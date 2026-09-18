@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TokenWatch — one glance at every AI account you're burning through</title>
+<meta name="description" content="A native macOS menu-bar app for session, weekly, and credit usage across Claude, Codex, Cursor, Copilot, Gemini, OpenRouter, and more. Local only, nothing leaves your device." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23151515'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%2358e6a8' stroke-width='2.4'/%3E%3Cpath d='M16 16 L16 8.5' stroke='%2358e6a8' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0d0e;
+    --surface: #151719;
+    --surface-2: #1c1f22;
+    --border: #2a2e32;
+    --text: #eef0f2;
+    --muted: #9aa3ab;
+    --accent: #58e6a8;
+    --accent-dim: #2f5f4c;
+    --warn: #e6b658;
+    --crit: #e65858;
+    --sans: "Space Grotesk", -apple-system, BlinkMacSystemFont, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, .mono { font-family: var(--mono); }
+
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+
+  header.top {
+    border-bottom: 1px solid var(--border);
+    padding: 18px 0;
+  }
+  header.top .wrap { display: flex; align-items: center; justify-content: space-between; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; }
+  .brand .mark {
+    width: 22px; height: 22px; border-radius: 6px; background: var(--surface-2);
+    border: 1px solid var(--border); position: relative; flex: none;
+  }
+  .brand .mark::after {
+    content: ""; position: absolute; inset: 4px;
+    border: 2px solid var(--accent); border-radius: 50%;
+  }
+  .brand .mark::before {
+    content: ""; position: absolute; top: 3px; left: 50%; width: 2px; height: 7px;
+    background: var(--accent); transform: translateX(-50%);
+  }
+  nav.top-links { display: flex; gap: 22px; font-size: 13px; color: var(--muted); font-family: var(--mono); }
+  nav.top-links a { color: var(--muted); }
+  nav.top-links a:hover { color: var(--text); }
+
+  .hero { padding: 88px 0 64px; border-bottom: 1px solid var(--border); }
+  .kicker {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 18px;
+  }
+  h1 {
+    font-size: clamp(34px, 5vw, 54px); line-height: 1.08; margin: 0 0 22px; font-weight: 700;
+    max-width: 15ch;
+  }
+  .lede { font-size: 18px; color: var(--muted); max-width: 56ch; margin: 0 0 36px; }
+  .cta-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 8px;
+    font-size: 14px; font-weight: 600; font-family: var(--sans);
+  }
+  .btn-primary { background: var(--accent); color: #06120c; }
+  .btn-primary:hover { background: #6ef0b8; text-decoration: none; }
+  .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: var(--muted); text-decoration: none; }
+
+  .install {
+    margin-top: 28px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px; font-family: var(--mono); font-size: 13.5px; max-width: 520px; color: var(--muted);
+  }
+  .install .line { color: var(--text); }
+  .install .line::before { content: "$ "; color: var(--accent); }
+
+  section.section { padding: 64px 0; border-bottom: 1px solid var(--border); }
+  section.section:last-of-type { border-bottom: none; }
+  h2 { font-size: 26px; margin: 0 0 10px; font-weight: 700; }
+  .section-lede { color: var(--muted); max-width: 60ch; margin: 0 0 40px; font-size: 15.5px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+  .card p { margin: 0; color: var(--muted); font-size: 13.5px; }
+
+  .providers { display: flex; flex-wrap: wrap; gap: 10px; }
+  .chip {
+    font-family: var(--mono); font-size: 13px; padding: 8px 13px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  }
+
+  .meter-demo { display: flex; align-items: center; gap: 14px; margin: 28px 0 0; font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .ring { width: 14px; height: 14px; border-radius: 50%; border: 2.4px solid var(--border); position: relative; flex: none; }
+  .ring.g { border-top-color: var(--accent); border-right-color: var(--accent); transform: rotate(35deg); }
+  .ring.a { border-top-color: var(--warn); border-right-color: var(--warn); border-left-color: var(--warn); transform: rotate(35deg); }
+  .ring.r { border-top-color: var(--crit); border-right-color: var(--crit); border-left-color: var(--crit); border-bottom-color: var(--crit); transform: rotate(35deg); }
+
+  .principles { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; }
+  .principle .num { font-family: var(--mono); color: var(--accent); font-size: 13px; margin-bottom: 8px; }
+  .principle h3 { margin: 0 0 8px; font-size: 17px; }
+  .principle p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+  footer { padding: 40px 0 60px; }
+  footer .wrap { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  footer p { margin: 0; color: var(--muted); font-size: 13px; font-family: var(--mono); }
+  footer nav { display: flex; gap: 18px; font-size: 13px; font-family: var(--mono); }
+  footer nav a { color: var(--muted); }
+  footer nav a:hover { color: var(--text); }
+
+  @media (max-width: 560px) {
+    .hero { padding: 56px 0 44px; }
+    section.section { padding: 44px 0; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><span class="mark"></span> TokenWatch</div>
+    <nav class="top-links">
+      <a href="#providers">Providers</a>
+      <a href="#how">How it works</a>
+      <a href="https://github.com/ajays97/tokenwatch">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <p class="kicker">macOS menu bar &middot; open source &middot; local only</p>
+    <h1>One glance at every AI account you're burning through.</h1>
+    <p class="lede">
+      TokenWatch sits in your menu bar and shows session, weekly, and credit usage across the AI
+      subscriptions, routing providers, and API keys you actually use &mdash; Claude, Codex, Cursor,
+      Copilot, Gemini, OpenRouter, and more. Nothing is ever sent off your device.
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/ajays97/tokenwatch">View on GitHub</a>
+      <a class="btn btn-ghost" href="#how">See how it works</a>
+    </div>
+    <div class="install">
+      <div class="line">git clone https://github.com/ajays97/tokenwatch.git</div>
+      <div class="line">cd tokenwatch &amp;&amp; swift run TokenWatch</div>
+    </div>
+    <div class="meter-demo">
+      <span class="ring g"></span> under 70% &nbsp;&nbsp;
+      <span class="ring a"></span> 70&ndash;90% &nbsp;&nbsp;
+      <span class="ring r"></span> over 90% &mdash; the menu bar always shows whichever account is closest to its limit
+    </div>
+  </div>
+</section>
+
+<section class="section" id="providers">
+  <div class="wrap">
+    <h2>Every account, one place</h2>
+    <p class="section-lede">
+      One account per provider, polled on your own schedule. TokenWatch reads each provider's own
+      local credentials &mdash; CLI Keychain items, OAuth token files, API keys you paste in &mdash;
+      and talks to each provider's usage API directly.
+    </p>
+    <div class="providers">
+      <span class="chip">Claude</span>
+      <span class="chip">Codex / ChatGPT</span>
+      <span class="chip">OpenAI API</span>
+      <span class="chip">Cursor</span>
+      <span class="chip">GitHub Copilot</span>
+      <span class="chip">Gemini</span>
+      <span class="chip">Antigravity</span>
+      <span class="chip">OpenRouter</span>
+      <span class="chip">z.ai</span>
+      <span class="chip">Kimi</span>
+      <span class="chip">Amp</span>
+      <span class="chip">Grok</span>
+      <span class="chip">OpenCode Go</span>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="how">
+  <div class="wrap">
+    <h2>How it works</h2>
+    <p class="section-lede">
+      A small provider-plugin pipeline feeds a generic dashboard: auth store, usage client,
+      mapper, normalized snapshot. Every provider's card comes from the same renderer &mdash; no
+      provider gets bespoke UI.
+    </p>
+    <div class="grid">
+      <div class="card">
+        <h3>Menu bar icon</h3>
+        <p>Shows the percentage of whichever enabled provider is closest to its limit, colored
+        green, amber, or red.</p>
+      </div>
+      <div class="card">
+        <h3>Dashboard popover</h3>
+        <p>Click the icon for a card per provider: session/weekly percent, credit balances, reset
+        times, and spend.</p>
+      </div>
+      <div class="card">
+        <h3>Local only</h3>
+        <p>API keys live in the macOS Keychain. Config lives in Application Support. No telemetry,
+        no relay server, no account.</p>
+      </div>
+      <div class="card">
+        <h3>Open source</h3>
+        <p>MIT licensed, clean-room Swift implementation. Read the source, audit the network
+        calls, build it yourself.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <h2>Built for people who use more than one</h2>
+    <div class="principles">
+      <div class="principle">
+        <div class="num">01</div>
+        <h3>Stop tab-switching to check limits</h3>
+        <p>Every provider's own dashboard is a different tab, a different login, a different
+        layout. TokenWatch normalizes all of it into one glance.</p>
+      </div>
+      <div class="principle">
+        <div class="num">02</div>
+        <h3>Know before you hit the wall</h3>
+        <p>The status item always surfaces whichever account is closest to running out, so a
+        mid-task rate limit stops being a surprise.</p>
+      </div>
+      <div class="principle">
+        <div class="num">03</div>
+        <h3>Your keys stay yours</h3>
+        <p>Everything runs on your Mac. Requests go straight to each provider's own API &mdash;
+        nothing passes through a server we run.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>TokenWatch &middot; MIT License</p>
+    <nav>
+      <a href="https://github.com/ajays97/tokenwatch">GitHub</a>
+      <a href="https://github.com/ajays97/tokenwatch/blob/main/README.md">Docs</a>
+      <a href="https://github.com/ajays97/tokenwatch/blob/main/LICENSE">License</a>
+    </nav>
+  </div>
+</footer>
+
+</body>
+</html>
