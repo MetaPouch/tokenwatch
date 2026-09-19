@@ -67,7 +67,11 @@ struct ProviderIcon: View {
                FileManager.default.fileExists(atPath: packaged.path) {
                 return packaged
             }
-            if let moduleURL = Bundle.module.url(forResource: name, withExtension: ext) {
+            // `resources: [.copy("Icons")]` in Package.swift preserves "Icons" as a real
+            // subdirectory inside the generated bundle rather than flattening it to the
+            // bundle's top level, so the lookup must say so explicitly -- omitting
+            // `subdirectory:` silently finds nothing even though the file is right there.
+            if let moduleURL = Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "Icons") {
                 return moduleURL
             }
         }
