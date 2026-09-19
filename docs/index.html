@@ -4,11 +4,11 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>TokenWatch — one glance at every AI account you're burning through</title>
-<meta name="description" content="A native macOS menu-bar app for session, weekly, and credit usage across Claude, Codex, Cursor, Copilot, Gemini, OpenRouter, and more. Local only, nothing leaves your device." />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23151515'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%2358e6a8' stroke-width='2.4'/%3E%3Cpath d='M16 16 L16 8.5' stroke='%2358e6a8' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E" />
+<meta name="description" content="A native macOS menu-bar app for session, weekly, and credit usage across Claude, Codex, Cursor, Copilot, Gemini, OpenRouter, and more. Shows which tool you just used and whether its prompt cache is warm or cold. Local only, nothing leaves your device." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23151719'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%2358e6a8' stroke-width='2.4'/%3E%3Cpath d='M16 16 L21.2 11.4' stroke='%2358e6a8' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #0c0d0e;
@@ -18,14 +18,14 @@
     --text: #eef0f2;
     --muted: #9aa3ab;
     --accent: #58e6a8;
-    --accent-dim: #2f5f4c;
     --warn: #e6b658;
     --crit: #e65858;
+    --cold: #5ea8e6;
     --sans: "Space Grotesk", -apple-system, BlinkMacSystemFont, sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   }
   * { box-sizing: border-box; }
-  html { background: var(--bg); }
+  html { background: var(--bg); scroll-behavior: smooth; }
   body {
     margin: 0;
     background: var(--bg);
@@ -37,15 +37,19 @@
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
   code, .mono { font-family: var(--mono); }
+  ::selection { background: var(--accent); color: #06120c; }
 
-  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
 
   header.top {
+    position: sticky; top: 0; z-index: 20;
     border-bottom: 1px solid var(--border);
-    padding: 18px 0;
+    padding: 16px 0;
+    background: rgba(12, 13, 14, 0.82);
+    backdrop-filter: blur(10px);
   }
-  header.top .wrap { display: flex; align-items: center; justify-content: space-between; }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; }
+  header.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; white-space: nowrap; }
   .brand .mark {
     width: 22px; height: 22px; border-radius: 6px; background: var(--surface-2);
     border: 1px solid var(--border); position: relative; flex: none;
@@ -55,23 +59,31 @@
     border: 2px solid var(--accent); border-radius: 50%;
   }
   .brand .mark::before {
-    content: ""; position: absolute; top: 3px; left: 50%; width: 2px; height: 7px;
-    background: var(--accent); transform: translateX(-50%);
+    content: ""; position: absolute; top: 4px; right: 4px; width: 6px; height: 2px;
+    background: var(--accent); transform: rotate(-45deg); transform-origin: right center;
   }
-  nav.top-links { display: flex; gap: 22px; font-size: 13px; color: var(--muted); font-family: var(--mono); }
-  nav.top-links a { color: var(--muted); }
-  nav.top-links a:hover { color: var(--text); }
+  nav.top-links { display: flex; align-items: center; gap: 22px; font-size: 13px; color: var(--muted); font-family: var(--mono); }
+  nav.top-links a.navlink { color: var(--muted); }
+  nav.top-links a.navlink:hover { color: var(--text); }
+  .btn-small {
+    font-family: var(--sans); font-weight: 600; font-size: 13px; color: #06120c !important;
+    background: var(--accent); padding: 7px 14px; border-radius: 7px;
+  }
+  .btn-small:hover { background: #6ef0b8; text-decoration: none; }
 
-  .hero { padding: 88px 0 64px; border-bottom: 1px solid var(--border); }
+  .hero { padding: 76px 0 56px; border-bottom: 1px solid var(--border); }
+  .hero-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 48px; align-items: start; }
+  @media (min-width: 920px) {
+    .hero-grid { grid-template-columns: 1.05fr 0.95fr; }
+  }
   .kicker {
     font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
     color: var(--accent); margin: 0 0 18px;
   }
   h1 {
-    font-size: clamp(34px, 5vw, 54px); line-height: 1.08; margin: 0 0 22px; font-weight: 700;
-    max-width: 15ch;
+    font-size: clamp(32px, 4.4vw, 50px); line-height: 1.08; margin: 0 0 20px; font-weight: 700;
   }
-  .lede { font-size: 18px; color: var(--muted); max-width: 56ch; margin: 0 0 36px; }
+  .lede { font-size: 17px; color: var(--muted); max-width: 52ch; margin: 0 0 30px; }
   .cta-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
   .btn {
     display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 8px;
@@ -83,50 +95,113 @@
   .btn-ghost:hover { border-color: var(--muted); text-decoration: none; }
 
   .install {
-    margin-top: 28px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-    padding: 16px 18px; font-family: var(--mono); font-size: 13.5px; max-width: 520px; color: var(--muted);
+    margin-top: 22px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; font-family: var(--mono); font-size: 13px; max-width: 480px; color: var(--muted);
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
   }
-  .install .line { color: var(--text); }
+  .install .line { color: var(--text); overflow-x: auto; }
   .install .line::before { content: "$ "; color: var(--accent); }
+  .badge-row { margin-top: 18px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap; }
+  .badge-row span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: inline-block; }
 
-  section.section { padding: 64px 0; border-bottom: 1px solid var(--border); }
-  section.section:last-of-type { border-bottom: none; }
-  h2 { font-size: 26px; margin: 0 0 10px; font-weight: 700; }
-  .section-lede { color: var(--muted); max-width: 60ch; margin: 0 0 40px; font-size: 15.5px; }
-
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
-  .card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px;
+  /* ---- Menu bar + dashboard mockup ---- */
+  .mockup {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    overflow: hidden; box-shadow: 0 30px 80px -30px rgba(0,0,0,0.6);
   }
-  .card h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+  .mockup-menubar {
+    background: #05070a; padding: 7px 14px; display: flex; justify-content: flex-end;
+    align-items: center; gap: 14px; font-family: var(--mono); font-size: 11.5px; color: #7d8791;
+    border-bottom: 1px solid var(--border);
+  }
+  .mb-icon { opacity: 0.6; }
+  .mb-status {
+    display: flex; align-items: center; gap: 5px; background: rgba(88,230,168,0.12);
+    color: var(--accent); padding: 3px 9px; border-radius: 999px; font-weight: 600;
+  }
+  .mb-flame { font-size: 11px; }
+  .mockup-body { padding: 18px; }
+  .mockup-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; }
+  .mockup-card:last-child { margin-bottom: 0; }
+  .mc-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .mc-head .name { font-weight: 600; font-size: 13.5px; }
+  .mc-head .plan { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .mc-row { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; margin-bottom: 7px; }
+  .mc-row .label { color: var(--muted); }
+  .mc-row .value { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .mc-bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; margin-bottom: 10px; }
+  .mc-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+  .mc-bar.amber > span { background: var(--warn); }
+  .mc-pill {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-family: var(--mono);
+    padding: 4px 9px; border-radius: 999px; background: rgba(88,230,168,0.12); color: var(--accent);
+  }
+  .mc-pill.cold { background: rgba(94,168,230,0.14); color: var(--cold); }
+
+  section.section { padding: 60px 0; border-bottom: 1px solid var(--border); scroll-margin-top: 70px; }
+  section.section:last-of-type { border-bottom: none; }
+  h2 { font-size: 25px; margin: 0 0 10px; font-weight: 700; }
+  .section-lede { color: var(--muted); max-width: 62ch; margin: 0 0 36px; font-size: 15px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px;
+  }
+  .card h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
   .card p { margin: 0; color: var(--muted); font-size: 13.5px; }
+  .card .icon { font-size: 15px; }
 
   .providers { display: flex; flex-wrap: wrap; gap: 10px; }
   .chip {
-    font-family: var(--mono); font-size: 13px; padding: 8px 13px; border-radius: 999px;
+    font-family: var(--mono); font-size: 12.5px; padding: 8px 13px; border-radius: 999px;
     border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .chip .auth { color: var(--muted); }
+
+  /* ---- Steps ---- */
+  .steps { counter-reset: step; display: flex; flex-direction: column; gap: 0; }
+  .step { display: grid; grid-template-columns: 40px 1fr; gap: 16px; padding: 20px 0; border-top: 1px solid var(--border); }
+  .step:first-child { border-top: none; }
+  .step .num {
+    counter-increment: step; width: 32px; height: 32px; border-radius: 50%; background: var(--surface-2);
+    border: 1px solid var(--border); display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 13px; color: var(--accent); font-weight: 600;
+  }
+  .step .num::before { content: counter(step); }
+  .step h3 { margin: 0 0 6px; font-size: 15.5px; }
+  .step p { margin: 0 0 8px; color: var(--muted); font-size: 14px; max-width: 62ch; }
+  .step .snippet {
+    font-family: var(--mono); font-size: 12.5px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 7px; padding: 9px 12px; display: inline-block; color: var(--text); margin-top: 4px;
   }
 
-  .meter-demo { display: flex; align-items: center; gap: 14px; margin: 28px 0 0; font-family: var(--mono); font-size: 13px; color: var(--muted); }
-  .ring { width: 14px; height: 14px; border-radius: 50%; border: 2.4px solid var(--border); position: relative; flex: none; }
-  .ring.g { border-top-color: var(--accent); border-right-color: var(--accent); transform: rotate(35deg); }
-  .ring.a { border-top-color: var(--warn); border-right-color: var(--warn); border-left-color: var(--warn); transform: rotate(35deg); }
-  .ring.r { border-top-color: var(--crit); border-right-color: var(--crit); border-left-color: var(--crit); border-bottom-color: var(--crit); transform: rotate(35deg); }
-
-  .principles { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; }
-  .principle .num { font-family: var(--mono); color: var(--accent); font-size: 13px; margin-bottom: 8px; }
-  .principle h3 { margin: 0 0 8px; font-size: 17px; }
-  .principle p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  /* ---- Roadmap ---- */
+  .roadmap { display: flex; flex-direction: column; gap: 10px; }
+  .rm-row {
+    display: grid; grid-template-columns: 92px 1fr; gap: 16px; align-items: start;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+  }
+  .rm-status {
+    font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 4px 0; text-align: center;
+    border-radius: 999px; height: fit-content;
+  }
+  .rm-status.shipped { background: rgba(88,230,168,0.14); color: var(--accent); }
+  .rm-status.planned { background: rgba(255,255,255,0.06); color: var(--muted); }
+  .rm-row h3 { margin: 0 0 4px; font-size: 14.5px; }
+  .rm-row p { margin: 0; color: var(--muted); font-size: 13px; }
 
   footer { padding: 40px 0 60px; }
   footer .wrap { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
   footer p { margin: 0; color: var(--muted); font-size: 13px; font-family: var(--mono); }
-  footer nav { display: flex; gap: 18px; font-size: 13px; font-family: var(--mono); }
+  footer nav { display: flex; gap: 18px; font-size: 13px; font-family: var(--mono); flex-wrap: wrap; }
   footer nav a { color: var(--muted); }
   footer nav a:hover { color: var(--text); }
 
-  @media (max-width: 560px) {
-    .hero { padding: 56px 0 44px; }
+  @media (max-width: 700px) {
+    nav.top-links .navlink { display: none; }
+    .hero { padding: 52px 0 40px; }
     section.section { padding: 44px 0; }
   }
 </style>
@@ -137,117 +212,283 @@
   <div class="wrap">
     <div class="brand"><span class="mark"></span> TokenWatch</div>
     <nav class="top-links">
-      <a href="#providers">Providers</a>
-      <a href="#how">How it works</a>
-      <a href="https://github.com/ajays97/tokenwatch">GitHub</a>
+      <a class="navlink" href="#features">Features</a>
+      <a class="navlink" href="#providers">Providers</a>
+      <a class="navlink" href="#start">Get started</a>
+      <a class="navlink" href="#roadmap">Roadmap</a>
+      <a class="navlink" href="https://github.com/ajays97/tokenwatch">GitHub</a>
+      <a class="btn-small" href="https://github.com/ajays97/tokenwatch/releases/latest">Download</a>
     </nav>
   </div>
 </header>
 
 <section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <p class="kicker">macOS menu bar &middot; open source &middot; local only</p>
+      <h1>One glance at every AI account you're burning through.</h1>
+      <p class="lede">
+        TokenWatch sits in your menu bar and shows session, weekly, and credit usage across the AI
+        subscriptions, routing providers, and API keys you actually use &mdash; and tells you which
+        one you just used, and whether its prompt cache is still warm.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/ajays97/tokenwatch/releases/latest">Download for macOS</a>
+        <a class="btn btn-ghost" href="https://github.com/ajays97/tokenwatch">View on GitHub</a>
+      </div>
+      <div class="install">
+        <span class="line">brew install --cask ajays97/tokenwatch/tokenwatch</span>
+      </div>
+      <div class="badge-row">
+        <span><span class="dot"></span> Signed &amp; notarized</span>
+        <span><span class="dot"></span> macOS 14+</span>
+        <span><span class="dot"></span> MIT licensed</span>
+        <span><span class="dot"></span> Zero dependencies</span>
+      </div>
+    </div>
+
+    <div class="mockup" aria-hidden="true">
+      <div class="mockup-menubar">
+        <span class="mb-icon">◐ 68%</span>
+        <span class="mb-icon">▤</span>
+        <span class="mb-status"><span class="mb-flame">🔥</span> Claude 29%</span>
+      </div>
+      <div class="mockup-body">
+        <div class="mockup-card">
+          <div class="mc-head"><span class="name">Claude</span><span class="plan">Max</span></div>
+          <div class="mc-row"><span class="label">Session (5h)</span><span class="value">29%</span></div>
+          <div class="mc-bar"><span style="width:29%"></span></div>
+          <div class="mc-row"><span class="label">Weekly</span><span class="value">13%</span></div>
+          <div class="mc-bar"><span style="width:13%"></span></div>
+          <span class="mc-pill">🔥 Cache warm &middot; 100% hit &middot; expires 14:15</span>
+        </div>
+        <div class="mockup-card">
+          <div class="mc-head"><span class="name">Cursor</span><span class="plan">Pro</span></div>
+          <div class="mc-row"><span class="label">Included usage</span><span class="value">84%</span></div>
+          <div class="mc-bar amber"><span style="width:84%"></span></div>
+          <div class="mc-row"><span class="label">On-demand</span><span class="value">$3.40</span></div>
+        </div>
+        <div class="mockup-card">
+          <div class="mc-head"><span class="name">OpenRouter</span><span class="plan"></span></div>
+          <div class="mc-row"><span class="label">Balance</span><span class="value">$42.10</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="features">
   <div class="wrap">
-    <p class="kicker">macOS menu bar &middot; open source &middot; local only</p>
-    <h1>One glance at every AI account you're burning through.</h1>
-    <p class="lede">
-      TokenWatch sits in your menu bar and shows session, weekly, and credit usage across the AI
-      subscriptions, routing providers, and API keys you actually use &mdash; Claude, Codex, Cursor,
-      Copilot, Gemini, OpenRouter, and more. Nothing is ever sent off your device.
+    <h2>Built for people who use more than one</h2>
+    <p class="section-lede">
+      Every provider's own dashboard is a different tab, a different login, a different layout.
+      TokenWatch normalizes all of it into one glance &mdash; and adds two things none of them show
+      you on their own.
     </p>
-    <div class="cta-row">
-      <a class="btn btn-primary" href="https://github.com/ajays97/tokenwatch/releases/latest">Download for macOS</a>
-      <a class="btn btn-ghost" href="https://github.com/ajays97/tokenwatch">View on GitHub</a>
-    </div>
-    <div class="install">
-      <div class="line">brew tap ajays97/tokenwatch &amp;&amp; brew install --cask tokenwatch</div>
-    </div>
-    <div class="meter-demo">
-      <span class="ring g"></span> under 70% &nbsp;&nbsp;
-      <span class="ring a"></span> 70&ndash;90% &nbsp;&nbsp;
-      <span class="ring r"></span> over 90% &mdash; the menu bar always shows whichever account is closest to its limit
+    <div class="grid">
+      <div class="card">
+        <h3><span class="icon">🔥</span> Cache temperature</h3>
+        <p>Claude's prompt cache goes cold 5 minutes after your last message &mdash; the next one
+        re-reads your whole context at full price. TokenWatch reads your local session logs and
+        shows warm (cheap) or cold (full price) before you hit send, with the hit ratio and exact
+        expiry time.</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon">🕓</span> Last tool used</h3>
+        <p>The menu bar leads with whichever tool you were just in &mdash; name, usage percent, and
+        its cache state &mdash; instead of making you guess which of thirteen possible providers
+        the number belongs to.</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon">◐</span> Closest to the wall</h3>
+        <p>No recent activity to show instead? The icon falls back to whichever enabled provider is
+        closest to its limit, colored green, amber, or red, so a rate limit never surprises you
+        mid-task.</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon">▤</span> One dashboard, every provider</h3>
+        <p>Click the icon for a card per provider: session/weekly percent, credit balances, reset
+        times, and spend &mdash; the same renderer for all thirteen, so a new provider is never a
+        bolted-on UI.</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon">🔒</span> Local only</h3>
+        <p>API keys live in the macOS Keychain. Every credential goes straight to that provider's
+        own API over HTTPS and nowhere else &mdash; no telemetry, no relay server, no account. See
+        <a href="https://github.com/ajays97/tokenwatch/blob/main/SECURITY.md">SECURITY.md</a> for the
+        full accounting.</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon">◇</span> Open source</h3>
+        <p>MIT licensed, clean-room Swift implementation, zero external dependencies. Read the
+        source, audit the network calls, build it yourself.</p>
+      </div>
     </div>
   </div>
 </section>
 
 <section class="section" id="providers">
   <div class="wrap">
-    <h2>Every account, one place</h2>
+    <h2>Thirteen providers, one menu bar</h2>
     <p class="section-lede">
       One account per provider, polled on your own schedule. TokenWatch reads each provider's own
-      local credentials &mdash; CLI Keychain items, OAuth token files, API keys you paste in &mdash;
-      and talks to each provider's usage API directly.
+      local credentials &mdash; CLI Keychain items, OAuth token files, API keys you paste in
+      &mdash; and talks to each provider's usage API directly.
     </p>
     <div class="providers">
-      <span class="chip">Claude</span>
-      <span class="chip">Codex / ChatGPT</span>
-      <span class="chip">OpenAI API</span>
-      <span class="chip">Cursor</span>
-      <span class="chip">GitHub Copilot</span>
-      <span class="chip">Gemini</span>
-      <span class="chip">Antigravity</span>
-      <span class="chip">OpenRouter</span>
-      <span class="chip">z.ai</span>
-      <span class="chip">Kimi</span>
-      <span class="chip">Amp</span>
-      <span class="chip">Grok</span>
-      <span class="chip">OpenCode Go</span>
+      <span class="chip">Claude <span class="auth">OAuth</span></span>
+      <span class="chip">Codex / ChatGPT <span class="auth">auth.json</span></span>
+      <span class="chip">OpenAI API <span class="auth">API key</span></span>
+      <span class="chip">Cursor <span class="auth">local session</span></span>
+      <span class="chip">GitHub Copilot <span class="auth">reused sign-in</span></span>
+      <span class="chip">Gemini <span class="auth">OAuth</span></span>
+      <span class="chip">Antigravity <span class="auth">local token</span></span>
+      <span class="chip">OpenRouter <span class="auth">API key</span></span>
+      <span class="chip">z.ai <span class="auth">API key</span></span>
+      <span class="chip">Kimi <span class="auth">API key</span></span>
+      <span class="chip">Amp <span class="auth">CLI / API key</span></span>
+      <span class="chip">Grok <span class="auth">auth.json</span></span>
+      <span class="chip">OpenCode Go <span class="auth">API key</span></span>
     </div>
   </div>
 </section>
 
-<section class="section" id="how">
+<section class="section" id="start">
   <div class="wrap">
-    <h2>How it works</h2>
+    <h2>Get started</h2>
     <p class="section-lede">
-      A small provider-plugin pipeline feeds a generic dashboard: auth store, usage client,
-      mapper, normalized snapshot. Every provider's card comes from the same renderer &mdash; no
-      provider gets bespoke UI.
+      No account, no sign-up. Install, enable the providers you actually use, and TokenWatch reads
+      whatever's already on your Mac.
     </p>
-    <div class="grid">
-      <div class="card">
-        <h3>Menu bar icon</h3>
-        <p>Shows the percentage of whichever enabled provider is closest to its limit, colored
-        green, amber, or red.</p>
+    <div class="steps">
+      <div class="step">
+        <span class="num"></span>
+        <div>
+          <h3>Install</h3>
+          <p>Via Homebrew, or download the signed &amp; notarized DMG directly.</p>
+          <span class="snippet">brew install --cask ajays97/tokenwatch/tokenwatch</span>
+        </div>
       </div>
-      <div class="card">
-        <h3>Dashboard popover</h3>
-        <p>Click the icon for a card per provider: session/weekly percent, credit balances, reset
-        times, and spend.</p>
+      <div class="step">
+        <span class="num"></span>
+        <div>
+          <h3>Launch it</h3>
+          <p>TokenWatch is a menu-bar-only app &mdash; no Dock icon, no window. Look for the icon
+          in your menu bar; it opens System Settings' privacy prompts only if a provider needs
+          Keychain or file access you haven't granted that tool yet.</p>
+        </div>
       </div>
-      <div class="card">
-        <h3>Local only</h3>
-        <p>API keys live in the macOS Keychain. Config lives in Application Support. No telemetry,
-        no relay server, no account.</p>
+      <div class="step">
+        <span class="num"></span>
+        <div>
+          <h3>Open Settings</h3>
+          <p>Click the menu bar icon, then the gear. You'll see all thirteen supported providers
+          with a toggle each.</p>
+        </div>
       </div>
-      <div class="card">
-        <h3>Open source</h3>
-        <p>MIT licensed, clean-room Swift implementation. Read the source, audit the network
-        calls, or build it yourself: <code>swift build &amp;&amp; swift run TokenWatch</code>.</p>
+      <div class="step">
+        <span class="num"></span>
+        <div>
+          <h3>Enable what you use</h3>
+          <p>Already signed into Claude Code, Codex, Cursor, Gemini, Copilot, Grok, or Antigravity
+          via their own CLI or app? Just flip the toggle &mdash; TokenWatch reads the credential
+          that's already there. For OpenRouter, z.ai, Kimi, OpenCode Go, Amp, or a raw OpenAI key,
+          paste the key into the field that appears next to the toggle.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="num"></span>
+        <div>
+          <h3>Read the menu bar</h3>
+          <p>It leads with whichever tool you were most recently in and its cache state (today:
+          Claude). No recent activity anywhere? It falls back to whichever enabled provider is
+          closest to its limit.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="num"></span>
+        <div>
+          <h3>Click for the full dashboard</h3>
+          <p>One card per enabled provider: usage percent, resets, credit balances, spend. Refresh
+          on demand with the toolbar button, or let it poll on its own schedule (default 5
+          minutes, adjustable in Settings).</p>
+        </div>
       </div>
     </div>
   </div>
 </section>
 
-<section class="section">
+<section class="section" id="roadmap">
   <div class="wrap">
-    <h2>Built for people who use more than one</h2>
-    <div class="principles">
-      <div class="principle">
-        <div class="num">01</div>
-        <h3>Stop tab-switching to check limits</h3>
-        <p>Every provider's own dashboard is a different tab, a different login, a different
-        layout. TokenWatch normalizes all of it into one glance.</p>
+    <h2>Roadmap</h2>
+    <p class="section-lede">
+      Everything below stays true to the one rule this app doesn't bend on: local only, nothing
+      leaves your device. No feature here needs a server we operate.
+    </p>
+    <div class="roadmap">
+      <div class="rm-row">
+        <span class="rm-status shipped">SHIPPED</span>
+        <div>
+          <h3>Cache temperature (Claude)</h3>
+          <p>Warm/cold badge with hit ratio and expiry, read from local session transcripts &mdash;
+          no extra network call.</p>
+        </div>
       </div>
-      <div class="principle">
-        <div class="num">02</div>
-        <h3>Know before you hit the wall</h3>
-        <p>The status item always surfaces whichever account is closest to running out, so a
-        mid-task rate limit stops being a surprise.</p>
+      <div class="rm-row">
+        <span class="rm-status shipped">SHIPPED</span>
+        <div>
+          <h3>Last-tool-used menu bar indicator</h3>
+          <p>The status item leads with whichever provider you were most recently active in,
+          instead of an unlabeled percentage.</p>
+        </div>
       </div>
-      <div class="principle">
-        <div class="num">03</div>
-        <h3>Your keys stay yours</h3>
-        <p>Everything runs on your Mac. Requests go straight to each provider's own API &mdash;
-        nothing passes through a server we run.</p>
+      <div class="rm-row">
+        <span class="rm-status planned">PLANNED</span>
+        <div>
+          <h3>Cache temperature for Codex &amp; OpenRouter</h3>
+          <p>Same local-session-log approach, extended to Codex's `~/.codex/sessions` transcripts
+          and OpenRouter's 10-minute sticky-routing window.</p>
+        </div>
+      </div>
+      <div class="rm-row">
+        <span class="rm-status planned">PLANNED</span>
+        <div>
+          <h3>Per-model usage breakdown</h3>
+          <p>Sum local session tokens per model over the last 7 days &mdash; which model actually
+          burned your weekly limit.</p>
+        </div>
+      </div>
+      <div class="rm-row">
+        <span class="rm-status planned">PLANNED</span>
+        <div>
+          <h3>Local cost estimation</h3>
+          <p>Estimate today's/this week's spend from local token counts and public pricing tables
+          &mdash; no Admin API key required, the way ccusage does it for Claude.</p>
+        </div>
+      </div>
+      <div class="rm-row">
+        <span class="rm-status planned">PLANNED</span>
+        <div>
+          <h3>Historical usage charts</h3>
+          <p>A sparkline of usage over the last 7/30 days per provider &mdash; the data model
+          already has a chart line type, just no provider populates it yet.</p>
+        </div>
+      </div>
+      <div class="rm-row">
+        <span class="rm-status planned">PLANNED</span>
+        <div>
+          <h3>Threshold notifications</h3>
+          <p>A native notification when an enabled provider crosses 90% used, so you find out
+          before the rate limit does it for you.</p>
+        </div>
+      </div>
+      <div class="rm-row">
+        <span class="rm-status planned">PLANNED</span>
+        <div>
+          <h3>In-app auto-update</h3>
+          <p>Sparkle-based update checks against signed release artifacts &mdash; still no
+          telemetry, just "is there a newer signed build."</p>
+        </div>
       </div>
     </div>
   </div>
@@ -259,6 +500,8 @@
     <nav>
       <a href="https://github.com/ajays97/tokenwatch">GitHub</a>
       <a href="https://github.com/ajays97/tokenwatch/blob/main/README.md">Docs</a>
+      <a href="https://github.com/ajays97/tokenwatch/blob/main/SECURITY.md">Security</a>
+      <a href="https://github.com/ajays97/tokenwatch/blob/main/CONTRIBUTING.md">Contributing</a>
       <a href="https://github.com/ajays97/tokenwatch/blob/main/LICENSE">License</a>
     </nav>
   </div>
