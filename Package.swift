@@ -18,7 +18,8 @@ let package = Package(
         .executableTarget(
             name: "TokenWatch",
             dependencies: ["TokenWatchCore"],
-            path: "Sources/TokenWatch"
+            path: "Sources/TokenWatch",
+            resources: [.copy("Icons")]
         ),
         .testTarget(
             name: "TokenWatchCoreTests",

@@ -43,7 +43,11 @@ public struct DatedPoint: Sendable, Equatable, Codable {
 public enum MetricLine: Sendable, Identifiable, Equatable, Codable {
     case progress(id: String, label: String, used: Double, limit: Double, format: MetricFormat, resetsAt: Date?, periodDurationMs: Int?)
     case values(id: String, label: String, values: [MetricValue])
-    case badge(id: String, text: String, tone: BadgeTone)
+    /// `icon` (an SF Symbol name) and `detail` (a short secondary line) are optional enrichment
+    /// -- omit both for a plain single-line badge; a provider that has both a glanceable primary
+    /// signal (e.g. a project name) and supporting detail (e.g. a hit ratio) can supply an icon
+    /// to color-code it and a detail line without inventing a new `MetricLine` case.
+    case badge(id: String, text: String, tone: BadgeTone, icon: String? = nil, detail: String? = nil)
     case chart(id: String, label: String, points: [DatedPoint])
     case text(id: String, value: String)
 
@@ -51,7 +55,7 @@ public enum MetricLine: Sendable, Identifiable, Equatable, Codable {
         switch self {
         case .progress(let id, _, _, _, _, _, _): return id
         case .values(let id, _, _): return id
-        case .badge(let id, _, _): return id
+        case .badge(let id, _, _, _, _): return id
         case .chart(let id, _, _): return id
         case .text(let id, _): return id
         }
@@ -65,7 +69,7 @@ public enum MetricLine: Sendable, Identifiable, Equatable, Codable {
 
 
     private enum CodingKeys: String, CodingKey {
-        case kind, id, label, used, limit, format, resetsAt, periodDurationMs, values, text, tone, points, value
+        case kind, id, label, used, limit, format, resetsAt, periodDurationMs, values, text, tone, icon, detail, points, value
     }
 
     public init(from decoder: Decoder) throws {
@@ -92,7 +96,9 @@ public enum MetricLine: Sendable, Identifiable, Equatable, Codable {
             self = .badge(
                 id: try c.decode(String.self, forKey: .id),
                 text: try c.decode(String.self, forKey: .text),
-                tone: try c.decode(BadgeTone.self, forKey: .tone)
+                tone: try c.decode(BadgeTone.self, forKey: .tone),
+                icon: try c.decodeIfPresent(String.self, forKey: .icon),
+                detail: try c.decodeIfPresent(String.self, forKey: .detail)
             )
         case "chart":
             self = .chart(
@@ -127,11 +133,13 @@ public enum MetricLine: Sendable, Identifiable, Equatable, Codable {
             try c.encode(id, forKey: .id)
             try c.encode(label, forKey: .label)
             try c.encode(values, forKey: .values)
-        case let .badge(id, text, tone):
+        case let .badge(id, text, tone, icon, detail):
             try c.encode("badge", forKey: .kind)
             try c.encode(id, forKey: .id)
             try c.encode(text, forKey: .text)
             try c.encode(tone, forKey: .tone)
+            try c.encodeIfPresent(icon, forKey: .icon)
+            try c.encodeIfPresent(detail, forKey: .detail)
         case let .chart(id, label, points):
             try c.encode("chart", forKey: .kind)
             try c.encode(id, forKey: .id)

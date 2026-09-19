@@ -40,12 +40,16 @@ used/limit ratio), colored green (<70%), amber (70–90%), or red (>90%).
 
 ## Dashboard
 
-Click the status item to open the dashboard: a provider picker (icon + name, every enabled
-provider) above a detail view for whichever one is selected. It opens on the provider the status
-item was just showing -- switch with the dropdown. Claude's detail view lists a badge per locally
-active session (touched within the last 5 hours, matching Anthropic's own session window), each
-showing that session's project name and cache warm/cold state, not just the newest one; every
-other provider shows its usual session/weekly percent, credit balance, and spend lines.
+Click the status item to open the dashboard: a provider picker (each provider's real logo, from
+[Lobe Icons](https://github.com/lobehub/lobe-icons) -- see
+[Sources/TokenWatch/Icons/NOTICE.md](Sources/TokenWatch/Icons/NOTICE.md) for license and
+per-icon sourcing) above a detail view for whichever one is selected. It opens on the provider
+the status item was just showing -- switch with the dropdown. Every progress bar is colored green
+under 70% used, amber 70-90%, red above, so a card's own numbers tell you what needs attention
+without reading every line. Claude's detail view lists a compact row per locally active session
+(touched within the last 5 hours, matching Anthropic's own session window) -- a flame or
+snowflake, the project name, and a small hit-ratio/expiry detail -- not just the newest session;
+every other provider shows its usual session/weekly percent, credit balance, and spend lines.
 
 ## Build & run
 

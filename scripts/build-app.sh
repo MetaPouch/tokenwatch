@@ -29,6 +29,13 @@ mkdir -p "${APP_BUNDLE}/Contents/MacOS" "${APP_BUNDLE}/Contents/Resources"
 cp "${BUILD_DIR}/${APP_NAME}" "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}"
 cp "Resources/Info.plist" "${APP_BUNDLE}/Contents/Info.plist"
 cp "Resources/AppIcon.icns" "${APP_BUNDLE}/Contents/Resources/AppIcon.icns"
+# SwiftPM's generated Bundle.module accessor only ever looks next to Bundle.main.bundleURL (the
+# .app's own top level) or the build directory -- neither is compatible with proper codesign
+# sealing (content outside Contents/ fails "code has no resources but signature indicates they
+# must be present"). So the provider logo SVGs ship as plain files under Contents/Resources/
+# instead, and ProviderIcon.swift checks that location before falling back to Bundle.module for
+# `swift run`/dev builds.
+cp -R "${BUILD_DIR}/TokenWatch_TokenWatch.bundle/Icons" "${APP_BUNDLE}/Contents/Resources/Icons"
 
 # PkgInfo is optional but conventional for APPL bundles.
 printf 'APPL????' > "${APP_BUNDLE}/Contents/PkgInfo"

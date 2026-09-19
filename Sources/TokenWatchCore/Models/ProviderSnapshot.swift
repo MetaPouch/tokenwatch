@@ -106,7 +106,7 @@ public struct ProviderSnapshot: Sendable, Equatable, Codable {
     /// The tone of the `cacheTemperature` badge line, if this snapshot has one.
     public var cacheTemperatureTone: BadgeTone? {
         for line in lines {
-            if case let .badge(id, _, tone) = line, id == "cacheTemperature" {
+            if case let .badge(id, _, tone, _, _) = line, id == "cacheTemperature" {
                 return tone
             }
         }

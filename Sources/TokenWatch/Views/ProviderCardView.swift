@@ -37,6 +37,7 @@ struct ProviderCardView: View {
                         .foregroundStyle(.secondary)
                 }
                 ProgressView(value: limit > 0 ? min(used / limit, 1) : 0)
+                    .tint(progressColor(used: used, limit: limit))
                 if let resetsAt {
                     Text("Resets \(resetsAt, style: .relative)")
                         .font(.caption2)
@@ -54,13 +55,22 @@ struct ProviderCardView: View {
                     }
                 }
             }
-        case let .badge(_, text, tone):
-            Text(text)
-                .font(.caption.weight(.medium))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(badgeColor(tone).opacity(0.15), in: Capsule())
-                .foregroundStyle(badgeColor(tone))
+        case let .badge(_, text, tone, icon, detail):
+            HStack(spacing: 6) {
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.caption)
+                        .foregroundStyle(badgeAccentColor(icon: icon, tone: tone))
+                }
+                Text(text)
+                    .font(.caption.weight(.semibold))
+                if let detail {
+                    Text(detail)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
         case let .chart(_, label, points):
             VStack(alignment: .leading, spacing: 3) {
                 Text(label).font(.subheadline)
@@ -93,11 +103,32 @@ struct ProviderCardView: View {
         return numberText
     }
 
+    /// Green under 70% used, amber 70-90%, red above -- matches the same thresholds the status
+    /// item uses for its own ring/label coloring.
+    private func progressColor(used: Double, limit: Double) -> Color {
+        guard limit > 0 else { return .secondary }
+        let ratio = used / limit
+        if ratio >= 0.9 { return .red }
+        if ratio >= 0.7 { return .orange }
+        return .green
+    }
+
     private func badgeColor(_ tone: BadgeTone) -> Color {
         switch tone {
         case .neutral: return .secondary
         case .warning: return .orange
         case .critical: return .red
+        }
+    }
+
+    /// Cache-temperature badges get the same green (warm)/blue (cold) language as the status
+    /// item's flame/snowflake icon, for one consistent color vocabulary across menu bar and
+    /// dashboard. Any other badge (no recognized icon) falls back to its tone's color.
+    private func badgeAccentColor(icon: String, tone: BadgeTone) -> Color {
+        switch icon {
+        case "flame.fill": return .green
+        case "snowflake": return .blue
+        default: return badgeColor(tone)
         }
     }
 }

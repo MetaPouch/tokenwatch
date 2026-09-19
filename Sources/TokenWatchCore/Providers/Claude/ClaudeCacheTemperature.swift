@@ -30,21 +30,24 @@ enum ClaudeCacheTemperature {
     /// show). `badgeID` defaults to the id `ProviderSnapshot.cacheTemperatureTone` and the
     /// status item look for (the headline, most-recent session); pass a distinct id for
     /// additional concurrently-active sessions so they don't collide in `snapshot.lines`.
+    ///
+    /// Leads with the project name and a flame/snowflake icon -- the glanceable part -- and
+    /// pushes hit ratio / expiry / re-read size into `detail`, a smaller secondary line, rather
+    /// than one long sentence.
     static func evaluate(activity: ClaudeSessionActivity?, now: Date = Date(), ttlSeconds: Int = defaultTTLSeconds, badgeID: String = "cacheTemperature") -> MetricLine? {
         guard let activity else { return nil }
 
         let expiresAt = activity.timestamp.addingTimeInterval(TimeInterval(ttlSeconds))
         let contextTokens = activity.inputTokens + activity.cacheReadTokens + activity.cacheCreationTokens
-        let sessionSuffix = " · \(activity.sessionLabel)"
 
         if now < expiresAt {
-            let hitSuffix = hitRatioText(activity).map { " · \($0) hit" } ?? ""
-            let text = "Cache warm\(hitSuffix) · expires \(formatClock(expiresAt))\(sessionSuffix)"
-            return .badge(id: badgeID, text: text, tone: .neutral)
+            let hitSuffix = hitRatioText(activity).map { "\($0) hit · " } ?? ""
+            let detail = "\(hitSuffix)expires \(formatClock(expiresAt))"
+            return .badge(id: badgeID, text: activity.sessionLabel, tone: .neutral, icon: "flame.fill", detail: detail)
         }
 
-        let text = "Cache cold · next message re-reads ~\(formatTokenCount(contextTokens)) tok at full price\(sessionSuffix)"
-        return .badge(id: badgeID, text: text, tone: .warning)
+        let detail = "cold · re-reads ~\(formatTokenCount(contextTokens)) tok"
+        return .badge(id: badgeID, text: activity.sessionLabel, tone: .warning, icon: "snowflake", detail: detail)
     }
 
     private static func hitRatioText(_ activity: ClaudeSessionActivity) -> String? {

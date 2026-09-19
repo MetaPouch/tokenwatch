@@ -50,21 +50,23 @@ struct DashboardView: View {
     }
 
     private var providerPicker: some View {
-        HStack {
+        HStack(spacing: 8) {
+            if let selectedProvider {
+                ProviderIcon(provider: selectedProvider, size: 16)
+            }
+            // `Menu`'s own label/items render reliably only with plain SwiftUI content --
+            // a custom icon inside the label or an item breaks its native chrome entirely
+            // (verified via offscreen render: it silently drops to near-blank). The real logo
+            // above is a sibling instead, always showing the current selection.
             Menu {
                 ForEach(enabledProviders) { provider in
-                    Button {
+                    Button(provider.displayName) {
                         selectedProvider = provider
-                    } label: {
-                        Label(provider.displayName, systemImage: provider.symbolName)
                     }
                 }
             } label: {
-                Label(
-                    selectedProvider?.displayName ?? "Select a provider",
-                    systemImage: selectedProvider?.symbolName ?? "questionmark.circle"
-                )
-                .font(.subheadline.weight(.semibold))
+                Text(selectedProvider?.displayName ?? "Select a provider")
+                    .font(.subheadline.weight(.semibold))
             }
             .fixedSize()
 

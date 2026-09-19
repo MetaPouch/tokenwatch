@@ -37,24 +37,20 @@ public enum ProviderID: String, CaseIterable, Codable, Sendable, Identifiable {
         }
     }
 
-    /// SF Symbol for the provider picker. Deliberately generic system glyphs, not stylized
-    /// lookalikes of any provider's real logo -- the name label next to it is the actual
-    /// identifier, this is just a scannable accent.
-    public var symbolName: String {
+    /// Filename (without extension) of this provider's real logo, bundled as an SVG under
+    /// `Sources/TokenWatch/Icons/` (sourced from github.com/lobehub/lobe-icons, MIT licensed --
+    /// see that directory's `NOTICE.md`). TokenWatchCore stays UI-framework-agnostic: this is
+    /// just the resource name, not an `NSImage`/`Image` -- the App layer loads and renders it.
+    public var iconResourceName: String { rawValue }
+
+    /// `true` for providers whose bundled icon is a single-color `fill="currentColor"` mark
+    /// (the brand itself is monochrome, not TokenWatch's choice) -- the App layer should tint
+    /// these to match the surrounding text rather than leaving them a fixed black glyph.
+    /// `false` for icons whose real logo has multiple colors baked into the asset already.
+    public var hasMonochromeIcon: Bool {
         switch self {
-        case .claude: return "message.fill"
-        case .codex: return "chevron.left.forwardslash.chevron.right"
-        case .openai: return "cpu"
-        case .gemini: return "sparkles"
-        case .antigravity: return "arrow.up.circle.fill"
-        case .cursor: return "cursorarrow.rays"
-        case .copilot: return "airplane"
-        case .openrouter: return "arrow.triangle.branch"
-        case .zai: return "bolt.fill"
-        case .kimi: return "moon.stars.fill"
-        case .amp: return "waveform"
-        case .grok: return "eye.fill"
-        case .opencode: return "terminal.fill"
+        case .openai, .cursor, .zai, .grok, .opencode: return true
+        case .claude, .codex, .gemini, .antigravity, .copilot, .openrouter, .kimi, .amp: return false
         }
     }
 }
