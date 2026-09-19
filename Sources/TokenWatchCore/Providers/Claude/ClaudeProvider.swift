@@ -1,10 +1,10 @@
 import Foundation
 
 /// Claude usage via OAuth: session (5h) + weekly (7d) percent, plus extra usage spend when
-/// enabled. Credentials: Claude CLI Keychain item `Claude Code-credentials`, falling back to
-/// `~/.claude/.credentials.json`. Local `.jsonl` per-model cost scanning (Claude Tracker's
-/// per-model breakdown) is a stretch goal skipped in v1 to keep the core session/weekly numbers
-/// simple -- see plan Phase 2 step 1.
+/// enabled, plus a best-effort cache-temperature badge read from local session transcripts (see
+/// `ClaudeCacheTemperature`). Credentials: Claude CLI Keychain item `Claude Code-credentials`,
+/// falling back to `~/.claude/.credentials.json`. Local `.jsonl` per-model cost scanning (Claude
+/// Tracker's per-model breakdown) remains a stretch goal skipped in v1 -- see plan Phase 2 step 1.
 public struct ClaudeProvider: ProviderRuntime {
     public static let id: ProviderID = .claude
     public static let displayName = "Claude"
@@ -27,7 +27,13 @@ public struct ClaudeProvider: ProviderRuntime {
         }
         do {
             let response = try await usageClient.fetchUsage(accessToken: token)
-            let lines = ClaudeMapper.map(response)
+            var lines = ClaudeMapper.map(response)
+            if let cacheLine = ClaudeCacheTemperature.evaluate(
+                activity: ClaudeSessionScanner.mostRecentActivity(),
+                ttlSeconds: ClaudeCacheTemperature.resolveTTLSeconds()
+            ) {
+                lines.append(cacheLine)
+            }
             return ProviderSnapshot(provider: Self.id, plan: nil, lines: lines, fetchedAt: Date())
         } catch let error as ProviderError {
             return .error(provider: Self.id, error: error)
