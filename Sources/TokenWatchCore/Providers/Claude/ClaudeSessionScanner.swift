@@ -3,6 +3,10 @@ import Foundation
 /// Token usage from the most recent assistant turn in a local Claude Code session transcript --
 /// the raw material for cache-temperature (see `ClaudeCacheTemperature`).
 struct ClaudeSessionActivity: Equatable {
+    /// Absolute path of the transcript this activity was read from -- used to dedupe when a
+    /// session already surfaced as the headline "most recent activity" shouldn't also be
+    /// repeated in the "other active sessions" list.
+    let filePath: String
     let timestamp: Date
     let inputTokens: Int
     let cacheReadTokens: Int
@@ -38,6 +42,25 @@ enum ClaudeSessionScanner {
         return lastAssistantActivity(inFileAtPath: newestFile, sessionLabel: sessionLabel(forTranscriptPath: newestFile))
     }
 
+    /// Window used by `allRecentActivity` to decide whether a session still counts as "active"
+    /// for listing purposes -- matches Anthropic's own 5-hour session-limit window, since that's
+    /// already a boundary this app surfaces (the "Session (5h)" progress line) rather than an
+    /// arbitrary new one.
+    static let activeSessionWindowSeconds: TimeInterval = 5 * 3600
+
+    /// Every distinct local session transcript modified within `windowSeconds` of `now`, newest
+    /// first. Unlike `mostRecentActivity` (unbounded, always returns the single newest file no
+    /// matter its age), this is the "what do I currently have open" list shown per-session in
+    /// the dashboard -- bounded so a user's entire multi-year history isn't scanned or shown.
+    static func allRecentActivity(roots: [String] = projectRoots(), now: Date = Date(), windowSeconds: TimeInterval = activeSessionWindowSeconds) -> [ClaudeSessionActivity] {
+        let cutoff = now.addingTimeInterval(-windowSeconds)
+        let files = transcriptFiles(roots: roots, modifiedSince: cutoff)
+        let activities = files.compactMap { file in
+            lastAssistantActivity(inFileAtPath: file.path, sessionLabel: sessionLabel(forTranscriptPath: file.path))
+        }
+        return activities.sorted { $0.timestamp > $1.timestamp }
+    }
+
     /// Best-effort label for the project a transcript belongs to. Claude Code names each
     /// project directory after the absolute working-directory path with every `/` rewritten to
     /// `-` (e.g. `/Users/alice/app` -> `-Users-alice-app`) -- lossy to reverse exactly, since a
@@ -64,10 +87,12 @@ enum ClaudeSessionScanner {
         return label
     }
 
-    private static func newestTranscriptFile(roots: [String]) -> String? {
+    /// Every `.jsonl` transcript under `roots` modified at or after `modifiedSince`, with its
+    /// modification date. Shared enumeration logic behind both `newestTranscriptFile` (unbounded,
+    /// `modifiedSince: .distantPast`) and `allRecentActivity` (bounded to the active window).
+    private static func transcriptFiles(roots: [String], modifiedSince: Date) -> [(path: String, modified: Date)] {
         let fileManager = FileManager.default
-        var newestPath: String?
-        var newestModified = Date.distantPast
+        var results: [(path: String, modified: Date)] = []
 
         for root in roots {
             guard let enumerator = fileManager.enumerator(atPath: root) else { continue }
@@ -75,15 +100,17 @@ enum ClaudeSessionScanner {
                 guard relativePath.hasSuffix(".jsonl") else { continue }
                 let fullPath = root + "/" + relativePath
                 guard let attributes = try? fileManager.attributesOfItem(atPath: fullPath),
-                      let modified = attributes[.modificationDate] as? Date
+                      let modified = attributes[.modificationDate] as? Date,
+                      modified >= modifiedSince
                 else { continue }
-                if modified > newestModified {
-                    newestModified = modified
-                    newestPath = fullPath
-                }
+                results.append((fullPath, modified))
             }
         }
-        return newestPath
+        return results
+    }
+
+    private static func newestTranscriptFile(roots: [String]) -> String? {
+        transcriptFiles(roots: roots, modifiedSince: .distantPast).max { $0.modified < $1.modified }?.path
     }
 
     /// Scans `path` from the end for the last `type: "assistant"` line carrying a
@@ -99,6 +126,7 @@ enum ClaudeSessionScanner {
             guard entry.type == "assistant", let usage = entry.message?.usage, let timestampString = entry.timestamp else { continue }
             guard let timestamp = FlexibleISO8601.parse(timestampString) else { continue }
             return ClaudeSessionActivity(
+                filePath: path,
                 timestamp: timestamp,
                 inputTokens: usage.inputTokens ?? 0,
                 cacheReadTokens: usage.cacheReadInputTokens ?? 0,

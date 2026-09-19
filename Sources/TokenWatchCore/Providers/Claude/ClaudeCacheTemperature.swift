@@ -27,8 +27,10 @@ enum ClaudeCacheTemperature {
 
     /// Builds the `.badge` line for the dashboard, or `nil` when there's no local session
     /// activity to evaluate (no Claude Code transcripts found -- not an error, just nothing to
-    /// show).
-    static func evaluate(activity: ClaudeSessionActivity?, now: Date = Date(), ttlSeconds: Int = defaultTTLSeconds) -> MetricLine? {
+    /// show). `badgeID` defaults to the id `ProviderSnapshot.cacheTemperatureTone` and the
+    /// status item look for (the headline, most-recent session); pass a distinct id for
+    /// additional concurrently-active sessions so they don't collide in `snapshot.lines`.
+    static func evaluate(activity: ClaudeSessionActivity?, now: Date = Date(), ttlSeconds: Int = defaultTTLSeconds, badgeID: String = "cacheTemperature") -> MetricLine? {
         guard let activity else { return nil }
 
         let expiresAt = activity.timestamp.addingTimeInterval(TimeInterval(ttlSeconds))
@@ -38,11 +40,11 @@ enum ClaudeCacheTemperature {
         if now < expiresAt {
             let hitSuffix = hitRatioText(activity).map { " · \($0) hit" } ?? ""
             let text = "Cache warm\(hitSuffix) · expires \(formatClock(expiresAt))\(sessionSuffix)"
-            return .badge(id: "cacheTemperature", text: text, tone: .neutral)
+            return .badge(id: badgeID, text: text, tone: .neutral)
         }
 
         let text = "Cache cold · next message re-reads ~\(formatTokenCount(contextTokens)) tok at full price\(sessionSuffix)"
-        return .badge(id: "cacheTemperature", text: text, tone: .warning)
+        return .badge(id: badgeID, text: text, tone: .warning)
     }
 
     private static func hitRatioText(_ activity: ClaudeSessionActivity) -> String? {

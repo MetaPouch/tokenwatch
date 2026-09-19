@@ -15,10 +15,10 @@ final class ClaudeSessionScannerTests: XCTestCase {
         super.tearDown()
     }
 
-    private func writeTranscript(_ name: String, lines: [String], modifiedSecondsAgo: TimeInterval = 0) -> URL {
-        let projectDir = tempRoot.appendingPathComponent("some-project", isDirectory: true)
-        try? FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
-        let fileURL = projectDir.appendingPathComponent(name)
+    private func writeTranscript(_ name: String, projectDir: String = "some-project", lines: [String], modifiedSecondsAgo: TimeInterval = 0) -> URL {
+        let projectDirURL = tempRoot.appendingPathComponent(projectDir, isDirectory: true)
+        try? FileManager.default.createDirectory(at: projectDirURL, withIntermediateDirectories: true)
+        let fileURL = projectDirURL.appendingPathComponent(name)
         try? lines.joined(separator: "\n").write(to: fileURL, atomically: true, encoding: .utf8)
         if modifiedSecondsAgo != 0 {
             let date = Date().addingTimeInterval(-modifiedSecondsAgo)
@@ -104,5 +104,37 @@ final class ClaudeSessionScannerTests: XCTestCase {
     func testProjectRootsDefaultsToBothCommonLocations() {
         let roots = ClaudeSessionScanner.projectRoots(homeDirectory: "/home/user", environment: [:])
         XCTAssertEqual(roots, ["/home/user/.config/claude/projects", "/home/user/.claude/projects"])
+    }
+
+    func testAllRecentActivityExcludesSessionsOutsideWindowAndSortsNewestFirst() {
+        _ = writeTranscript("session.jsonl", projectDir: "stale-project", lines: [
+            assistantLine(timestamp: "2026-09-19T00:00:00.000Z", input: 1, cacheRead: 0, cacheCreate: 0)
+        ], modifiedSecondsAgo: 6 * 3600) // outside the default 5h window
+
+        _ = writeTranscript("session.jsonl", projectDir: "older-active-project", lines: [
+            assistantLine(timestamp: "2026-09-19T07:00:00.000Z", input: 2, cacheRead: 0, cacheCreate: 0)
+        ], modifiedSecondsAgo: 3 * 3600)
+
+        _ = writeTranscript("session.jsonl", projectDir: "newest-active-project", lines: [
+            assistantLine(timestamp: "2026-09-19T09:00:00.000Z", input: 3, cacheRead: 0, cacheCreate: 0)
+        ], modifiedSecondsAgo: 60)
+
+        let activity = ClaudeSessionScanner.allRecentActivity(roots: [tempRoot.path])
+        XCTAssertEqual(activity.map(\.sessionLabel), ["newest-active-project", "older-active-project"])
+        XCTAssertEqual(activity.map(\.inputTokens), [3, 2])
+    }
+
+    func testAllRecentActivityHonorsCustomWindow() {
+        _ = writeTranscript("session.jsonl", projectDir: "hour-old-project", lines: [
+            assistantLine(timestamp: "2026-09-19T08:00:00.000Z", input: 1, cacheRead: 0, cacheCreate: 0)
+        ], modifiedSecondsAgo: 3600)
+
+        XCTAssertTrue(ClaudeSessionScanner.allRecentActivity(roots: [tempRoot.path], windowSeconds: 1800).isEmpty)
+        XCTAssertEqual(ClaudeSessionScanner.allRecentActivity(roots: [tempRoot.path], windowSeconds: 7200).count, 1)
+    }
+
+    func testAllRecentActivityEmptyWhenNoTranscripts() {
+        XCTAssertTrue(ClaudeSessionScanner.allRecentActivity(roots: [tempRoot.path]).isEmpty)
+        XCTAssertTrue(ClaudeSessionScanner.allRecentActivity(roots: ["/nonexistent/path/xyz"]).isEmpty)
     }
 }

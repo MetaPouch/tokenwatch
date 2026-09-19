@@ -36,8 +36,16 @@ usage, but the cache icon reflects exactly one local session — whichever one y
 recently, which matters if you run several Claude Code sessions in parallel. Hover the status
 item, or check the badge line in the dashboard, to see which project it's describing and when.
 Otherwise it falls back to whichever enabled provider's metric is closest to its limit (highest
-used/limit ratio), colored green (<70%), amber (70–90%), or red (>90%). Click it to open the
-dashboard with a card per enabled provider.
+used/limit ratio), colored green (<70%), amber (70–90%), or red (>90%).
+
+## Dashboard
+
+Click the status item to open the dashboard: a provider picker (icon + name, every enabled
+provider) above a detail view for whichever one is selected. It opens on the provider the status
+item was just showing -- switch with the dropdown. Claude's detail view lists a badge per locally
+active session (touched within the last 5 hours, matching Anthropic's own session window), each
+showing that session's project name and cache warm/cold state, not just the newest one; every
+other provider shows its usual session/weekly percent, credit balance, and spend lines.
 
 ## Build & run
 

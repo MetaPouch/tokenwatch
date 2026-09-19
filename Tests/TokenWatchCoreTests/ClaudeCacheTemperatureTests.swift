@@ -9,7 +9,7 @@ final class ClaudeCacheTemperatureTests: XCTestCase {
     }
 
     func testWarmWithinTTLShowsHitRatioAndExpiry() {
-        let activity = ClaudeSessionActivity(timestamp: now.addingTimeInterval(-120), inputTokens: 2, cacheReadTokens: 484_489, cacheCreationTokens: 1_460, sessionLabel: "my-project")
+        let activity = ClaudeSessionActivity(filePath: "/tmp/fake.jsonl", timestamp: now.addingTimeInterval(-120), inputTokens: 2, cacheReadTokens: 484_489, cacheCreationTokens: 1_460, sessionLabel: "my-project")
         let line = ClaudeCacheTemperature.evaluate(activity: activity, now: now, ttlSeconds: 300)
 
         guard case let .badge(id, text, tone) = line else {
@@ -23,7 +23,7 @@ final class ClaudeCacheTemperatureTests: XCTestCase {
     }
 
     func testWarmOmitsHitRatioWhenNoCacheActivity() {
-        let activity = ClaudeSessionActivity(timestamp: now.addingTimeInterval(-10), inputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, sessionLabel: "my-project")
+        let activity = ClaudeSessionActivity(filePath: "/tmp/fake.jsonl", timestamp: now.addingTimeInterval(-10), inputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, sessionLabel: "my-project")
         let line = ClaudeCacheTemperature.evaluate(activity: activity, now: now, ttlSeconds: 300)
 
         guard case let .badge(_, text, tone) = line else {
@@ -35,7 +35,7 @@ final class ClaudeCacheTemperatureTests: XCTestCase {
     }
 
     func testExactExpiryBoundaryIsAlreadyCold() {
-        let activity = ClaudeSessionActivity(timestamp: now.addingTimeInterval(-300), inputTokens: 100, cacheReadTokens: 0, cacheCreationTokens: 0, sessionLabel: "my-project")
+        let activity = ClaudeSessionActivity(filePath: "/tmp/fake.jsonl", timestamp: now.addingTimeInterval(-300), inputTokens: 100, cacheReadTokens: 0, cacheCreationTokens: 0, sessionLabel: "my-project")
         let line = ClaudeCacheTemperature.evaluate(activity: activity, now: now, ttlSeconds: 300)
 
         guard case let .badge(_, _, tone) = line else {
@@ -45,7 +45,7 @@ final class ClaudeCacheTemperatureTests: XCTestCase {
     }
 
     func testColdNamesReReadSizeAndFullPrice() {
-        let activity = ClaudeSessionActivity(timestamp: now.addingTimeInterval(-600), inputTokens: 500, cacheReadTokens: 4_500, cacheCreationTokens: 0, sessionLabel: "my-project")
+        let activity = ClaudeSessionActivity(filePath: "/tmp/fake.jsonl", timestamp: now.addingTimeInterval(-600), inputTokens: 500, cacheReadTokens: 4_500, cacheCreationTokens: 0, sessionLabel: "my-project")
         let line = ClaudeCacheTemperature.evaluate(activity: activity, now: now, ttlSeconds: 300)
 
         guard case let .badge(_, text, tone) = line else {
@@ -64,5 +64,15 @@ final class ClaudeCacheTemperatureTests: XCTestCase {
         XCTAssertEqual(ClaudeCacheTemperature.resolveTTLSeconds(environment: ["TOKENWATCH_CLAUDE_CACHE_TTL_SECONDS": "3600"]), 3600)
         XCTAssertEqual(ClaudeCacheTemperature.resolveTTLSeconds(environment: ["TOKENWATCH_CLAUDE_CACHE_TTL_SECONDS": "0"]), 5)
         XCTAssertEqual(ClaudeCacheTemperature.resolveTTLSeconds(environment: ["TOKENWATCH_CLAUDE_CACHE_TTL_SECONDS": "-50"]), 5)
+    }
+
+    func testCustomBadgeIDDistinguishesMultipleSessions() {
+        let activity = ClaudeSessionActivity(filePath: "/tmp/other.jsonl", timestamp: now.addingTimeInterval(-30), inputTokens: 1, cacheReadTokens: 10, cacheCreationTokens: 0, sessionLabel: "other-project")
+        let line = ClaudeCacheTemperature.evaluate(activity: activity, now: now, ttlSeconds: 300, badgeID: "cacheTemperature-other-0")
+
+        guard case let .badge(id, _, _) = line else {
+            return XCTFail("expected a badge line")
+        }
+        XCTAssertEqual(id, "cacheTemperature-other-0")
     }
 }
