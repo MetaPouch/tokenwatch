@@ -28,15 +28,16 @@ Single account per provider. Everything runs locally: no telemetry, no data leav
 ## Menu bar behavior
 
 If a provider has a recent local-activity signal (currently: Claude, from local session
-transcripts, refreshed within the last 24h), the status item shows that provider's name, its own
-closest-to-limit percent, and a cache-temperature icon: a green flame when Claude's prompt cache
-is still warm (a follow-up message stays cheap), a blue snowflake once it's gone cold (the next
-message re-reads the full context at full price). The percent is that provider's account-wide
-usage, but the cache icon reflects exactly one local session — whichever one you touched most
-recently, which matters if you run several Claude Code sessions in parallel. Hover the status
-item, or check the badge line in the dashboard, to see which project it's describing and when.
-Otherwise it falls back to whichever enabled provider's metric is closest to its limit (highest
-used/limit ratio), colored green (<70%), amber (70–90%), or red (>90%).
+transcripts, refreshed within the last 24h), the status item shows that provider's name, its
+current session percent (never weekly, even if weekly happens to be higher -- session is the
+actionable number moment-to-moment), and a progress ring colored green (<70%), amber (70-90%),
+or red (>90%). When Claude's prompt cache has local data for that session, the ring is tinted
+green (warm -- a follow-up message stays cheap) or blue (cold -- the next message re-reads the
+full context at full price) instead of the usual threshold color. That cache read reflects
+exactly one local session -- whichever one you touched most recently, which matters if you run
+several Claude Code sessions in parallel. Hover the status item, or check the badge line in the
+dashboard, to see which project it's describing and when. Otherwise it falls back to whichever
+enabled provider's metric is closest to its limit (highest used/limit ratio), same coloring.
 
 ## Dashboard
 

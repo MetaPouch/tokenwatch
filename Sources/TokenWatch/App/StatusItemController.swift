@@ -4,12 +4,13 @@ import Combine
 import TokenWatchCore
 
 /// Owns the `NSStatusItem`. Primary display: whichever enabled provider has the most recent
-/// local activity signal (currently only Claude provides one) gets its name, its own
-/// closest-to-limit percent, and a warm/cold cache icon when cache-temperature data is
-/// available. Because that percent is account-wide but the cache icon is scoped to one specific
-/// local session, a hover tooltip names which session and when it was last touched. Falls back
-/// to the MeterBar-style "closest to limit across every enabled provider" ring when no provider
-/// has a recent-activity signal.
+/// local activity signal (currently only Claude provides one) gets its name, its own session
+/// percent (weekly is never shown here -- see `primaryRatio`), and a progress ring colored by
+/// how close that is to the limit. When cache-temperature data is available the ring is tinted
+/// warm-green or cold-blue instead of the usual threshold color. Because the percent is
+/// account-wide but cache warmth is scoped to one specific local session, a hover tooltip names
+/// which session and when it was last touched. Falls back to the MeterBar-style "closest to
+/// limit across every enabled provider" ring when no provider has a recent-activity signal.
 @MainActor
 final class StatusItemController {
     private let statusItem: NSStatusItem
@@ -47,18 +48,26 @@ final class StatusItemController {
         }
     }
 
-    /// Highest used/limit ratio among a snapshot's own `.progress` lines.
-    private func closestToLimit(in snapshot: ProviderSnapshot) -> Double? {
-        snapshot.lines.compactMap(\.progressRatio).max()
+    /// Ratio to show for a provider's status-item percent/ring. Prefers a line explicitly
+    /// identified as "session" (Claude's 5-hour window) over any other progress line -- plain
+    /// max-of-all-lines let weekly (which only ever accumulates over days) dominate the display
+    /// with an alarming-looking number when the actionable one is how much of the CURRENT
+    /// session remains. Falls back to the highest ratio among whatever progress lines exist,
+    /// which is just "the one line" for every provider except Claude.
+    private func primaryRatio(in snapshot: ProviderSnapshot) -> Double? {
+        if let sessionRatio = snapshot.lines.first(where: { $0.id == "session" })?.progressRatio {
+            return sessionRatio
+        }
+        return snapshot.lines.compactMap(\.progressRatio).max()
     }
 
-    /// Highest used/limit ratio across every enabled provider's `.progress` lines wins the icon
-    /// when there's no "latest active" provider to prefer instead.
+    /// Highest `primaryRatio` across every enabled provider wins the icon when there's no
+    /// "latest active" provider to prefer instead.
     private func closestToLimitAcrossAll() -> (ratio: Double, tone: NSColor)? {
         var best: Double?
         for provider in enablementStore.enabledProviders {
             guard let snapshot = dataStore.snapshot(for: provider) else { continue }
-            if let ratio = closestToLimit(in: snapshot), best == nil || ratio > best! {
+            if let ratio = primaryRatio(in: snapshot), best == nil || ratio > best! {
                 best = ratio
             }
         }
@@ -93,14 +102,14 @@ final class StatusItemController {
         guard let button = statusItem.button else { return }
 
         if let (provider, snapshot) = mostRecentlyActive() {
-            let ratio = closestToLimit(in: snapshot)
+            let ratio = primaryRatio(in: snapshot)
             let percentText = ratio.map { " \(Int(($0 * 100).rounded()))%" } ?? ""
             button.title = "\(shortName(provider))\(percentText)"
             button.toolTip = tooltip(for: provider, snapshot: snapshot)
 
             if let tone = snapshot.cacheTemperatureTone {
                 let isWarm = tone == .neutral
-                button.image = Self.symbolImage(systemName: isWarm ? "flame.fill" : "snowflake", tint: isWarm ? .systemGreen : .systemBlue)
+                button.image = Self.ringImage(ratio: ratio ?? 0, tone: isWarm ? .systemGreen : .systemBlue, filled: true)
             } else if let ratio {
                 button.image = Self.ringImage(ratio: ratio, tone: toneForRatio(ratio), filled: true)
             } else {
@@ -121,7 +130,7 @@ final class StatusItemController {
     }
 
     /// Spells out which local session the title/icon describe -- the percent is this provider's
-    /// account-wide closest-to-limit ratio, but the cache icon (when present) is scoped to one
+    /// account-wide session ratio, but the cache icon color (when present) is scoped to one
     /// specific session, and a user running several at once has no other way to tell which.
     private func tooltip(for provider: ProviderID, snapshot: ProviderSnapshot) -> String? {
         guard let activityAt = snapshot.lastActivityAt else { return nil }
@@ -172,8 +181,8 @@ final class StatusItemController {
         return image
     }
 
-    /// Renders an SF Symbol tinted with a fixed color, for the cache-temperature flame/snowflake
-    /// glyphs. Falls back to a filled ring if the symbol name doesn't resolve.
+    /// Renders an SF Symbol tinted with a fixed color -- currently only the "no ratio to show"
+    /// placeholder dot. Falls back to a filled ring if the symbol name doesn't resolve.
     private static func symbolImage(systemName: String, tint: NSColor) -> NSImage {
         guard let base = NSImage(systemSymbolName: systemName, accessibilityDescription: nil) else {
             return ringImage(ratio: 1, tone: tint, filled: true)
