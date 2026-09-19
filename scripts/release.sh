@@ -3,7 +3,7 @@
 #
 # Prerequisites:
 #   - Developer ID Application certificate installed (see DISTRIBUTION.md)
-#   - notarytool credentials stored under the "tokenwatch-notary" profile (see DISTRIBUTION.md)
+#   - notarytool credentials stored under the "TokenWatch Notary" profile (see DISTRIBUTION.md)
 #   - `gh` authenticated with push/release access to the repo
 #
 # Usage:

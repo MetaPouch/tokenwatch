@@ -11,7 +11,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 DMG_PATH="${1:-$(ls -t dist/TokenWatch-*.dmg 2>/dev/null | head -1)}"
-PROFILE="${NOTARY_PROFILE:-tokenwatch-notary}"
+PROFILE="${NOTARY_PROFILE:-TokenWatch Notary}"
 
 if [ -z "$DMG_PATH" ] || [ ! -f "$DMG_PATH" ]; then
     echo "error: no DMG found -- run scripts/build-dmg.sh first, or pass a path" >&2

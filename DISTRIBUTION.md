@@ -22,25 +22,44 @@ account interactively — nothing here can be done without your Apple ID / 2FA.
    quoted string is your `SIGN_IDENTITY`.
 
 **2. Store notarytool credentials** (separate from the signing cert — this authenticates the
-*upload* to Apple's notary service). App Store Connect API key is preferred over an app-specific
-password: it doesn't expire when your Apple ID password changes and isn't tied to 2FA re-auth.
+*upload* to Apple's notary service). Either path works; the profile name `TokenWatch` used below
+is what `scripts/notarize.sh` and `scripts/release.sh` expect by default.
 
+**Option A — Apple ID + app-specific password** (simpler, what `store-credentials` defaults to
+when you skip the API key prompt):
+```sh
+xcrun notarytool store-credentials "TokenWatch Notary"
+# Profile name: TokenWatch
+# Path to App Store Connect API private key: <leave blank, press enter>
+# Developer Apple ID: <your Apple ID email on the MetaPouch team>
+# App-specific password: <generate one at appleid.apple.com -> Sign-In and Security ->
+#   App-Specific Passwords -> + -> copy the xxxx-xxxx-xxxx-xxxx password shown once>
+# Team ID: <MetaPouch's 10-character Team ID, from developer.apple.com/account -> Membership,
+#   or Xcode -> Settings -> Accounts -> select the MetaPouch team>
+```
+Re-run `store-credentials` again later if the app-specific password is ever revoked.
+
+**Option B — App Store Connect API key** (doesn't expire with your Apple ID password, better
+for long-lived CI use):
 1. Go to [appstoreconnect.apple.com](https://appstoreconnect.apple.com) → **Users and Access** →
    **Integrations** tab → **Team Keys** → **+** to generate a key with the **Developer** role.
 2. Download the `.p8` file **immediately** — Apple only lets you download it once. Note the **Key
    ID** and **Issuer ID** shown on that page.
-3. Store it as a keychain profile (one-time; notarytool remembers it after this):
+3. Store it as a keychain profile:
    ```sh
-   xcrun notarytool store-credentials "tokenwatch-notary" \
+   xcrun notarytool store-credentials "TokenWatch Notary" \
      --key /path/to/AuthKey_XXXXXXXXXX.p8 \
      --key-id XXXXXXXXXX \
      --issuer YOUR-ISSUER-UUID
    ```
-4. Confirm it's stored: `xcrun notarytool history --keychain-profile "tokenwatch-notary"` should
-   return (an empty list is fine — it just proves the credentials are valid).
+4. Delete the `.p8` file from Downloads after storing it; the keychain profile is the only copy
+   needed going forward.
 
-Delete the `.p8` file from Downloads after storing it; the keychain profile is the only copy
-needed going forward.
+**Either way, confirm it's stored:**
+```sh
+xcrun notarytool history --keychain-profile "TokenWatch Notary"
+```
+An empty list is a success — it just proves the credentials authenticate correctly.
 
 ## Build → sign → notarize → package
 
