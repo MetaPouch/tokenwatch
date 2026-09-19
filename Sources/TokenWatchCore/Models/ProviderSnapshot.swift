@@ -79,14 +79,21 @@ public struct ProviderSnapshot: Sendable, Equatable, Codable {
     /// the timestamp of the most recent local activity -- the signal behind the menu bar's
     /// "last tool used" display. `nil` for providers with no such local signal.
     public let lastActivityAt: Date?
+    /// A best-effort, human-glanceable label for whatever `lastActivityAt` refers to (currently:
+    /// Claude's most-recently-touched project directory name) -- disambiguates which of
+    /// possibly several concurrent sessions the activity timestamp and cache-temperature badge
+    /// describe. `nil` when `lastActivityAt` is `nil`, or when a provider has an activity signal
+    /// but no meaningful label for it.
+    public let lastActivityLabel: String?
 
-    public init(provider: ProviderID, plan: String? = nil, lines: [MetricLine] = [], fetchedAt: Date = Date(), error: ProviderError? = nil, lastActivityAt: Date? = nil) {
+    public init(provider: ProviderID, plan: String? = nil, lines: [MetricLine] = [], fetchedAt: Date = Date(), error: ProviderError? = nil, lastActivityAt: Date? = nil, lastActivityLabel: String? = nil) {
         self.provider = provider
         self.plan = plan
         self.lines = lines
         self.fetchedAt = fetchedAt
         self.error = error
         self.lastActivityAt = lastActivityAt
+        self.lastActivityLabel = lastActivityLabel
     }
 
     /// Convenience factory for a failed refresh.

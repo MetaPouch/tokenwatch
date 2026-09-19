@@ -48,7 +48,35 @@ final class ClaudeSessionScannerTests: XCTestCase {
         XCTAssertEqual(activity?.cacheReadTokens, 484_489)
         XCTAssertEqual(activity?.cacheCreationTokens, 1_460)
         XCTAssertEqual(activity?.timestamp, FlexibleISO8601.parse("2026-09-19T08:25:34.039Z"))
+        XCTAssertEqual(activity?.sessionLabel, "some-project")
     }
+
+    func testSessionLabelStripsEncodedHomeDirectoryPrefix() {
+        let label = ClaudeSessionScanner.sessionLabel(
+            forTranscriptPath: "/home/alice/.claude/projects/-home-alice-code-widget-factory/session.jsonl",
+            homeDirectory: "/home/alice"
+        )
+        XCTAssertEqual(label, "code-widget-factory")
+    }
+
+    func testSessionLabelFallsBackToRawNameWhenHomePrefixAbsent() {
+        let label = ClaudeSessionScanner.sessionLabel(
+            forTranscriptPath: "/home/alice/.claude/projects/some-other-machines-project/session.jsonl",
+            homeDirectory: "/home/alice"
+        )
+        XCTAssertEqual(label, "some-other-machines-project")
+    }
+
+    func testSessionLabelTruncatesVeryLongProjectNames() {
+        let longName = String(repeating: "a", count: 60)
+        let label = ClaudeSessionScanner.sessionLabel(
+            forTranscriptPath: "/home/alice/.claude/projects/-home-alice-\(longName)/session.jsonl",
+            homeDirectory: "/home/alice"
+        )
+        XCTAssertTrue(label.hasPrefix("…"), label)
+        XCTAssertLessThanOrEqual(label.count, 32)
+    }
+
 
     func testSkipsNonAssistantAndUsagelessLines() {
         _ = writeTranscript("session.jsonl", lines: [

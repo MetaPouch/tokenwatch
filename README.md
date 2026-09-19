@@ -31,9 +31,13 @@ If a provider has a recent local-activity signal (currently: Claude, from local 
 transcripts, refreshed within the last 24h), the status item shows that provider's name, its own
 closest-to-limit percent, and a cache-temperature icon: a green flame when Claude's prompt cache
 is still warm (a follow-up message stays cheap), a blue snowflake once it's gone cold (the next
-message re-reads the full context at full price). Otherwise it falls back to whichever enabled
-provider's metric is closest to its limit (highest used/limit ratio), colored green (<70%), amber
-(70–90%), or red (>90%). Click it to open the dashboard with a card per enabled provider.
+message re-reads the full context at full price). The percent is that provider's account-wide
+usage, but the cache icon reflects exactly one local session — whichever one you touched most
+recently, which matters if you run several Claude Code sessions in parallel. Hover the status
+item, or check the badge line in the dashboard, to see which project it's describing and when.
+Otherwise it falls back to whichever enabled provider's metric is closest to its limit (highest
+used/limit ratio), colored green (<70%), amber (70–90%), or red (>90%). Click it to open the
+dashboard with a card per enabled provider.
 
 ## Build & run
 

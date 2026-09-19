@@ -35,7 +35,7 @@ public struct ClaudeProvider: ProviderRuntime {
             ) {
                 lines.append(cacheLine)
             }
-            return ProviderSnapshot(provider: Self.id, plan: nil, lines: lines, fetchedAt: Date(), lastActivityAt: activity?.timestamp)
+            return ProviderSnapshot(provider: Self.id, plan: nil, lines: lines, fetchedAt: Date(), lastActivityAt: activity?.timestamp, lastActivityLabel: activity?.sessionLabel)
         } catch let error as ProviderError {
             return .error(provider: Self.id, error: error)
         } catch {

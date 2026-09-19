@@ -33,14 +33,15 @@ enum ClaudeCacheTemperature {
 
         let expiresAt = activity.timestamp.addingTimeInterval(TimeInterval(ttlSeconds))
         let contextTokens = activity.inputTokens + activity.cacheReadTokens + activity.cacheCreationTokens
+        let sessionSuffix = " · \(activity.sessionLabel)"
 
         if now < expiresAt {
             let hitSuffix = hitRatioText(activity).map { " · \($0) hit" } ?? ""
-            let text = "Cache warm\(hitSuffix) · expires \(formatClock(expiresAt))"
+            let text = "Cache warm\(hitSuffix) · expires \(formatClock(expiresAt))\(sessionSuffix)"
             return .badge(id: "cacheTemperature", text: text, tone: .neutral)
         }
 
-        let text = "Cache cold · next message re-reads ~\(formatTokenCount(contextTokens)) tok at full price"
+        let text = "Cache cold · next message re-reads ~\(formatTokenCount(contextTokens)) tok at full price\(sessionSuffix)"
         return .badge(id: "cacheTemperature", text: text, tone: .warning)
     }
 

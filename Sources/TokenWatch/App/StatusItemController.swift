@@ -6,8 +6,10 @@ import TokenWatchCore
 /// Owns the `NSStatusItem`. Primary display: whichever enabled provider has the most recent
 /// local activity signal (currently only Claude provides one) gets its name, its own
 /// closest-to-limit percent, and a warm/cold cache icon when cache-temperature data is
-/// available. Falls back to the MeterBar-style "closest to limit across every enabled
-/// provider" ring when no provider has a recent-activity signal.
+/// available. Because that percent is account-wide but the cache icon is scoped to one specific
+/// local session, a hover tooltip names which session and when it was last touched. Falls back
+/// to the MeterBar-style "closest to limit across every enabled provider" ring when no provider
+/// has a recent-activity signal.
 @MainActor
 final class StatusItemController {
     private let statusItem: NSStatusItem
@@ -94,6 +96,7 @@ final class StatusItemController {
             let ratio = closestToLimit(in: snapshot)
             let percentText = ratio.map { " \(Int(($0 * 100).rounded()))%" } ?? ""
             button.title = "\(shortName(provider))\(percentText)"
+            button.toolTip = tooltip(for: provider, snapshot: snapshot)
 
             if let tone = snapshot.cacheTemperatureTone {
                 let isWarm = tone == .neutral
@@ -109,10 +112,26 @@ final class StatusItemController {
         guard let (ratio, tone) = closestToLimitAcrossAll() else {
             button.image = Self.ringImage(ratio: 0, tone: .secondaryLabelColor, filled: false)
             button.title = ""
+            button.toolTip = nil
             return
         }
         button.image = Self.ringImage(ratio: ratio, tone: tone, filled: true)
         button.title = " \(Int((ratio * 100).rounded()))%"
+        button.toolTip = nil
+    }
+
+    /// Spells out which local session the title/icon describe -- the percent is this provider's
+    /// account-wide closest-to-limit ratio, but the cache icon (when present) is scoped to one
+    /// specific session, and a user running several at once has no other way to tell which.
+    private func tooltip(for provider: ProviderID, snapshot: ProviderSnapshot) -> String? {
+        guard let activityAt = snapshot.lastActivityAt else { return nil }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        let time = formatter.string(from: activityAt)
+        if let label = snapshot.lastActivityLabel {
+            return "\(provider.displayName) — \(label) · last active \(time)"
+        }
+        return "\(provider.displayName) · last active \(time)"
     }
 
     /// Short label for the menu bar title -- every provider's display name is already compact
