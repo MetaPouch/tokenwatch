@@ -37,4 +37,4 @@ gh release create "v${VERSION}" "$DMG_PATH" \
     --generate-notes
 
 echo "==> Done. Download URL:"
-echo "    https://github.com/ajays97/tokenwatch/releases/download/v${VERSION}/TokenWatch-${VERSION}.dmg"
+echo "    https://github.com/MetaPouch/tokenwatch/releases/download/v${VERSION}/TokenWatch-${VERSION}.dmg"

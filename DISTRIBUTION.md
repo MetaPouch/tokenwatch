@@ -91,7 +91,7 @@ spctl -a -t open --context context:primary-signature -v dist/TokenWatch-1.0.0.dm
 - **Homebrew Cask**: `homebrew-cask/tokenwatch.rb` is a ready-to-submit cask formula. Update its
   `sha256` after cutting a release (the release script prints it), then open a PR against
   [homebrew/homebrew-cask](https://github.com/Homebrew/homebrew-cask) or tap it yourself first:
-  `brew tap ajays97/tokenwatch && brew install --cask tokenwatch`.
+  `brew tap MetaPouch/tokenwatch && brew install --cask tokenwatch`.
 - **tokenwatch.fyi**: the landing page's Download button points at the latest GitHub release
   asset directly (`/releases/latest/download/...`), so publishing a release is enough — no
   separate landing-page edit needed per version.

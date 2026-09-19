@@ -27,7 +27,7 @@ each provider's doc comment under `Sources/TokenWatchCore/Providers/`.
 ## Reporting a vulnerability
 
 Please **do not** open a public GitHub issue for a suspected security vulnerability. Instead,
-open a [private security advisory](https://github.com/ajays97/tokenwatch/security/advisories/new)
+open a [private security advisory](https://github.com/MetaPouch/tokenwatch/security/advisories/new)
 on this repository. Include:
 
 - The provider(s) or file(s) involved.

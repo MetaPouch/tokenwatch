@@ -3,7 +3,7 @@
 ## Getting set up
 
 ```sh
-git clone https://github.com/ajays97/tokenwatch.git
+git clone https://github.com/MetaPouch/tokenwatch.git
 cd tokenwatch
 swift build
 swift test
