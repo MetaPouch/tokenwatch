@@ -1,6 +1,6 @@
 cask "tokenwatch" do
-  version "1.0.0"
-  sha256 "d88da1db63116e3840531e74f0b8bca7f4badb7adb8c7e01fa03edb14a5b9c15"
+  version "1.1.0"
+  sha256 "70741e0407721f324c1a80aae2545e7a31ab320f9b70a535261f5565e7a20902"
 
   url "https://github.com/ajays97/tokenwatch/releases/download/v#{version}/TokenWatch-#{version}.dmg"
   name "TokenWatch"
