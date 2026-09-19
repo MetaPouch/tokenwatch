@@ -27,9 +27,13 @@ Single account per provider. Everything runs locally: no telemetry, no data leav
 
 ## Menu bar behavior
 
-The status item always shows whichever enabled provider's metric is closest to its limit
-(highest used/limit ratio), colored green (<70%), amber (70–90%), or red (>90%). Click it to open
-the dashboard with a card per enabled provider.
+If a provider has a recent local-activity signal (currently: Claude, from local session
+transcripts, refreshed within the last 24h), the status item shows that provider's name, its own
+closest-to-limit percent, and a cache-temperature icon: a green flame when Claude's prompt cache
+is still warm (a follow-up message stays cheap), a blue snowflake once it's gone cold (the next
+message re-reads the full context at full price). Otherwise it falls back to whichever enabled
+provider's metric is closest to its limit (highest used/limit ratio), colored green (<70%), amber
+(70–90%), or red (>90%). Click it to open the dashboard with a card per enabled provider.
 
 ## Build & run
 

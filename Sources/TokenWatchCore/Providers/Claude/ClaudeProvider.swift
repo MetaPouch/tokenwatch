@@ -28,13 +28,14 @@ public struct ClaudeProvider: ProviderRuntime {
         do {
             let response = try await usageClient.fetchUsage(accessToken: token)
             var lines = ClaudeMapper.map(response)
+            let activity = ClaudeSessionScanner.mostRecentActivity()
             if let cacheLine = ClaudeCacheTemperature.evaluate(
-                activity: ClaudeSessionScanner.mostRecentActivity(),
+                activity: activity,
                 ttlSeconds: ClaudeCacheTemperature.resolveTTLSeconds()
             ) {
                 lines.append(cacheLine)
             }
-            return ProviderSnapshot(provider: Self.id, plan: nil, lines: lines, fetchedAt: Date())
+            return ProviderSnapshot(provider: Self.id, plan: nil, lines: lines, fetchedAt: Date(), lastActivityAt: activity?.timestamp)
         } catch let error as ProviderError {
             return .error(provider: Self.id, error: error)
         } catch {

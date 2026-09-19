@@ -41,7 +41,8 @@ final class MetricLineTests: XCTestCase {
             plan: "Max",
             lines: [.badge(id: "s", text: "hi", tone: .critical)],
             fetchedAt: Date(timeIntervalSince1970: 1_700_000_000),
-            error: nil
+            error: nil,
+            lastActivityAt: Date(timeIntervalSince1970: 1_699_999_000)
         )
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -52,6 +53,35 @@ final class MetricLineTests: XCTestCase {
         let decoded = try decoder.decode(ProviderSnapshot.self, from: data)
         XCTAssertEqual(snapshot, decoded)
     }
+
+    func testProviderSnapshotDecodesMissingLastActivityAtAsNil() throws {
+        // Old cache.json files predate this field; decoding must not fail.
+        let json = """
+        {"provider":"claude","lines":[],"fetchedAt":"2023-11-14T22:13:20Z"}
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(ProviderSnapshot.self, from: Data(json.utf8))
+        XCTAssertNil(decoded.lastActivityAt)
+    }
+
+    func testCacheTemperatureToneFindsBadgeByID() {
+        let warm = ProviderSnapshot(provider: .claude, lines: [
+            .progress(id: "session", label: "S", used: 1, limit: 100, format: .percent, resetsAt: nil, periodDurationMs: nil),
+            .badge(id: "cacheTemperature", text: "Cache warm", tone: .neutral)
+        ])
+        XCTAssertEqual(warm.cacheTemperatureTone, .neutral)
+
+        let cold = ProviderSnapshot(provider: .claude, lines: [.badge(id: "cacheTemperature", text: "Cache cold", tone: .warning)])
+        XCTAssertEqual(cold.cacheTemperatureTone, .warning)
+
+        let absent = ProviderSnapshot(provider: .claude, lines: [.badge(id: "other", text: "x", tone: .neutral)])
+        XCTAssertNil(absent.cacheTemperatureTone)
+
+        let empty = ProviderSnapshot(provider: .claude, lines: [])
+        XCTAssertNil(empty.cacheTemperatureTone)
+    }
+
 
     func testProviderErrorRoundTripsThroughJSON() throws {
         let errors: [ProviderError] = [

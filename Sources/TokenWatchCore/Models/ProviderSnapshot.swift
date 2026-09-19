@@ -75,13 +75,18 @@ public struct ProviderSnapshot: Sendable, Equatable, Codable {
     public let lines: [MetricLine]
     public let fetchedAt: Date
     public let error: ProviderError?
+    /// When a provider can determine it (currently: Claude, from local session transcripts),
+    /// the timestamp of the most recent local activity -- the signal behind the menu bar's
+    /// "last tool used" display. `nil` for providers with no such local signal.
+    public let lastActivityAt: Date?
 
-    public init(provider: ProviderID, plan: String? = nil, lines: [MetricLine] = [], fetchedAt: Date = Date(), error: ProviderError? = nil) {
+    public init(provider: ProviderID, plan: String? = nil, lines: [MetricLine] = [], fetchedAt: Date = Date(), error: ProviderError? = nil, lastActivityAt: Date? = nil) {
         self.provider = provider
         self.plan = plan
         self.lines = lines
         self.fetchedAt = fetchedAt
         self.error = error
+        self.lastActivityAt = lastActivityAt
     }
 
     /// Convenience factory for a failed refresh.
@@ -90,4 +95,14 @@ public struct ProviderSnapshot: Sendable, Equatable, Codable {
     }
 
     public var isError: Bool { error != nil }
+
+    /// The tone of the `cacheTemperature` badge line, if this snapshot has one.
+    public var cacheTemperatureTone: BadgeTone? {
+        for line in lines {
+            if case let .badge(id, _, tone) = line, id == "cacheTemperature" {
+                return tone
+            }
+        }
+        return nil
+    }
 }
