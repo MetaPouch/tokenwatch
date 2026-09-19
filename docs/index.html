@@ -133,19 +133,24 @@
   .mc-bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; margin-bottom: 10px; }
   .mc-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
   .mc-bar.amber > span { background: var(--warn); }
+  .mc-bar.red > span { background: var(--crit); }
   .mc-pill {
-    display: flex; width: fit-content; align-items: center; gap: 6px; font-size: 11px; font-family: var(--mono);
-    padding: 4px 9px; border-radius: 999px; background: rgba(88,230,168,0.12); color: var(--accent);
-    margin-bottom: 6px;
+    display: flex; width: fit-content; align-items: baseline; gap: 6px; font-size: 12px;
+    margin-bottom: 8px; color: var(--text);
   }
   .mc-pill:last-child { margin-bottom: 0; }
-  .mc-pill.cold { background: rgba(94,168,230,0.14); color: var(--cold); }
+  .mc-pill .mp-icon { font-size: 11px; }
+  .mc-pill b { font-weight: 600; }
+  .mc-pill .mp-detail { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .mc-pill.cold b { color: var(--cold); }
   .mockup-picker {
     display: flex; width: fit-content; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;
     padding: 7px 12px; border-radius: 999px; background: rgba(255,255,255,0.08); color: var(--text);
     margin-bottom: 14px;
   }
+  .mockup-picker img { width: 16px; height: 16px; display: block; }
   .mp-chevron { color: var(--muted); font-size: 11px; }
+  .provider-icon { width: 15px; height: 15px; display: block; flex: none; }
 
   section.section { padding: 60px 0; border-bottom: 1px solid var(--border); scroll-margin-top: 70px; }
   section.section:last-of-type { border-bottom: none; }
@@ -262,15 +267,15 @@
         <span class="mb-status"><span class="mb-flame">🔥</span> Claude 29%</span>
       </div>
       <div class="mockup-body">
-        <div class="mockup-picker">💬 Claude <span class="mp-chevron">⌄</span></div>
+        <div class="mockup-picker"><img src="icons/claude.svg" alt=""> Claude <span class="mp-chevron">⌄</span></div>
         <div class="mockup-card">
           <div class="mc-row"><span class="label">Session (5h)</span><span class="value">29%</span></div>
           <div class="mc-bar"><span style="width:29%"></span></div>
-          <div class="mc-row"><span class="label">Weekly</span><span class="value">13%</span></div>
-          <div class="mc-bar"><span style="width:13%"></span></div>
-          <span class="mc-pill">🔥 Cache warm &middot; 100% hit &middot; expires 14:15 &middot; token-bar</span>
-          <span class="mc-pill cold">❄️ Cache cold &middot; re-reads ~5k tok &middot; agentick-demo</span>
-          <span class="mc-pill">🔥 Cache warm &middot; 87% hit &middot; expires 13:58 &middot; dotfiles-fork</span>
+          <div class="mc-row"><span class="label">Weekly</span><span class="value">88%</span></div>
+          <div class="mc-bar amber"><span style="width:88%"></span></div>
+          <span class="mc-pill"><span class="mp-icon">🔥</span> <b>token-bar</b> <span class="mp-detail">100% hit &middot; expires 14:15</span></span>
+          <span class="mc-pill cold"><span class="mp-icon">❄️</span> <b>agentick-demo</b> <span class="mp-detail">cold &middot; re-reads ~5k tok</span></span>
+          <span class="mc-pill"><span class="mp-icon">🔥</span> <b>dotfiles-fork</b> <span class="mp-detail">87% hit &middot; expires 13:58</span></span>
         </div>
       </div>
     </div>
@@ -308,10 +313,11 @@
       </div>
       <div class="card">
         <h3><span class="icon">▤</span> One dashboard, pick your provider</h3>
-        <p>Click the icon for a provider picker, not a wall of cards &mdash; pick Claude and see
-        every locally active session's cache state, not just the newest; pick anyone else and see
-        session/weekly percent, credit balances, reset times, and spend, from the same renderer
-        for all thirteen.</p>
+        <p>Click the icon for a provider picker with each service's real logo, not a wall of
+        cards &mdash; pick Claude and see every locally active session's cache state, not just
+        the newest; pick anyone else and see session/weekly percent, credit balances, reset
+        times, and spend, every bar colored green/amber/red by how close it is to the limit,
+        from the same renderer for all thirteen.</p>
       </div>
       <div class="card">
         <h3><span class="icon">🔒</span> Local only</h3>
@@ -338,19 +344,19 @@
       &mdash; and talks to each provider's usage API directly.
     </p>
     <div class="providers">
-      <span class="chip">Claude <span class="auth">OAuth</span></span>
-      <span class="chip">Codex / ChatGPT <span class="auth">auth.json</span></span>
-      <span class="chip">OpenAI API <span class="auth">API key</span></span>
-      <span class="chip">Cursor <span class="auth">local session</span></span>
-      <span class="chip">GitHub Copilot <span class="auth">reused sign-in</span></span>
-      <span class="chip">Gemini <span class="auth">OAuth</span></span>
-      <span class="chip">Antigravity <span class="auth">local token</span></span>
-      <span class="chip">OpenRouter <span class="auth">API key</span></span>
-      <span class="chip">z.ai <span class="auth">API key</span></span>
-      <span class="chip">Kimi <span class="auth">API key</span></span>
-      <span class="chip">Amp <span class="auth">CLI / API key</span></span>
-      <span class="chip">Grok <span class="auth">auth.json</span></span>
-      <span class="chip">OpenCode Go <span class="auth">API key</span></span>
+      <span class="chip"><img class="provider-icon" src="icons/claude.svg" alt=""> Claude <span class="auth">OAuth</span></span>
+      <span class="chip"><img class="provider-icon" src="icons/codex.svg" alt=""> Codex / ChatGPT <span class="auth">auth.json</span></span>
+      <span class="chip"><img class="provider-icon" src="icons/openai.svg" alt=""> OpenAI API <span class="auth">API key</span></span>
+      <span class="chip"><img class="provider-icon" src="icons/cursor.svg" alt=""> Cursor <span class="auth">local session</span></span>
+      <span class="chip"><img class="provider-icon" src="icons/copilot.svg" alt=""> GitHub Copilot <span class="auth">reused sign-in</span></span>
+      <span class="chip"><img class="provider-icon" src="icons/gemini.png" alt=""> Gemini <span class="auth">OAuth</span></span>
+      <span class="chip"><img class="provider-icon" src="icons/antigravity.svg" alt=""> Antigravity <span class="auth">local token</span></span>
+      <span class="chip"><img class="provider-icon" src="icons/openrouter.svg" alt=""> OpenRouter <span class="auth">API key</span></span>
+      <span class="chip"><img class="provider-icon" src="icons/zai.svg" alt=""> z.ai <span class="auth">API key</span></span>
+      <span class="chip"><img class="provider-icon" src="icons/kimi.svg" alt=""> Kimi <span class="auth">API key</span></span>
+      <span class="chip"><img class="provider-icon" src="icons/amp.svg" alt=""> Amp <span class="auth">CLI / API key</span></span>
+      <span class="chip"><img class="provider-icon" src="icons/grok.svg" alt=""> Grok <span class="auth">auth.json</span></span>
+      <span class="chip"><img class="provider-icon" src="icons/opencode.svg" alt=""> OpenCode Go <span class="auth">API key</span></span>
     </div>
   </div>
 </section>
@@ -506,6 +512,9 @@
       <a href="https://github.com/ajays97/tokenwatch/blob/main/CONTRIBUTING.md">Contributing</a>
       <a href="https://github.com/ajays97/tokenwatch/blob/main/LICENSE">License</a>
     </nav>
+  </div>
+  <div class="wrap">
+    <p style="margin-top: 10px;">Provider logos courtesy of <a href="https://github.com/lobehub/lobe-icons">Lobe Icons</a> (MIT). Brand marks belong to their respective owners; shown here to identify each service, not to imply endorsement.</p>
   </div>
 </footer>
 
