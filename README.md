@@ -57,6 +57,16 @@ swift test
 
 Each provider has a mapper fixture test: sample JSON in, expected metric lines out.
 
+## Privacy & security
+
+Every credential TokenWatch reads goes to that same provider's own official usage API over
+HTTPS, and nowhere else — no telemetry, no analytics, no server we operate. Full detail on what's
+read, why, and how to report a security issue: [SECURITY.md](SECURITY.md).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for project layout, how to add a provider, and code style.
+
 ## Scope
 
 This is a from-scratch, clean-room build. It implements one reliable auth path and the primary
@@ -64,4 +74,5 @@ usage metric(s) per provider — not every edge case (multi-account switching, t
 enterprise hosts) that larger, multi-year usage trackers eventually grow. See inline doc comments
 on each provider for the specific scope cuts.
 
-Distribution (notarization, Homebrew cask, auto-update) is out of scope for this build.
+Distributed as a signed, notarized DMG and a Homebrew cask (see
+[DISTRIBUTION.md](DISTRIBUTION.md)); in-app auto-update is not implemented yet.
