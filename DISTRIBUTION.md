@@ -22,20 +22,18 @@ account interactively — nothing here can be done without your Apple ID / 2FA.
    quoted string is your `SIGN_IDENTITY`.
 
 **2. Store notarytool credentials** (separate from the signing cert — this authenticates the
-*upload* to Apple's notary service). Either path works; the profile name `TokenWatch` used below
-is what `scripts/notarize.sh` and `scripts/release.sh` expect by default.
+*upload* to Apple's notary service). Either path works; the profile name `TokenWatch Notary`
+used below is what `scripts/notarize.sh` and `scripts/release.sh` expect by default.
 
 **Option A — Apple ID + app-specific password** (simpler, what `store-credentials` defaults to
 when you skip the API key prompt):
 ```sh
 xcrun notarytool store-credentials "TokenWatch Notary"
-# Profile name: TokenWatch
+# Profile name: TokenWatch Notary
 # Path to App Store Connect API private key: <leave blank, press enter>
 # Developer Apple ID: <your Apple ID email on the MetaPouch team>
 # App-specific password: <generate one at appleid.apple.com -> Sign-In and Security ->
 #   App-Specific Passwords -> + -> copy the xxxx-xxxx-xxxx-xxxx password shown once>
-# Team ID: <MetaPouch's 10-character Team ID, from developer.apple.com/account -> Membership,
-#   or Xcode -> Settings -> Accounts -> select the MetaPouch team>
 ```
 Re-run `store-credentials` again later if the app-specific password is ever revoked.
 
@@ -80,7 +78,7 @@ network call to Apple at launch time (the staple embeds the ticket in the file i
 
 Verify independently at any point:
 ```sh
-spctl -a -t open --context context:primary-signature -v dist/TokenWatch-1.0.0.dmg
+spctl -a -t open --context context:primary-signature -v dist/TokenWatch-<version>.dmg
 # should print: accepted, source=Notarized Developer ID
 ```
 

@@ -38,6 +38,14 @@ Each provider lives in `Sources/TokenWatchCore/Providers/<Name>/` with four file
    `do`/`catch` around every network/parse call. **Never force-unwrap a response** — a
    provider's `refresh()` must return `.error(...)` on any failure, never throw or crash.
 
+Add a case to `ProviderID` (`Sources/TokenWatchCore/Models/ProviderID.swift`) with its
+`displayName`, `iconResourceName`, and `hasMonochromeIcon`, and drop a real logo at
+`Sources/TokenWatch/Icons/<name>.svg` (or `.png` if CoreSVG can't render the source file --
+Gemini's does this). Source it from a properly licensed collection like
+[Lobe Icons](https://github.com/lobehub/lobe-icons) and add a row to that directory's
+[NOTICE.md](Sources/TokenWatch/Icons/NOTICE.md); don't scrape a logo from a provider's own site
+without checking its license.
+
 Register the new runtime in `Sources/TokenWatch/App/AppContainer.swift`'s `buildRuntimes()`, and
 add it to `buildAPIKeyManagers()` too if it's key-based.
 
