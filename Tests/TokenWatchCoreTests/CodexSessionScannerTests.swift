@@ -60,10 +60,10 @@ final class CodexSessionScannerTests: XCTestCase {
 
     func testSessionLabelUsesCwdFromSessionMeta() {
         let url = writeRollout("rollout-x-33333333-3333.jsonl", lines: [
-            sessionMetaLine(cwd: "/Users/alice/projects/agentick-workspace"),
+            sessionMetaLine(cwd: "/Users/alice/projects/billing-api"),
             tokenCountLine(timestamp: "2026-01-01T00:00:00.000Z", input: 10, cached: 0),
         ])
-        XCTAssertEqual(CodexSessionScanner.sessionLabel(forTranscriptPath: url.path), "agentick-workspace")
+        XCTAssertEqual(CodexSessionScanner.sessionLabel(forTranscriptPath: url.path), "billing-api")
     }
 
     func testSessionLabelFallsBackToUUIDFragmentWhenNoCwd() {
