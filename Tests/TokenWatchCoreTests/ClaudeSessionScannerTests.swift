@@ -27,10 +27,9 @@ final class ClaudeSessionScannerTests: XCTestCase {
         return fileURL
     }
 
-    private func assistantLine(timestamp: String, input: Int, cacheRead: Int, cacheCreate: Int) -> String {
-        """
-        {"type":"assistant","timestamp":"\(timestamp)","message":{"usage":{"input_tokens":\(input),"cache_read_input_tokens":\(cacheRead),"cache_creation_input_tokens":\(cacheCreate)}}}
-        """
+    private func assistantLine(timestamp: String, input: Int, cacheRead: Int, cacheCreate: Int, cwd: String? = nil) -> String {
+        let cwdField = cwd.map { #","cwd":"\#($0)""# } ?? ""
+        return #"{"type":"assistant","timestamp":"\#(timestamp)","message":{"usage":{"input_tokens":\#(input),"cache_read_input_tokens":\#(cacheRead),"cache_creation_input_tokens":\#(cacheCreate)}}\#(cwdField)}"#
     }
 
     func testFindsLastAssistantUsageInMostRecentFile() {
@@ -48,6 +47,61 @@ final class ClaudeSessionScannerTests: XCTestCase {
         XCTAssertEqual(activity?.cacheReadTokens, 484_489)
         XCTAssertEqual(activity?.cacheCreationTokens, 1_460)
         XCTAssertEqual(activity?.timestamp, FlexibleISO8601.parse("2026-09-19T08:25:34.039Z"))
+        XCTAssertEqual(activity?.sessionLabel, "some-project")
+    }
+
+    func testPrefersRealCwdLeafOverEncodedDirectoryName() {
+        // The on-disk project directory encodes the whole nested path since home (a worktree
+        // manager placing this under ~/.tool/worktrees/<id>/<repo>), which would otherwise leak
+        // every intermediate directory name (tool, org, repo) into the dashboard. The real `cwd`
+        // Claude Code stamps on the line lets us show just the leaf instead.
+        _ = writeTranscript(
+            "session.jsonl",
+            projectDir: "-Users-alice--tool-worktrees-worktrees-abcd1234-git-github-com-someorg-somerepo",
+            lines: [
+                assistantLine(
+                    timestamp: "2026-09-19T08:25:34.039Z", input: 2, cacheRead: 10, cacheCreate: 0,
+                    cwd: "/Users/alice/.tool/worktrees/worktrees/abcd1234/git-github.com-someorg-somerepo"
+                ),
+            ]
+        )
+
+        let activity = ClaudeSessionScanner.mostRecentActivity(roots: [tempRoot.path])
+        XCTAssertEqual(activity?.sessionLabel, "git-github.com-someorg-somerepo")
+    }
+
+    func testCwdLeafForSimpleWorktreeShowsJustTheWorktreeName() {
+        _ = writeTranscript(
+            "session.jsonl",
+            projectDir: "-Users-alice-code-myrepo-worktrees-feature-x",
+            lines: [
+                assistantLine(
+                    timestamp: "2026-09-19T08:25:34.039Z", input: 2, cacheRead: 10, cacheCreate: 0,
+                    cwd: "/Users/alice/code/myrepo-worktrees/feature-x"
+                ),
+            ]
+        )
+
+        let activity = ClaudeSessionScanner.mostRecentActivity(roots: [tempRoot.path])
+        XCTAssertEqual(activity?.sessionLabel, "feature-x")
+    }
+
+    func testCwdLeafIsTruncatedWhenVeryLong() {
+        let longLeaf = String(repeating: "a", count: 60)
+        _ = writeTranscript("session.jsonl", lines: [
+            assistantLine(timestamp: "2026-09-19T08:25:34.039Z", input: 1, cacheRead: 0, cacheCreate: 0, cwd: "/Users/alice/code/\(longLeaf)"),
+        ])
+
+        let activity = ClaudeSessionScanner.mostRecentActivity(roots: [tempRoot.path])
+        XCTAssertEqual(activity?.sessionLabel, "…" + longLeaf.suffix(31))
+    }
+
+    func testEmptyCwdFallsBackToEncodedDirectoryName() {
+        _ = writeTranscript("session.jsonl", projectDir: "some-project", lines: [
+            assistantLine(timestamp: "2026-09-19T08:25:34.039Z", input: 1, cacheRead: 0, cacheCreate: 0, cwd: ""),
+        ])
+
+        let activity = ClaudeSessionScanner.mostRecentActivity(roots: [tempRoot.path])
         XCTAssertEqual(activity?.sessionLabel, "some-project")
     }
 
