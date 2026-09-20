@@ -9,7 +9,7 @@ struct ProviderCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let error = snapshot.error {
-                Label(error.displayMessage, systemImage: "exclamationmark.triangle")
+                Label(errorMessage(error, provider: snapshot.provider), systemImage: "exclamationmark.triangle")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else if snapshot.lines.isEmpty {
@@ -21,6 +21,17 @@ struct ProviderCardView: View {
                     lineView(line)
                 }
             }
+        }
+    }
+
+    /// Provider-specific guidance for the two credential-shaped errors -- "Not signed in" alone
+    /// left no next step. Every other error (network/http/parse) keeps its generic message,
+    /// since those aren't about what credential to go set up.
+    private func errorMessage(_ error: ProviderError, provider: ProviderID) -> String {
+        switch error {
+        case .credentialsMissing: return provider.credentialSourceHint
+        case .notConfigured: return provider.notConfiguredHint ?? error.displayMessage
+        default: return error.displayMessage
         }
     }
 

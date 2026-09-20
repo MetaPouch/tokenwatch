@@ -54,6 +54,9 @@ struct SettingsView: View {
                     set: { enablementStore.setEnabled(provider, $0) }
                 )
             )
+            Text(provider.credentialSourceHint)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
 
             if let manager = apiKeyManagers[provider] {
                 apiKeyField(provider: provider, manager: manager)
