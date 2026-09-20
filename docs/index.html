@@ -296,14 +296,16 @@
         <p>Claude's prompt cache goes cold 5 minutes after your last message &mdash; the next one
         re-reads your whole context at full price. TokenWatch reads your local session logs and
         shows warm (cheap) or cold (full price) before you hit send, with the hit ratio and exact
-        expiry time, scoped to whichever session you were just in.</p>
+        expiry time, scoped to whichever session you were just in. Codex gets the same warm/cold
+        badge from its own local rollout logs &mdash; without a fabricated expiry time, since
+        OpenAI's cache retention is server-side and not something a local file can tell you.</p>
       </div>
       <div class="card">
         <h3><span class="icon">🕓</span> Last tool used</h3>
         <p>The menu bar leads with whichever tool you were just in &mdash; name, usage percent, and
         its cache state &mdash; instead of making you guess which of thirteen possible providers
-        the number belongs to. Run several Claude Code sessions at once? Hover the icon to see
-        which project the cache state is describing.</p>
+        the number belongs to. Run several Claude Code or Codex sessions at once? Hover the icon
+        to see which project the cache state is describing.</p>
       </div>
       <div class="card">
         <h3><span class="icon">◐</span> Closest to the wall</h3>
@@ -437,9 +439,11 @@
       <div class="rm-row">
         <span class="rm-status shipped">SHIPPED</span>
         <div>
-          <h3>Cache temperature (Claude)</h3>
-          <p>Warm/cold badge with hit ratio and expiry, read from local session transcripts &mdash;
-          no extra network call.</p>
+          <h3>Cache temperature (Claude &amp; Codex)</h3>
+          <p>Warm/cold badge with hit ratio, read from local session transcripts &mdash; no extra
+          network call. Claude's badge shows an exact expiry (Anthropic's TTL is fixed and
+          client-visible); Codex's reports last-turn hit/miss only, since OpenAI's cache
+          retention is server-side and not locally knowable.</p>
         </div>
       </div>
       <div class="rm-row">
@@ -453,9 +457,9 @@
       <div class="rm-row">
         <span class="rm-status planned">PLANNED</span>
         <div>
-          <h3>Cache temperature for Codex &amp; OpenRouter</h3>
-          <p>Same local-session-log approach, extended to Codex's `~/.codex/sessions` transcripts
-          and OpenRouter's 10-minute sticky-routing window.</p>
+          <h3>Cache temperature for OpenRouter</h3>
+          <p>Same local-session-log approach, extended to OpenRouter's 10-minute sticky-routing
+          window.</p>
         </div>
       </div>
       <div class="rm-row">
