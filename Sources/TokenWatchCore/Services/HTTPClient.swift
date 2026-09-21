@@ -51,8 +51,7 @@ public struct HTTPClient: Sendable {
             throw ProviderError.network(error.localizedDescription)
         }
         guard (200...299).contains(status) else {
-            let message = String(data: data, encoding: .utf8)
-            throw ProviderError.http(status: status, message: message.map { String($0.prefix(200)) })
+            throw ProviderError.http(status: status, message: Self.errorMessage(from: data))
         }
         do {
             let decoder = JSONDecoder()
@@ -61,5 +60,23 @@ public struct HTTPClient: Sendable {
         } catch {
             throw ProviderError.parse("\(error)")
         }
+    }
+
+    /// Every provider's usage API returns errors as JSON, but the shape differs (Anthropic
+    /// nests under `error.message`, most OpenAI-compatible APIs match that same shape, a few
+    /// return a flat `message`). Try those common shapes first so a dashboard error reads as a
+    /// sentence, not a raw JSON blob; fall back to the truncated raw body for any shape none of
+    /// them match, rather than swallowing the error entirely.
+    static func errorMessage(from data: Data) -> String? {
+        struct CommonErrorBody: Decodable {
+            struct Nested: Decodable { let message: String? }
+            let error: Nested?
+            let message: String?
+        }
+        if let body = try? JSONDecoder().decode(CommonErrorBody.self, from: data),
+           let message = body.error?.message ?? body.message, !message.isEmpty {
+            return message
+        }
+        return String(data: data, encoding: .utf8).map { String($0.prefix(200)) }
     }
 }

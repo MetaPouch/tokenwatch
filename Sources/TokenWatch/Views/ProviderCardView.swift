@@ -24,13 +24,18 @@ struct ProviderCardView: View {
         }
     }
 
-    /// Provider-specific guidance for the two credential-shaped errors -- "Not signed in" alone
-    /// left no next step. Every other error (network/http/parse) keeps its generic message,
-    /// since those aren't about what credential to go set up.
+    /// Provider-specific guidance for the credential-shaped errors -- "Not signed in" or a raw
+    /// "HTTP 401: ..." alone left no next step. A 401/403 means the credential TokenWatch found
+    /// was once valid and no longer is (expired/revoked token, not "never configured"), so it
+    /// gets the same source hint as `.credentialsMissing` with wording that doesn't imply this
+    /// is a first-time setup. Every other error (network/other http/parse) keeps its generic
+    /// message, since those aren't about what credential to go set up.
     private func errorMessage(_ error: ProviderError, provider: ProviderID) -> String {
         switch error {
         case .credentialsMissing: return provider.credentialSourceHint
         case .notConfigured: return provider.notConfiguredHint ?? error.displayMessage
+        case let .http(status, _) where status == 401 || status == 403:
+            return "Credentials expired or revoked. \(provider.credentialSourceHint)"
         default: return error.displayMessage
         }
     }
