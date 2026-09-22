@@ -62,13 +62,20 @@ can see at a glance whether the fill is ahead of or behind that mark. The headli
 and the reset label ("Resets in 3h") are both click-to-flip -- click the headline to switch
 every metric to "% left" instead of "% used," click a reset label to switch every metric between
 a countdown and an exact clock time. Right-click any row for Star for menu bar / Hide / Refresh
-/ Customize; right-click a provider's header for the same, plus hiding the whole provider. A
-provider whose last successful fetch is more than two refresh cycles old gets a quiet "Outdated"
-tag next to its name.
+/ Customize; right-click a provider's header for the same, plus **Share Screenshot** (renders
+that card to a PNG and copies it to the clipboard) and hiding the whole provider. A provider
+whose last successful fetch is more than two refresh cycles old gets a quiet "Outdated" tag next
+to its name.
 
-A cross-provider **Total Spend** card sits above the list when at least one enabled provider has
-local spend data (today: Claude, via the 30-day scan below) -- a small donut with a
-Today/Yesterday/30 Days toggle and a per-provider legend.
+A cross-provider **Total Spend** card sits above the list when Settings' **Show Total Spend** is
+on and at least one enabled provider has local spend data (today: Claude, via the 30-day scan
+below). The title is a pull-down for **Cost** / **Cost per MTok** / **Tokens**; a
+**Today** / **Yesterday** / **30 Days** segmented toggle sits alongside it. The donut's segments
+use each provider's real brand color (Anthropic's terracotta, OpenAI's teal-green, and so on);
+hover the center for the exact figure instead of the rounded one; hover a provider's legend row
+for a ranked per-model spend breakdown (name, cost, share, tokens); the share icon copies a PNG
+of the card to your clipboard, and the ⓘ names which providers feed the total.
+
 
 Claude's and Codex's cards also list a compact row per locally active session (touched within
 the last 5 hours) -- a flame or snowflake, the project name, and a hit-ratio detail -- not just
@@ -92,6 +99,36 @@ reorder) and, per provider, an **Always Visible** / **On Demand** split -- drag 
 them to tuck it behind that provider's expand caret, or star it (up to two per provider) to pin
 it to the menu bar. **Reset** restores one provider's defaults; **Reset All** restores every
 provider's order and metrics.
+
+## Keyboard shortcuts
+
+| Key | Action |
+| --- | --- |
+| Return | Open Customize |
+| Esc | Close whichever sheet is open (Settings/Customize), else close the popover |
+| ⌘Z | Undo the last customization change (hide/show, reorder, star, tier move), app-wide |
+| ⌘R | Refresh now |
+| ⌘, | Toggle Settings |
+
+A global shortcut (recorded in Settings → General) also toggles the popover from anywhere, via
+the Carbon Event Manager -- no external dependency and no Input Monitoring permission needed
+(unlike `NSEvent`'s global key monitor).
+
+## Settings
+
+- **General** -- Show Total Spend, Launch at Login ([`SMAppService`](https://developer.apple.com/documentation/servicemanagement/smappservice), the modern login-item API), the global shortcut recorder.
+- **Appearance** -- menu-bar Icon Style (Text, or a compact **Bars** glyph of up to four starred
+  bounded metrics' fill fractions), Theme (System/Light/Dark), Density (Default/Compact), Time
+  Format (Auto/12-hour/24-hour) for exact reset times, Reduce Animations, Increase Transparency
+  (auto-disabled while macOS's own Reduce Transparency accessibility setting is on).
+- **Notifications** -- three independent, default-off pace-crossing alerts: **Almost Out**
+  (under 10% remaining), **Cutting It Close** (projected to land close to the limit),
+  **Will Run Out** (projected to run out before reset). Deduplicated so a refresh loop doesn't
+  repeat the same alert: a metric already in a bad state when the app launches establishes a
+  silent baseline, then only a new crossing or a worsening trigger fires again. macOS asks for
+  notification permission the first time you turn one on; if you decline, Settings shows a
+  warning with a link to System Settings.
+- **Refresh interval**, **Providers** -- unchanged.
 
 ## Usage tab
 
@@ -149,8 +186,9 @@ Every credential TokenWatch reads goes to that same provider's own official usag
 HTTPS, and nowhere else. The one exception is the optional pricing refresh
 (`PricingRefreshService`): a plain, unauthenticated GET of a public GitHub-hosted price list,
 roughly hourly, carrying no usage data or credentials -- it only ever sends a request for the
-file, nothing about you or your usage. No telemetry, no analytics, no server we operate. Full
-detail on what's read, why, and how to report a security issue: [SECURITY.md](SECURITY.md).
+file, nothing about you or your usage. Notifications use Apple's local `UNUserNotificationCenter`
+directly -- nothing about a quota alert leaves your Mac. No telemetry, no analytics, no server we
+operate. Full detail on what's read, why, and how to report a security issue: [SECURITY.md](SECURITY.md).
 
 ## Contributing
 
@@ -162,7 +200,10 @@ This is a from-scratch, clean-room build. It implements one reliable auth path a
 usage metric(s) per provider, plus read-only multi-account visibility for Claude/Codex and a
 Claude-only cost history (see Usage tab, above) -- not every edge case (account *switching*,
 team budgets, enterprise hosts) that larger, multi-year usage trackers eventually grow. See
-inline doc comments on each provider for the specific scope cuts.
+inline doc comments on each provider for the specific scope cuts. Zero external SwiftPM
+dependencies and zero telemetry are firm project principles -- an in-app auto-updater and any
+analytics SDK are deliberately not implemented, even though comparable menu-bar usage trackers
+ship both; see [DISTRIBUTION.md](DISTRIBUTION.md) for how updates work instead.
 
 Distributed as a signed, notarized DMG and a Homebrew cask (see
 [DISTRIBUTION.md](DISTRIBUTION.md)); in-app auto-update is not implemented yet, and the cask sets
