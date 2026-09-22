@@ -25,6 +25,8 @@ struct DashboardView: View {
     /// hosting `TokenWatchPanel` can resize to fit it.
     let onHeightChange: (CGFloat) -> Void
 
+    @Environment(\.colorScheme) private var systemColorScheme
+
     @State private var currentScreen: DashboardScreen = .dashboard
     @State private var customizeDetailProvider: ProviderID?
     @State private var selectedTab: DashboardTab = .provider
@@ -55,7 +57,14 @@ struct DashboardView: View {
             if reduceTransparency {
                 Color(nsColor: .windowBackgroundColor)
             } else {
-                Rectangle().glassEffect(appearanceStore.increaseTransparency ? .clear : .regular, in: .rect)
+                // A fixed black/white tint (not `NSColor.windowBackgroundColor`, which resolves
+                // unpredictably light when read from inside a `Glass.tint()` closure rather than
+                // a live-rendered view) darkens/lightens the glass to match whichever appearance
+                // the popover is actually rendering in, confirmed by direct screenshot.
+                let effectiveScheme = appearanceStore.theme.colorScheme ?? systemColorScheme
+                let tintColor: Color = effectiveScheme == .light ? .white : .black
+                let tintOpacity = appearanceStore.increaseTransparency ? 0.35 : 0.72
+                Rectangle().glassEffect(.regular.tint(tintColor.opacity(tintOpacity)), in: .rect)
             }
         }
         .preferredColorScheme(appearanceStore.theme.colorScheme)
