@@ -48,18 +48,20 @@ private struct AppearanceFile: Codable {
     var reduceAnimations: Bool
     var increaseTransparency: Bool
     var iconStyle: MenuBarIconStyle
+    var hideFromScreenShare: Bool
 
     private enum CodingKeys: String, CodingKey {
-        case theme, density, timeFormat, reduceAnimations, increaseTransparency, iconStyle
+        case theme, density, timeFormat, reduceAnimations, increaseTransparency, iconStyle, hideFromScreenShare
     }
 
-    init(theme: AppTheme, density: AppDensity, timeFormat: TimeFormatPreference, reduceAnimations: Bool, increaseTransparency: Bool, iconStyle: MenuBarIconStyle) {
+    init(theme: AppTheme, density: AppDensity, timeFormat: TimeFormatPreference, reduceAnimations: Bool, increaseTransparency: Bool, iconStyle: MenuBarIconStyle, hideFromScreenShare: Bool) {
         self.theme = theme
         self.density = density
         self.timeFormat = timeFormat
         self.reduceAnimations = reduceAnimations
         self.increaseTransparency = increaseTransparency
         self.iconStyle = iconStyle
+        self.hideFromScreenShare = hideFromScreenShare
     }
 
     init(from decoder: Decoder) throws {
@@ -70,12 +72,14 @@ private struct AppearanceFile: Codable {
         reduceAnimations = try container.decode(Bool.self, forKey: .reduceAnimations)
         increaseTransparency = try container.decode(Bool.self, forKey: .increaseTransparency)
         iconStyle = try container.decodeIfPresent(MenuBarIconStyle.self, forKey: .iconStyle) ?? .text
+        hideFromScreenShare = try container.decodeIfPresent(Bool.self, forKey: .hideFromScreenShare) ?? false
     }
 }
 
 /// Persists the popover's Appearance settings (Theme, Density, Time Format, Reduce Animations,
-/// Increase Transparency, menu-bar Icon Style) to their own `appearance.json`, independent of
-/// the other stores so a decode failure here can't take any of them down.
+/// Increase Transparency, menu-bar Icon Style, Hide From Screen Share) to their own
+/// `appearance.json`, independent of the other stores so a decode failure here can't take any of
+/// them down.
 @MainActor
 public final class AppearanceStore: ObservableObject {
     @Published public var theme: AppTheme { didSet { persist() } }
@@ -84,6 +88,10 @@ public final class AppearanceStore: ObservableObject {
     @Published public var reduceAnimations: Bool { didSet { persist() } }
     @Published public var increaseTransparency: Bool { didSet { persist() } }
     @Published public var iconStyle: MenuBarIconStyle { didSet { persist() } }
+    /// Excludes the popover window from screen recordings and screen sharing
+    /// (`NSWindow.sharingType = .none`) -- useful when presenting/streaming with usage figures
+    /// visible in the menu bar dropdown that shouldn't be broadcast.
+    @Published public var hideFromScreenShare: Bool { didSet { persist() } }
 
     private let fileURL: URL
 
@@ -97,6 +105,7 @@ public final class AppearanceStore: ObservableObject {
             self.reduceAnimations = file.reduceAnimations
             self.increaseTransparency = file.increaseTransparency
             self.iconStyle = file.iconStyle
+            self.hideFromScreenShare = file.hideFromScreenShare
         } else {
             self.theme = .system
             self.density = .regular
@@ -104,11 +113,12 @@ public final class AppearanceStore: ObservableObject {
             self.reduceAnimations = false
             self.increaseTransparency = false
             self.iconStyle = .text
+            self.hideFromScreenShare = false
         }
     }
 
     private func persist() {
-        let file = AppearanceFile(theme: theme, density: density, timeFormat: timeFormat, reduceAnimations: reduceAnimations, increaseTransparency: increaseTransparency, iconStyle: iconStyle)
+        let file = AppearanceFile(theme: theme, density: density, timeFormat: timeFormat, reduceAnimations: reduceAnimations, increaseTransparency: increaseTransparency, iconStyle: iconStyle, hideFromScreenShare: hideFromScreenShare)
         guard let data = try? JSONEncoder().encode(file) else { return }
         try? data.write(to: fileURL, options: .atomic)
     }

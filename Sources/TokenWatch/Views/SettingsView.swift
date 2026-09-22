@@ -62,6 +62,8 @@ struct SettingsView: View {
                     Toggle("Increase Transparency", isOn: $appearanceStore.increaseTransparency)
                         .disabled(NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency)
                         .help(NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency ? "Disabled while macOS's own Reduce Transparency setting is on." : "")
+                    Toggle("Hide From Screen Share", isOn: $appearanceStore.hideFromScreenShare)
+                        .help("Excludes the popover from screen recordings and screen sharing.")
                 }
 
                 settingsSection("Notifications") {

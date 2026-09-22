@@ -82,6 +82,9 @@ struct ProviderSectionView: View {
 
     private var header: some View {
         HStack(spacing: 6) {
+            Image(systemName: "line.3.horizontal")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
             ProviderIcon(provider: provider, size: 16)
             Text(provider.displayName).font(.subheadline.weight(.semibold))
             if let plan = snapshot?.plan, !plan.isEmpty {

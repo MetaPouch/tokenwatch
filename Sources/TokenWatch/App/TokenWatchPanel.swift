@@ -40,6 +40,12 @@ final class TokenWatchPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
+    /// Excludes this window from screen recordings/screen sharing when `hidden`, restores normal
+    /// sharing otherwise.
+    func setHiddenFromScreenShare(_ hidden: Bool) {
+        sharingType = hidden ? .none : .readWrite
+    }
+
     /// Anchors the panel's top-left under the status item button and shows it.
     func show(relativeTo button: NSStatusBarButton) {
         guard let buttonWindow = button.window else { return }

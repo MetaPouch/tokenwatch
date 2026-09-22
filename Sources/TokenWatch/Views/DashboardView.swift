@@ -28,6 +28,7 @@ struct DashboardView: View {
     @State private var customizeDetailProvider: ProviderID?
     @State private var selectedTab: DashboardTab = .provider
     @State private var screenHeights: [DashboardScreen: CGFloat] = [:]
+    @State private var draggingProvider: ProviderID?
 
     private enum DashboardTab: Hashable {
         case provider, usage
@@ -304,6 +305,17 @@ struct DashboardView: View {
                         onHideProvider: { enablementStore.setEnabled(provider, false) },
                         onCustomizeProvider: { customizeDetailProvider = provider; currentScreen = .customize }
                     )
+                    .opacity(draggingProvider == provider ? 0.4 : 1)
+                    .onDrag {
+                        draggingProvider = provider
+                        return NSItemProvider(object: provider.rawValue as NSString)
+                    }
+                    .onDrop(of: [.text], delegate: ProviderDropDelegate(
+                        target: provider,
+                        draggingProvider: $draggingProvider,
+                        enabled: enablementStore.enabledProviders,
+                        layoutStore: layoutStore
+                    ))
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

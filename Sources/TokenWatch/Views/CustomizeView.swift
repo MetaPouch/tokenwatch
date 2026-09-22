@@ -195,7 +195,7 @@ struct CustomizeView: View {
 }
 
 /// Reorders the enabled-provider list as a row is dragged over another.
-private struct ProviderDropDelegate: DropDelegate {
+struct ProviderDropDelegate: DropDelegate {
     let target: ProviderID
     @Binding var draggingProvider: ProviderID?
     let enabled: Set<ProviderID>

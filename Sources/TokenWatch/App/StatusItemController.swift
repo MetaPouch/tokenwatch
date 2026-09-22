@@ -45,6 +45,11 @@ final class StatusItemController {
             .receive(on: RunLoop.main)
             .sink { [weak self] _, _ in self?.render() }
             .store(in: &cancellables)
+
+        appearanceStore.$hideFromScreenShare
+            .receive(on: RunLoop.main)
+            .sink { [weak self] hidden in self?.panel.setHiddenFromScreenShare(hidden) }
+            .store(in: &cancellables)
     }
 
     @objc func togglePanel() {

@@ -17,6 +17,7 @@ final class AppearanceStoreTests: XCTestCase {
         XCTAssertFalse(store.reduceAnimations)
         XCTAssertFalse(store.increaseTransparency)
         XCTAssertEqual(store.iconStyle, .text)
+        XCTAssertFalse(store.hideFromScreenShare)
     }
 
     func testChangesPersistAcrossInstancesOnDisk() {
@@ -28,6 +29,7 @@ final class AppearanceStoreTests: XCTestCase {
         first.reduceAnimations = true
         first.increaseTransparency = true
         first.iconStyle = .bars
+        first.hideFromScreenShare = true
 
         let second = AppearanceStore(directory: dir)
         XCTAssertEqual(second.theme, .dark)
@@ -36,6 +38,7 @@ final class AppearanceStoreTests: XCTestCase {
         XCTAssertTrue(second.reduceAnimations)
         XCTAssertTrue(second.increaseTransparency)
         XCTAssertEqual(second.iconStyle, .bars)
+        XCTAssertTrue(second.hideFromScreenShare)
     }
 
     func testIconStyleDefaultsToTextWhenMissingFromAnOlderSavedFile() {
@@ -47,5 +50,17 @@ final class AppearanceStoreTests: XCTestCase {
         let store = AppearanceStore(directory: dir)
         XCTAssertEqual(store.iconStyle, .text)
         XCTAssertEqual(store.theme, .dark)
+        XCTAssertFalse(store.hideFromScreenShare)
+    }
+
+    func testHideFromScreenShareDefaultsToFalseWhenMissingFromAnOlderSavedFile() {
+        let dir = tempDir()
+        let legacyJSON = """
+        {"theme":"Light","density":"Default","timeFormat":"Auto","reduceAnimations":false,"increaseTransparency":false,"iconStyle":"Bars"}
+        """
+        try? legacyJSON.data(using: .utf8)!.write(to: dir.appendingPathComponent("appearance.json"))
+        let store = AppearanceStore(directory: dir)
+        XCTAssertFalse(store.hideFromScreenShare)
+        XCTAssertEqual(store.iconStyle, .bars)
     }
 }
