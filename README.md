@@ -55,6 +55,14 @@ not, since OpenAI's cache retention is server-side, org-dependent, and machine-l
 reports whether the last turn itself was a cache hit. Every other provider shows its usual
 session/weekly percent, credit balance, and spend lines.
 
+Claude's local activity also picks up sessions run through a coding-agent harness that talks to
+Anthropic's API directly rather than shelling out to the `claude` CLI (currently: `omp`, the CLI
+behind [Superset](https://superset.sh)) -- without this, usage through such a harness would be
+completely invisible to the local session list even though it's real Claude usage. This depends
+on that harness's own undocumented local session-log format, not a stable public contract the
+way Claude Code's and Codex's are, so it's read defensively and fails soft if the format ever
+changes.
+
 ## Build & run
 
 Requires Xcode 15+ / Swift 5.10 toolchain on macOS 14+.
