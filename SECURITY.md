@@ -11,14 +11,20 @@ each provider's doc comment under `Sources/TokenWatchCore/Providers/`.
 
 **What TokenWatch does with what it reads:**
 - Sends the credential to that same provider's own official usage API, over HTTPS, to ask "what's
-  my current usage." Nothing else.
-- Never sends a credential to any host other than the provider that issued it.
+  my current usage." Nothing else -- a credential is never sent anywhere but the provider that
+  issued it.
 - Never writes to, modifies, or deletes another app's credential file or Keychain item — every
   read is read-only.
 - Never phones home. There is no telemetry, no analytics SDK, no crash reporter, no update-check
   ping, no server TokenWatch's authors operate. You can verify this directly: every outbound host
-  is a literal string in the relevant `*UsageClient.swift` file, and `git grep -n 'URL(string:'`
-  finds all of them.
+  is a literal string in the relevant `*UsageClient.swift` file (per-provider) or
+  `PricingRefreshService.swift` (the one exception below), and `git grep -n 'URL(string:'` finds
+  all of them.
+- The one non-credential network call: `PricingRefreshService` does a plain, unauthenticated GET
+  of a public GitHub-hosted model-price list roughly hourly, to keep local cost estimates current.
+  This request carries no credential, no usage data, and no identifying information -- it's
+  indistinguishable from any other visitor fetching that public file. A fetch failure falls
+  straight through to a bundled static table, so it's never a hard dependency.
 - API keys you enter yourself are stored in the macOS Keychain under the service
   `dev.tokenwatch.credentials`, scoped to TokenWatch's own code-signing identity. Cached derived
   sessions (currently: Cursor's Safari-cookie fallback) live under `dev.tokenwatch.cookiecache`,

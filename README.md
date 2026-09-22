@@ -34,33 +34,48 @@ its own -- the status item alone (a plain ring, nothing to show yet) is easy to 
 first time. It goes straight to "No providers enabled -- Open Settings." Every later launch
 leaves discovery to the status item.
 
-If a provider has a recent local-activity signal (currently: Claude and Codex, from local
-session transcripts, refreshed within the last 24h), the status item shows that provider's name,
-its current session percent (never weekly, even if weekly happens to be higher -- session is the
-actionable number moment-to-moment), and a progress ring colored green (<70%), amber (70-90%),
-or red (>90%). When the provider's prompt cache has local data for that session, the ring is
-tinted green (warm -- a follow-up message stays cheap) or blue (cold -- the next message
-re-reads the full context at full price) instead of the usual threshold color. That cache read
-reflects exactly one local session -- whichever one you touched most recently, which matters if
-you run several sessions in parallel. Hover the status item, or check the badge line in the
-dashboard, to see which project it's describing and when. Otherwise it falls back to whichever
-enabled provider's metric is closest to its limit (highest used/limit ratio), same coloring.
+By default (nothing starred yet) the status item shows a smart summary: whichever enabled
+provider has a recent local-activity signal (currently: Claude and Codex, from local session
+transcripts, refreshed within the last 24h) shows its name, its current session percent (never
+weekly, even if weekly happens to be higher), and a progress ring. Ring/cache-badge coloring is
+unchanged from before. Otherwise it falls back to whichever enabled provider's metric is closest
+to its limit (highest used/limit ratio).
+
+Star a metric from its right-click menu (or from Customize) to pin it instead -- once anything
+is starred, the status item switches to showing exactly those pinned metrics, one segment per
+provider with real data, up to two metrics per provider. A provider whose stars have no data
+yet drops out of the strip entirely rather than showing a placeholder.
 
 ## Dashboard
 
-Click the status item to open the dashboard: a provider picker (each provider's real logo, from
-[Lobe Icons](https://github.com/lobehub/lobe-icons) -- see
+Click the status item to open the dashboard: every enabled provider stacked in one scrollable
+list (in whatever order Customize has them in), instead of a one-at-a-time picker. Provider
+logos are real, from [Lobe Icons](https://github.com/lobehub/lobe-icons) -- see
 [Sources/TokenWatch/Icons/NOTICE.md](Sources/TokenWatch/Icons/NOTICE.md) for license and
-per-icon sourcing) above a detail view for whichever one is selected. It opens on the provider
-the status item was just showing -- switch with the dropdown. Every progress bar is colored green
-under 70% used, amber 70-90%, red above, so a card's own numbers tell you what needs attention
-without reading every line. Claude's and Codex's detail views each list a compact row per
-locally active session (touched within the last 5 hours) -- a flame or snowflake, the project
-name, and a hit-ratio detail -- not just the newest session. Claude's detail includes a precise
-expiry (`expires HH:mm`), since Anthropic's cache TTL is fixed and client-visible; Codex's does
-not, since OpenAI's cache retention is server-side, org-dependent, and machine-local, so it only
-reports whether the last turn itself was a cache hit. Every other provider shows its usual
-session/weekly percent, credit balance, and spend lines.
+per-icon sourcing.
+
+A metric with a reset window is colored by burn-rate pace, not raw percentage: blue means
+current usage is on course to finish with room to spare, amber means it's projected to land
+close to the limit, red means it's projected to run out before the window resets (or is already
+there). An elapsed-time tick mark on the bar marks how far through the window "now" is, so you
+can see at a glance whether the fill is ahead of or behind that mark. The headline ("34% used")
+and the reset label ("Resets in 3h") are both click-to-flip -- click the headline to switch
+every metric to "% left" instead of "% used," click a reset label to switch every metric between
+a countdown and an exact clock time. Right-click any row for Star for menu bar / Hide / Refresh
+/ Customize; right-click a provider's header for the same, plus hiding the whole provider. A
+provider whose last successful fetch is more than two refresh cycles old gets a quiet "Outdated"
+tag next to its name.
+
+A cross-provider **Total Spend** card sits above the list when at least one enabled provider has
+local spend data (today: Claude, via the 30-day scan below) -- a small donut with a
+Today/Yesterday/30 Days toggle and a per-provider legend.
+
+Claude's and Codex's cards also list a compact row per locally active session (touched within
+the last 5 hours) -- a flame or snowflake, the project name, and a hit-ratio detail -- not just
+the newest session. Claude's detail includes a precise expiry (`expires HH:mm`), since
+Anthropic's cache TTL is fixed and client-visible; Codex's does not, since OpenAI's cache
+retention is server-side, org-dependent, and machine-local, so it only reports whether the last
+turn itself was a cache hit.
 
 Claude's local activity also picks up sessions run through a coding-agent harness that talks to
 Anthropic's API directly rather than shelling out to the `claude` CLI (currently: `omp`, the CLI
@@ -69,6 +84,14 @@ completely invisible to the local session list even though it's real Claude usag
 on that harness's own undocumented local session-log format, not a stable public contract the
 way Claude Code's and Codex's are, so it's read defensively and fails soft if the format ever
 changes.
+
+## Customize
+
+Open from a card's right-click menu, or the gear icon: a provider list (on/off, drag to
+reorder) and, per provider, an **Always Visible** / **On Demand** split -- drag a metric between
+them to tuck it behind that provider's expand caret, or star it (up to two per provider) to pin
+it to the menu bar. **Reset** restores one provider's defaults; **Reset All** restores every
+provider's order and metrics.
 
 ## Usage tab
 
@@ -93,8 +116,10 @@ every enabled provider, instead of one provider at a time.
   seconds on a machine with a long session history, so it always runs off the main thread and
   shows its own loading state rather than blocking the tab. The estimate is explicitly labeled as
   one: subscription usage isn't billed per token, this is "what the same work would cost on the
-  API," using a pricing table that goes stale as vendors change prices (the table's last-updated
-  date is shown next to the chart).
+  API." Rates come from a small static table refreshed against LiteLLM's public,
+  community-maintained price list roughly hourly (`PricingRefreshService`) -- a fetch failure or
+  not having fetched yet falls straight through to the static table, so cost estimates work
+  offline and on first launch too.
 
 ## Build & run
 
@@ -121,8 +146,11 @@ Each provider has a mapper fixture test: sample JSON in, expected metric lines o
 ## Privacy & security
 
 Every credential TokenWatch reads goes to that same provider's own official usage API over
-HTTPS, and nowhere else — no telemetry, no analytics, no server we operate. Full detail on what's
-read, why, and how to report a security issue: [SECURITY.md](SECURITY.md).
+HTTPS, and nowhere else. The one exception is the optional pricing refresh
+(`PricingRefreshService`): a plain, unauthenticated GET of a public GitHub-hosted price list,
+roughly hourly, carrying no usage data or credentials -- it only ever sends a request for the
+file, nothing about you or your usage. No telemetry, no analytics, no server we operate. Full
+detail on what's read, why, and how to report a security issue: [SECURITY.md](SECURITY.md).
 
 ## Contributing
 
