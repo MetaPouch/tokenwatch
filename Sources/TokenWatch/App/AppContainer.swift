@@ -9,6 +9,8 @@ public final class AppContainer {
     public let dataStore: WidgetDataStore
     public let refreshScheduler: RefreshScheduler
     public let usageService: MultiAccountUsageService
+    public let layoutStore: LayoutStore
+    public let displayStore: MeterDisplayStore
     /// Providers backed by a plain API key, keyed by id, for Settings' secure text fields.
     /// Populated as `APIKeyManaging` providers land (Phase 1+).
     public let apiKeyManagers: [ProviderID: any APIKeyManaging]
@@ -21,6 +23,8 @@ public final class AppContainer {
         self.dataStore = dataStore
         self.refreshScheduler = RefreshScheduler(dataStore: dataStore, enablementStore: enablementStore)
         self.usageService = MultiAccountUsageService(dataStore: dataStore, enablementStore: enablementStore)
+        self.layoutStore = LayoutStore()
+        self.displayStore = MeterDisplayStore()
         self.apiKeyManagers = Self.buildAPIKeyManagers()
     }
 
