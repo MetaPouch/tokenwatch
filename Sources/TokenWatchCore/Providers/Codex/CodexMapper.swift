@@ -9,6 +9,11 @@ enum CodexMapper {
         if let secondary = response.rateLimit?.secondaryWindow {
             lines.append(windowLine(id: "weekly", label: "Weekly", window: secondary, now: now))
         }
+        for (index, extra) in (response.additionalRateLimits ?? []).enumerated() {
+            guard let window = extra.rateLimit?.primaryWindow else { continue }
+            let name = extra.limitName ?? "Limit \(index + 1)"
+            lines.append(windowLine(id: "additional:\(name)", label: name, window: window, now: now))
+        }
         return lines
     }
 

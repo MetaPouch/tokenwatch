@@ -8,6 +8,13 @@ public enum ProviderError: Error, Sendable, Equatable, Codable {
     case network(String)
     case http(status: Int, message: String?)
     case parse(String)
+    /// A credential was found and is structurally valid, but locally known (from its own expiry
+    /// timestamps, no network call) to be temporarily unusable. `selfHeals` distinguishes "the
+    /// CLI silently renews this on its next run, no action needed" from "the login itself has
+    /// lapsed, sign in again" -- conflating the two as one generic error message would either
+    /// alarm a user over a normal, self-correcting state, or under-inform one who genuinely needs
+    /// to re-authenticate. `detail` is the full final user-facing message.
+    case credentialLapsed(selfHeals: Bool, detail: String)
 
     /// Short human-readable summary suitable for a dashboard error badge.
     public var displayMessage: String {
@@ -25,11 +32,13 @@ public enum ProviderError: Error, Sendable, Equatable, Codable {
             return "HTTP \(status)"
         case .parse(let message):
             return "Parse error: \(message)"
+        case .credentialLapsed(_, let detail):
+            return detail
         }
     }
 
     private enum CodingKeys: String, CodingKey {
-        case kind, message, status
+        case kind, message, status, selfHeals
     }
 
     public init(from decoder: Decoder) throws {
@@ -41,6 +50,7 @@ public enum ProviderError: Error, Sendable, Equatable, Codable {
         case "network": self = .network(try c.decode(String.self, forKey: .message))
         case "http": self = .http(status: try c.decode(Int.self, forKey: .status), message: try c.decodeIfPresent(String.self, forKey: .message))
         case "parse": self = .parse(try c.decode(String.self, forKey: .message))
+        case "credentialLapsed": self = .credentialLapsed(selfHeals: try c.decode(Bool.self, forKey: .selfHeals), detail: try c.decode(String.self, forKey: .message))
         default:
             throw DecodingError.dataCorruptedError(forKey: .kind, in: c, debugDescription: "Unknown ProviderError kind '\(kind)'")
         }
@@ -63,6 +73,10 @@ public enum ProviderError: Error, Sendable, Equatable, Codable {
         case .parse(let message):
             try c.encode("parse", forKey: .kind)
             try c.encode(message, forKey: .message)
+        case .credentialLapsed(let selfHeals, let detail):
+            try c.encode("credentialLapsed", forKey: .kind)
+            try c.encode(selfHeals, forKey: .selfHeals)
+            try c.encode(detail, forKey: .message)
         }
     }
 }

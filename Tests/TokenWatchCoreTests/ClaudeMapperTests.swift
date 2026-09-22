@@ -51,4 +51,85 @@ final class ClaudeMapperTests: XCTestCase {
         let lines = ClaudeMapper.map(response)
         XCTAssertEqual(lines.count, 2)
     }
+
+    func testMapsSevenDaySonnetWindow() throws {
+        let json = """
+        {
+          "five_hour": {"utilization": 14.0, "resets_at": null},
+          "seven_day": {"utilization": 8.0, "resets_at": null},
+          "seven_day_sonnet": {"utilization": 42.0, "resets_at": "2026-09-24T09:00:00Z"}
+        }
+        """
+        let response = try JSONDecoder().decode(ClaudeUsageResponse.self, from: Data(json.utf8))
+        let lines = ClaudeMapper.map(response)
+        XCTAssertEqual(lines.count, 3)
+        guard case let .progress(id, label, used, _, _, resetsAt, _) = lines[2] else {
+            return XCTFail("expected seven_day_sonnet progress line")
+        }
+        XCTAssertEqual(id, "weekly_sonnet")
+        XCTAssertEqual(label, "Weekly · Sonnet")
+        XCTAssertEqual(used, 42.0)
+        XCTAssertNotNil(resetsAt)
+    }
+
+    func testMapsPerModelWeeklyScopedLimits() throws {
+        let json = """
+        {
+          "five_hour": {"utilization": 14.0, "resets_at": null},
+          "seven_day": {"utilization": 8.0, "resets_at": null},
+          "limits": [
+            {"kind": "weekly_scoped", "percent": 55.0, "resets_at": "2026-09-24T09:00:00Z", "scope": {"model": {"display_name": "Opus"}}},
+            {"kind": "weekly_scoped", "percent": 12.0, "resets_at": null, "scope": {"model": {"display_name": "Haiku"}}}
+          ]
+        }
+        """
+        let response = try JSONDecoder().decode(ClaudeUsageResponse.self, from: Data(json.utf8))
+        let lines = ClaudeMapper.map(response)
+        XCTAssertEqual(lines.count, 4)
+        guard case let .progress(id, label, used, _, _, _, _) = lines[2] else {
+            return XCTFail("expected Opus weekly_scoped line")
+        }
+        XCTAssertEqual(id, "weekly_scoped:Opus")
+        XCTAssertEqual(label, "Weekly · Opus")
+        XCTAssertEqual(used, 55.0)
+        guard case let .progress(id2, label2, _, _, _, _, _) = lines[3] else {
+            return XCTFail("expected Haiku weekly_scoped line")
+        }
+        XCTAssertEqual(id2, "weekly_scoped:Haiku")
+        XCTAssertEqual(label2, "Weekly · Haiku")
+    }
+
+    func testIgnoresNonWeeklyScopedLimitsAndMissingModelName() throws {
+        let json = """
+        {
+          "five_hour": {"utilization": 14.0, "resets_at": null},
+          "seven_day": {"utilization": 8.0, "resets_at": null},
+          "limits": [
+            {"kind": "other_kind", "percent": 90.0, "scope": {"model": {"display_name": "Opus"}}},
+            {"kind": "weekly_scoped", "percent": 90.0, "scope": {}}
+          ]
+        }
+        """
+        let response = try JSONDecoder().decode(ClaudeUsageResponse.self, from: Data(json.utf8))
+        let lines = ClaudeMapper.map(response)
+        XCTAssertEqual(lines.count, 2)
+    }
+
+    func testSkipsDuplicateWeeklyScopedLabelIfAlreadyPresent() throws {
+        // A limits[] entry whose composed label collides with seven_day_sonnet's own label is
+        // skipped rather than shown twice.
+        let json = """
+        {
+          "five_hour": {"utilization": 14.0, "resets_at": null},
+          "seven_day": {"utilization": 8.0, "resets_at": null},
+          "seven_day_sonnet": {"utilization": 40.0, "resets_at": null},
+          "limits": [
+            {"kind": "weekly_scoped", "percent": 99.0, "scope": {"model": {"display_name": "Sonnet"}}}
+          ]
+        }
+        """
+        let response = try JSONDecoder().decode(ClaudeUsageResponse.self, from: Data(json.utf8))
+        let lines = ClaudeMapper.map(response)
+        XCTAssertEqual(lines.count, 3)
+    }
 }

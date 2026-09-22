@@ -23,7 +23,7 @@ final class StatusItemController {
         self.dataStore = container.dataStore
         self.enablementStore = container.enablementStore
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        self.panel = TokenWatchPanel(content: DashboardView(dataStore: container.dataStore, enablementStore: container.enablementStore, refreshScheduler: container.refreshScheduler, apiKeyManagers: container.apiKeyManagers))
+        self.panel = TokenWatchPanel(content: DashboardView(dataStore: container.dataStore, enablementStore: container.enablementStore, refreshScheduler: container.refreshScheduler, apiKeyManagers: container.apiKeyManagers, usageService: container.usageService))
 
         if let button = statusItem.button {
             button.target = self

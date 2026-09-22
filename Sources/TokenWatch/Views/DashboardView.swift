@@ -12,9 +12,15 @@ struct DashboardView: View {
     @ObservedObject var enablementStore: ProviderEnablementStore
     let refreshScheduler: RefreshScheduler
     let apiKeyManagers: [ProviderID: any APIKeyManaging]
+    @ObservedObject var usageService: MultiAccountUsageService
 
     @State private var showingSettings = false
     @State private var selectedProvider: ProviderID?
+    @State private var selectedTab: DashboardTab = .provider
+
+    private enum DashboardTab: Hashable {
+        case provider, usage
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -23,9 +29,16 @@ struct DashboardView: View {
             if enabledProviders.isEmpty {
                 emptyState
             } else {
-                providerPicker
+                tabSwitcher
                 Divider()
-                detail
+                switch selectedTab {
+                case .provider:
+                    providerPicker
+                    Divider()
+                    detail
+                case .usage:
+                    UsageTabView(usageService: usageService)
+                }
             }
         }
         .frame(width: 360, height: 420)
@@ -36,6 +49,18 @@ struct DashboardView: View {
             SettingsView(enablementStore: enablementStore, apiKeyManagers: apiKeyManagers)
                 .frame(width: 380, height: 420)
         }
+    }
+
+    private var tabSwitcher: some View {
+        Picker("", selection: $selectedTab) {
+            Text("Provider").tag(DashboardTab.provider)
+            Text("Usage").tag(DashboardTab.usage)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .padding(.horizontal, 14)
+        .padding(.top, 8)
+        .padding(.bottom, 2)
     }
 
     private var enabledProviders: [ProviderID] {

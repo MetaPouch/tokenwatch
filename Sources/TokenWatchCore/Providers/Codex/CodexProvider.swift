@@ -31,7 +31,7 @@ public struct CodexProvider: ProviderRuntime {
             do {
                 let response = try await usageClient.fetchUsage(accessToken: token)
                 let lines = CodexMapper.map(response)
-                return Self.appendingCacheTemperature(to: lines)
+                return Self.appendingCacheTemperature(to: lines, plan: response.planType)
             } catch let error as ProviderError {
                 return .error(provider: Self.id, error: error)
             } catch {
@@ -51,7 +51,7 @@ public struct CodexProvider: ProviderRuntime {
             guard !lines.isEmpty else {
                 return .error(provider: Self.id, error: .credentialsMissing)
             }
-            return Self.appendingCacheTemperature(to: lines)
+            return Self.appendingCacheTemperature(to: lines, plan: nil)
         } catch let error as ProviderError {
             return .error(provider: Self.id, error: error)
         } catch {
@@ -63,7 +63,9 @@ public struct CodexProvider: ProviderRuntime {
     /// appends a cache-temperature badge per active session on top of the usage `lines` already
     /// fetched from the API -- shared by both the primary and app-server-fallback refresh paths
     /// so cache-temperature works regardless of which credential source produced the usage %.
-    private static func appendingCacheTemperature(to usageLines: [MetricLine]) -> ProviderSnapshot {
+    /// `plan` is the usage endpoint's own `plan_type` when the primary path produced it -- the
+    /// app-server fallback has no equivalent field, so it always passes `nil`.
+    private static func appendingCacheTemperature(to usageLines: [MetricLine], plan: String?) -> ProviderSnapshot {
         var lines = usageLines
         let activity = CodexSessionScanner.mostRecentActivity()
         if let cacheLine = CodexCacheTemperature.evaluate(activity: activity) {
@@ -77,6 +79,6 @@ public struct CodexProvider: ProviderRuntime {
             }
         }
 
-        return ProviderSnapshot(provider: Self.id, plan: nil, lines: lines, fetchedAt: Date(), lastActivityAt: activity?.timestamp, lastActivityLabel: activity?.sessionLabel)
+        return ProviderSnapshot(provider: Self.id, plan: plan, lines: lines, fetchedAt: Date(), lastActivityAt: activity?.timestamp, lastActivityLabel: activity?.sessionLabel)
     }
 }

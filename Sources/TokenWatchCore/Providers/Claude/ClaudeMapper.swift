@@ -28,6 +28,40 @@ enum ClaudeMapper {
             ))
         }
 
+        if let sevenDaySonnet = response.sevenDaySonnet, let utilization = sevenDaySonnet.utilization {
+            lines.append(.progress(
+                id: "weekly_sonnet",
+                label: "Weekly · Sonnet",
+                used: utilization,
+                limit: 100,
+                format: .percent,
+                resetsAt: sevenDaySonnet.resetsAt.flatMap(FlexibleISO8601.parse),
+                periodDurationMs: 7 * 24 * 3600 * 1000
+            ))
+        }
+
+        var seenLabels = Set(lines.compactMap { line -> String? in
+            if case let .progress(_, label, _, _, _, _, _) = line { return label }
+            return nil
+        })
+        for limit in response.limits ?? [] {
+            guard limit.kind == "weekly_scoped", let percent = limit.percent,
+                  let modelName = limit.scope?.model?.displayName
+            else { continue }
+            let label = "Weekly · \(modelName)"
+            guard !seenLabels.contains(label) else { continue }
+            seenLabels.insert(label)
+            lines.append(.progress(
+                id: "weekly_scoped:\(modelName)",
+                label: label,
+                used: percent,
+                limit: 100,
+                format: .percent,
+                resetsAt: limit.resetsAt.flatMap(FlexibleISO8601.parse),
+                periodDurationMs: 7 * 24 * 3600 * 1000
+            ))
+        }
+
         if let extra = response.extraUsage, extra.isEnabled, let monthlyLimit = extra.monthlyLimit {
             let usedCredits = extra.usedCredits ?? 0
             lines.append(.progress(

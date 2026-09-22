@@ -11,9 +11,12 @@ import Foundation
 /// runs the `claude` CLI, so it has its own separate transcript format -- see that scanner's doc
 /// comment) -- without the second source, any Claude usage happening through such a harness is
 /// invisible here even though the account-level Session/Weekly percent below already reflects it.
-/// Credentials: Claude CLI Keychain item `Claude Code-credentials`, falling back to
-/// `~/.claude/.credentials.json`. Local `.jsonl` per-model cost scanning (Claude Tracker's
-/// per-model breakdown) remains a stretch goal skipped in v1 -- see plan Phase 2 step 1.
+/// Credentials: freshest of the Claude CLI Keychain item, `~/.claude/.credentials.json`, and
+/// `~/.config/claude/credentials.json` -- see `ClaudeAuthStore`. A locally lapsed credential
+/// short-circuits before any network call (see `ClaudeCredentialLapse`), distinguishing "will
+/// refresh itself" from "needs `/login` again" rather than treating every lapse as the same
+/// generic error. Local `.jsonl` per-model cost scanning (Claude Tracker's per-model breakdown)
+/// remains a stretch goal skipped in v1 -- see plan Phase 2 step 1.
 public struct ClaudeProvider: ProviderRuntime {
     public static let id: ProviderID = .claude
     public static let displayName = "Claude"
@@ -27,15 +30,31 @@ public struct ClaudeProvider: ProviderRuntime {
     }
 
     public func hasLocalCredentials() async -> Bool {
-        authStore.accessToken() != nil
+        authStore.resolvedCredential() != nil
     }
 
     public func refresh() async -> ProviderSnapshot {
-        guard let token = authStore.accessToken() else {
+        guard let credential = authStore.resolvedCredential() else {
             return .error(provider: Self.id, error: .credentialsMissing)
         }
+
+        switch ClaudeAuthStore.classifyLapse(credential) {
+        case .stale:
+            return .error(provider: Self.id, error: .credentialLapsed(
+                selfHeals: true,
+                detail: "Access token will refresh automatically the next time Claude Code runs -- no action needed."
+            ))
+        case .expired:
+            return .error(provider: Self.id, error: .credentialLapsed(
+                selfHeals: false,
+                detail: "Sign-in expired. \(ProviderID.claude.credentialSourceHint)"
+            ))
+        case .live:
+            break
+        }
+
         do {
-            let response = try await usageClient.fetchUsage(accessToken: token)
+            let response = try await usageClient.fetchUsage(accessToken: credential.accessToken)
             var lines = ClaudeMapper.map(response)
             let ttlSeconds = ClaudeCacheTemperature.resolveTTLSeconds()
             let activity = Self.mostRecentActivity()
@@ -50,7 +69,7 @@ public struct ClaudeProvider: ProviderRuntime {
                 }
             }
 
-            return ProviderSnapshot(provider: Self.id, plan: nil, lines: lines, fetchedAt: Date(), lastActivityAt: activity?.timestamp, lastActivityLabel: activity?.sessionLabel)
+            return ProviderSnapshot(provider: Self.id, plan: credential.subscriptionType, lines: lines, fetchedAt: Date(), lastActivityAt: activity?.timestamp, lastActivityLabel: activity?.sessionLabel)
         } catch let error as ProviderError {
             return .error(provider: Self.id, error: error)
         } catch {

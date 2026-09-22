@@ -8,6 +8,7 @@ public final class AppContainer {
     public let enablementStore: ProviderEnablementStore
     public let dataStore: WidgetDataStore
     public let refreshScheduler: RefreshScheduler
+    public let usageService: MultiAccountUsageService
     /// Providers backed by a plain API key, keyed by id, for Settings' secure text fields.
     /// Populated as `APIKeyManaging` providers land (Phase 1+).
     public let apiKeyManagers: [ProviderID: any APIKeyManaging]
@@ -19,6 +20,7 @@ public final class AppContainer {
         self.enablementStore = enablementStore
         self.dataStore = dataStore
         self.refreshScheduler = RefreshScheduler(dataStore: dataStore, enablementStore: enablementStore)
+        self.usageService = MultiAccountUsageService(dataStore: dataStore, enablementStore: enablementStore)
         self.apiKeyManagers = Self.buildAPIKeyManagers()
     }
 

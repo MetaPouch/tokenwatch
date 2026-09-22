@@ -23,7 +23,9 @@ nothing relayed off your device.
 | Grok | `~/.grok/auth.json` | Credit usage percent |
 | OpenCode Go | API key | Rolling + weekly usage percent |
 
-Single account per provider. Everything runs locally: no telemetry, no data leaves your device.
+Single account per provider on the menu bar and per-provider dashboard tab. The Usage tab (below)
+additionally discovers and shows every local Claude/Codex login it can find, not just the
+default one. Everything runs locally: no telemetry, no data leaves your device.
 
 ## Menu bar behavior
 
@@ -63,6 +65,32 @@ on that harness's own undocumented local session-log format, not a stable public
 way Claude Code's and Codex's are, so it's read defensively and fails soft if the format ever
 changes.
 
+## Usage tab
+
+A second tab in the dashboard (next to the per-provider one), switched via the segmented control
+at the top: a consolidated list of quota meters across every locally discovered account for
+every enabled provider, instead of one provider at a time.
+
+- **Default accounts.** Whatever each provider's own dashboard tab already tracks, shown as a
+  card per provider -- no extra network call, it reuses the same poll.
+- **Additional accounts (Claude, Codex only).** A second (or third...) local login under a
+  different `CLAUDE_CONFIG_DIR`/`CODEX_HOME` profile directory shows as its own card, fetched
+  fresh when the tab appears. Discovery is file-based only: it finds a profile whose login wrote
+  its own `.credentials.json`/`auth.json`, not one that only ever reached the macOS Keychain
+  under a profile-specific service name. A found-but-lapsed credential shows why (self-heals on
+  next CLI run, or needs a real re-login) rather than a raw HTTP error. This is read-only
+  visibility, not account switching -- TokenWatch doesn't change which login your `claude`/`codex`
+  CLI actually uses.
+- **Cost history (Claude only, last 7 days).** A daily bar chart -- toggle Cost/Tokens -- built
+  by summing *every* turn's token usage (not just the newest, the way cache-temperature works)
+  across local Claude session logs, both the real `claude` CLI's transcripts and a coding-agent
+  harness's own (see above), and pricing them at API list rates. This can take several real
+  seconds on a machine with a long session history, so it always runs off the main thread and
+  shows its own loading state rather than blocking the tab. The estimate is explicitly labeled as
+  one: subscription usage isn't billed per token, this is "what the same work would cost on the
+  API," using a pricing table that goes stale as vendors change prices (the table's last-updated
+  date is shown next to the chart).
+
 ## Build & run
 
 Requires Xcode 15+ / Swift 5.10 toolchain on macOS 14+.
@@ -98,9 +126,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for project layout, how to add a provider
 ## Scope
 
 This is a from-scratch, clean-room build. It implements one reliable auth path and the primary
-usage metric(s) per provider — not every edge case (multi-account switching, team budgets,
-enterprise hosts) that larger, multi-year usage trackers eventually grow. See inline doc comments
-on each provider for the specific scope cuts.
+usage metric(s) per provider, plus read-only multi-account visibility for Claude/Codex and a
+Claude-only cost history (see Usage tab, above) -- not every edge case (account *switching*,
+team budgets, enterprise hosts) that larger, multi-year usage trackers eventually grow. See
+inline doc comments on each provider for the specific scope cuts.
 
 Distributed as a signed, notarized DMG and a Homebrew cask (see
 [DISTRIBUTION.md](DISTRIBUTION.md)); in-app auto-update is not implemented yet.

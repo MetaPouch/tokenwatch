@@ -2,7 +2,9 @@ import Foundation
 
 /// `GET /backend-api/wham/usage` response shape (field names confirmed via
 /// github.com/openai/codex#26370, where users quote the raw JSON: `primary_window.used_percent`,
-/// `window_minutes`, `resets_at`).
+/// `window_minutes`, `resets_at`; `additional_rate_limits` cross-checked against
+/// github.com/superset-sh/superset's own reader, which surfaces named extra limits the endpoint
+/// can return alongside primary/secondary).
 struct CodexUsageResponse: Decodable {
     struct Window: Decodable {
         let usedPercent: Double?
@@ -26,10 +28,25 @@ struct CodexUsageResponse: Decodable {
             case secondaryWindow = "secondary_window"
         }
     }
+    struct AdditionalRateLimit: Decodable {
+        let limitName: String?
+        let rateLimit: RateLimit?
+
+        enum CodingKeys: String, CodingKey {
+            case limitName = "limit_name"
+            case rateLimit = "rate_limit"
+        }
+    }
     let rateLimit: RateLimit?
+    let additionalRateLimits: [AdditionalRateLimit]?
+    let email: String?
+    let planType: String?
 
     enum CodingKeys: String, CodingKey {
         case rateLimit = "rate_limit"
+        case additionalRateLimits = "additional_rate_limits"
+        case email
+        case planType = "plan_type"
     }
 }
 
