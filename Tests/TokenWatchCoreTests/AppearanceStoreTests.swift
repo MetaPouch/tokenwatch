@@ -16,6 +16,7 @@ final class AppearanceStoreTests: XCTestCase {
         XCTAssertEqual(store.timeFormat, .auto)
         XCTAssertFalse(store.reduceAnimations)
         XCTAssertFalse(store.increaseTransparency)
+        XCTAssertEqual(store.iconStyle, .text)
     }
 
     func testChangesPersistAcrossInstancesOnDisk() {
@@ -26,6 +27,7 @@ final class AppearanceStoreTests: XCTestCase {
         first.timeFormat = .twentyFourHour
         first.reduceAnimations = true
         first.increaseTransparency = true
+        first.iconStyle = .bars
 
         let second = AppearanceStore(directory: dir)
         XCTAssertEqual(second.theme, .dark)
@@ -33,5 +35,17 @@ final class AppearanceStoreTests: XCTestCase {
         XCTAssertEqual(second.timeFormat, .twentyFourHour)
         XCTAssertTrue(second.reduceAnimations)
         XCTAssertTrue(second.increaseTransparency)
+        XCTAssertEqual(second.iconStyle, .bars)
+    }
+
+    func testIconStyleDefaultsToTextWhenMissingFromAnOlderSavedFile() {
+        let dir = tempDir()
+        let legacyJSON = """
+        {"theme":"Dark","density":"Compact","timeFormat":"Auto","reduceAnimations":false,"increaseTransparency":false}
+        """
+        try? legacyJSON.data(using: .utf8)!.write(to: dir.appendingPathComponent("appearance.json"))
+        let store = AppearanceStore(directory: dir)
+        XCTAssertEqual(store.iconStyle, .text)
+        XCTAssertEqual(store.theme, .dark)
     }
 }

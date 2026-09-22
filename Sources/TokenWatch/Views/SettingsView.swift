@@ -53,6 +53,9 @@ struct SettingsView: View {
                 }
 
                 Section("Appearance") {
+                    Picker("Icon Style", selection: $appearanceStore.iconStyle) {
+                        ForEach(MenuBarIconStyle.allCases) { Text($0.rawValue).tag($0) }
+                    }
                     Picker("Theme", selection: $appearanceStore.theme) {
                         ForEach(AppTheme.allCases) { Text($0.rawValue).tag($0) }
                     }

@@ -18,12 +18,14 @@ final class StatusItemController {
     private let dataStore: WidgetDataStore
     private let enablementStore: ProviderEnablementStore
     private let layoutStore: LayoutStore
+    private let appearanceStore: AppearanceStore
     private var cancellables: Set<AnyCancellable> = []
 
     init(container: AppContainer) {
         self.dataStore = container.dataStore
         self.enablementStore = container.enablementStore
         self.layoutStore = container.layoutStore
+        self.appearanceStore = container.appearanceStore
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.panel = TokenWatchPanel(content: DashboardView(dataStore: container.dataStore, enablementStore: container.enablementStore, refreshScheduler: container.refreshScheduler, apiKeyManagers: container.apiKeyManagers, usageService: container.usageService, layoutStore: container.layoutStore, displayStore: container.displayStore, appearanceStore: container.appearanceStore, toggleDashboardPanel: { container.toggleDashboardPanel() }))
 
@@ -37,8 +39,9 @@ final class StatusItemController {
 
         dataStore.$snapshots
             .combineLatest(enablementStore.$enabledProviders, layoutStore.$metricLayouts, layoutStore.$providerOrder)
+            .combineLatest(appearanceStore.$iconStyle)
             .receive(on: RunLoop.main)
-            .sink { [weak self] _, _, _, _ in self?.render() }
+            .sink { [weak self] _, _ in self?.render() }
             .store(in: &cancellables)
     }
 
@@ -112,6 +115,16 @@ final class StatusItemController {
 
     private func render() {
         guard let button = statusItem.button else { return }
+
+        if appearanceStore.iconStyle == .bars {
+            let fractions = barsFractions()
+            if !fractions.isEmpty {
+                button.attributedTitle = NSAttributedString(string: "")
+                button.image = Self.barsImage(fractions: fractions)
+                button.toolTip = pinnedSegments().map { "\($0.provider.displayName): \($0.text)" }.joined(separator: "\n")
+                return
+            }
+        }
 
         let pins = pinnedSegments()
         if !pins.isEmpty {
@@ -194,6 +207,57 @@ final class StatusItemController {
         default:
             return nil
         }
+    }
+
+    /// Up to four starred *bounded* metrics' fill fractions, across every enabled provider in
+    /// layout order -- the data behind Bars icon style. A starred metric with no limit (a
+    /// balance, a badge) simply doesn't appear here; it only ever shows in Text style.
+    private func barsFractions() -> [Double] {
+        var fractions: [Double] = []
+        for provider in layoutStore.orderedProviders(enabled: enablementStore.enabledProviders) {
+            guard let snapshot = dataStore.snapshot(for: provider) else { continue }
+            let starredIDs = Set(layoutStore.starredMetricIDs(for: provider))
+            guard !starredIDs.isEmpty else { continue }
+            for line in snapshot.lines where starredIDs.contains(line.id) {
+                if case let .progress(_, _, used, limit, _, _, _) = line, limit > 0 {
+                    fractions.append(max(0, min(used / limit, 1)))
+                }
+            }
+        }
+        return Array(fractions.prefix(4))
+    }
+
+    /// Renders an 18x18 template image of up to four horizontal bars, each showing one
+    /// metric's fill fraction -- a compact alternative to Text style for someone who'd rather
+    /// glance at bar heights than read numbers. A simplified, not pixel-exact, port of the
+    /// underlying idea (up to four bars, track + fill) rather than a copy of any specific
+    /// implementation.
+    private static func barsImage(fractions: [Double]) -> NSImage {
+        let size = NSSize(width: 18, height: 18)
+        let image = NSImage(size: size)
+        image.lockFocus()
+        defer { image.unlockFocus() }
+
+        let count = max(fractions.count, 1)
+        let gap: CGFloat = 2
+        let barHeight = (size.height - CGFloat(count - 1) * gap) / CGFloat(count)
+
+        for (index, fraction) in fractions.enumerated() {
+            let y = size.height - CGFloat(index + 1) * barHeight - CGFloat(index) * gap
+            let trackRect = NSRect(x: 0, y: y, width: size.width, height: barHeight)
+            let track = NSBezierPath(roundedRect: trackRect, xRadius: barHeight / 2, yRadius: barHeight / 2)
+            NSColor.labelColor.withAlphaComponent(0.18).setFill()
+            track.fill()
+
+            let fillWidth = max(trackRect.width * CGFloat(fraction), fraction > 0 ? barHeight : 0)
+            let fillRect = NSRect(x: 0, y: y, width: fillWidth, height: barHeight)
+            let fill = NSBezierPath(roundedRect: fillRect, xRadius: barHeight / 2, yRadius: barHeight / 2)
+            NSColor.labelColor.setFill()
+            fill.fill()
+        }
+
+        image.isTemplate = true
+        return image
     }
 
     /// Composes every pinned segment into one title string, separated by a thin divider --
