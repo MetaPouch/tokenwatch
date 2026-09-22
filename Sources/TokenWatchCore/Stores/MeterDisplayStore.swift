@@ -14,10 +14,33 @@ public enum ResetDisplayMode: String, Sendable, Codable {
     case exact
 }
 
+/// `showTotalSpend` was added after `display.json` already shipped -- a custom decode so an
+/// existing file missing that key defaults it to `true` instead of failing the whole decode
+/// (which would silently reset every other saved preference too).
 private struct DisplayFile: Codable {
     var reading: MeterReadingMode
     var reset: ResetDisplayMode
     var alwaysShowPacing: Bool
+    var showTotalSpend: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case reading, reset, alwaysShowPacing, showTotalSpend
+    }
+
+    init(reading: MeterReadingMode, reset: ResetDisplayMode, alwaysShowPacing: Bool, showTotalSpend: Bool) {
+        self.reading = reading
+        self.reset = reset
+        self.alwaysShowPacing = alwaysShowPacing
+        self.showTotalSpend = showTotalSpend
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        reading = try container.decode(MeterReadingMode.self, forKey: .reading)
+        reset = try container.decode(ResetDisplayMode.self, forKey: .reset)
+        alwaysShowPacing = try container.decode(Bool.self, forKey: .alwaysShowPacing)
+        showTotalSpend = try container.decodeIfPresent(Bool.self, forKey: .showTotalSpend) ?? true
+    }
 }
 
 /// App-wide, click-to-flip display preferences. Flipping one row's headline or reset label
@@ -37,9 +60,13 @@ public final class MeterDisplayStore: ObservableObject {
     @Published public var alwaysShowPacing: Bool {
         didSet { persist() }
     }
+    /// On by default: whether the cross-provider Total Spend card shows at the top of the
+    /// dashboard at all (independent of whether it currently has anything to show).
+    @Published public var showTotalSpend: Bool {
+        didSet { persist() }
+    }
 
     private let fileURL: URL
-    private var isLoading = false
 
     public init(directory: URL? = nil) {
         let base = directory ?? ConfigStore.defaultDirectory()
@@ -48,10 +75,12 @@ public final class MeterDisplayStore: ObservableObject {
             self.readingMode = file.reading
             self.resetDisplayMode = file.reset
             self.alwaysShowPacing = file.alwaysShowPacing
+            self.showTotalSpend = file.showTotalSpend
         } else {
             self.readingMode = .used
             self.resetDisplayMode = .countdown
             self.alwaysShowPacing = false
+            self.showTotalSpend = true
         }
     }
 
@@ -64,7 +93,7 @@ public final class MeterDisplayStore: ObservableObject {
     }
 
     private func persist() {
-        let file = DisplayFile(reading: readingMode, reset: resetDisplayMode, alwaysShowPacing: alwaysShowPacing)
+        let file = DisplayFile(reading: readingMode, reset: resetDisplayMode, alwaysShowPacing: alwaysShowPacing, showTotalSpend: showTotalSpend)
         guard let data = try? JSONEncoder().encode(file) else { return }
         try? data.write(to: fileURL, options: .atomic)
     }

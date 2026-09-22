@@ -23,6 +23,11 @@ struct SettingsView: View {
             Divider()
 
             Form {
+                Section("General") {
+                    Toggle("Show Total Spend", isOn: $displayStore.showTotalSpend)
+                        .help("Whether the cross-provider Total Spend card shows at the top of the dashboard.")
+                }
+
                 Section("Refresh interval") {
                     Stepper(
                         "\(enablementStore.refreshIntervalSeconds) seconds",
@@ -39,6 +44,7 @@ struct SettingsView: View {
                     Toggle("Always show pacing", isOn: $displayStore.alwaysShowPacing)
                         .help("Show every bounded metric's projection and pace tick, not just ones close to or over their limit.")
                 }
+
 
                 Section("Providers") {
                     ForEach(ProviderID.allCases) { provider in

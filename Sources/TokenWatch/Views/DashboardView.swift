@@ -69,7 +69,7 @@ struct DashboardView: View {
     private var providerList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                TotalSpendCard(dataStore: dataStore, enablementStore: enablementStore)
+                TotalSpendCard(dataStore: dataStore, enablementStore: enablementStore, displayStore: displayStore)
                 ForEach(orderedEnabledProviders) { provider in
                     ProviderSectionView(
                         provider: provider,

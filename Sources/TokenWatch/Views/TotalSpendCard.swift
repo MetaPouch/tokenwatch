@@ -1,39 +1,40 @@
 import SwiftUI
+import AppKit
 import TokenWatchCore
 
-/// Cross-provider spend summary: a donut segmented by provider, a Today/Yesterday/30 Days
-/// toggle, and a centered total. Sources spend from whichever enabled providers have a local
-/// spend-history scanner wired in -- today that's Claude only, via `ClaudeUsageHistoryScanner`
-/// -- so adding another provider's local spend is additive to `providerTotals`, not a rewrite of
-/// this view. Renders nothing (not an empty card) when no enabled provider has spend data for
-/// the selected period, matching the rest of the dashboard's "never show a misleading zero"
-/// stance.
+/// Cross-provider spend summary: a donut segmented by provider, a Cost / Cost per MTok / Tokens
+/// mode picker, a Today/Yesterday/30 Days toggle, and a centered total. Sources spend from
+/// whichever enabled providers have a local spend-history scanner wired in -- today that's
+/// Claude only, via `ClaudeUsageHistoryScanner` -- so adding another provider's local spend is
+/// additive to `providerValues`, not a rewrite of this view. Renders nothing (not an empty card)
+/// when no enabled provider has data for the selected period/mode, matching the rest of the
+/// dashboard's "never show a misleading zero" stance.
 struct TotalSpendCard: View {
     @ObservedObject var dataStore: WidgetDataStore
     @ObservedObject var enablementStore: ProviderEnablementStore
+    @ObservedObject var displayStore: MeterDisplayStore
 
-    @State private var period: SpendPeriod = .today
+    @AppStorage("totalSpendPeriod") private var periodRaw: String = SpendPeriod.today.rawValue
+    @AppStorage("totalSpendMode") private var modeRaw: String = SpendMetricMode.cost.rawValue
     @State private var claudeDays: [ClaudeUsageDay] = []
     @State private var isLoading = true
+    @State private var isHoveringCenter = false
+
+    private var period: SpendPeriod { SpendPeriod(rawValue: periodRaw) ?? .today }
+    private var mode: SpendMetricMode { SpendMetricMode(rawValue: modeRaw) ?? .cost }
 
     var body: some View {
         Group {
-            if !isLoading, let totals = providerTotals, !totals.isEmpty {
-                card(totals: totals)
+            if displayStore.showTotalSpend, !isLoading, let entries = providerValues, !entries.isEmpty {
+                card(entries: entries)
             } else {
-                // A `Group` whose content is *conditionally entirely empty* on first render
-                // doesn't reliably fire `.task`/`.onAppear` in SwiftUI -- confirmed via direct
-                // instrumentation (the load below never even started). Always render something
-                // concrete, even a zero-size placeholder, so this view has a stable identity to
-                // attach the task to from the very first frame.
+                // A view that's conditionally entirely empty on its first render doesn't
+                // reliably fire `.task` in SwiftUI -- always render something concrete so the
+                // load below is guaranteed to start.
                 Color.clear.frame(width: 0, height: 0)
             }
         }
         .task {
-            // `.utility` QoS measured far slower than a foreground process for the identical
-            // scan under this app's background/App-Nap-eligible state -- this gates visible UI
-            // content the user is actively waiting on, so it runs at `.userInitiated` priority
-            // and explicitly opts out of App Nap (see `withBackgroundActivity`).
             let result = await withBackgroundActivity(reason: "Scanning local Claude spend history") {
                 await Task.detached(priority: .userInitiated) {
                     ClaudeUsageHistoryScanner.dailyUsage(days: 30)
@@ -44,96 +45,165 @@ struct TotalSpendCard: View {
         }
     }
 
-    /// One entry per provider with spend in the selected period, largest first. `nil` while
-    /// still loading.
-    private var providerTotals: [(provider: ProviderID, amount: Double)]? {
+    /// One entry per provider with a nonzero value for the current mode/period, largest first.
+    /// `nil` while still loading.
+    private var providerValues: [(provider: ProviderID, value: Double)]? {
         guard !isLoading else { return nil }
-        var totals: [(ProviderID, Double)] = []
+        var entries: [(ProviderID, Double)] = []
         if enablementStore.isEnabled(.claude) {
-            let amount = SpendAggregator.amount(for: period, days: claudeDays)
-            if amount > 0 { totals.append((.claude, amount)) }
+            let value: Double?
+            switch mode {
+            case .cost: value = SpendAggregator.amount(for: period, days: claudeDays)
+            case .tokens: value = Double(SpendAggregator.tokens(for: period, days: claudeDays))
+            case .costPerMTok: value = SpendAggregator.costPerMillionTokens(for: period, days: claudeDays)
+            }
+            if let value, value > 0 { entries.append((.claude, value)) }
         }
-        return totals.sorted { $0.1 > $1.1 }.map { (provider: $0.0, amount: $0.1) }
+        return entries.sorted { $0.1 > $1.1 }.map { (provider: $0.0, value: $0.1) }
     }
 
-    private func card(totals: [(provider: ProviderID, amount: Double)]) -> some View {
-        let total = totals.reduce(0) { $0 + $1.amount }
+    private func card(entries: [(provider: ProviderID, value: Double)]) -> some View {
+        let total = entries.reduce(0) { $0 + $1.value }
         return VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Total Spend").font(.subheadline.weight(.semibold))
+            HStack(spacing: 6) {
+                Menu {
+                    ForEach(SpendMetricMode.allCases) { candidate in
+                        Button(candidate.rawValue) { modeRaw = candidate.rawValue }
+                    }
+                } label: {
+                    HStack(spacing: 3) {
+                        Text("Total Spend").font(.subheadline.weight(.semibold))
+                        Image(systemName: "chevron.down").font(.caption2)
+                    }
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                Image(systemName: "info.circle")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .help("Includes: \(entries.map { $0.provider.displayName }.joined(separator: ", "))")
                 Spacer()
-                Picker("", selection: $period) {
-                    ForEach(SpendPeriod.allCases) { Text($0.rawValue).tag($0) }
+                Button(action: { shareToClipboard(entries: entries, total: total) }) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Copy a PNG of this card to the clipboard")
+                Picker("", selection: $periodRaw) {
+                    ForEach(SpendPeriod.allCases) { Text($0.rawValue).tag($0.rawValue) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
             }
             HStack(spacing: 16) {
-                donut(totals: totals, total: total)
+                donutWithCenter(entries: entries, total: total)
                     .frame(width: 72, height: 72)
-                legend(totals: totals, total: total)
+                legend(entries: entries, total: total)
             }
         }
         .padding(12)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
     }
 
-    private func donut(totals: [(provider: ProviderID, amount: Double)], total: Double) -> some View {
+    private func donutWithCenter(entries: [(provider: ProviderID, value: Double)], total: Double) -> some View {
         ZStack {
-            Canvas { context, size in
-                let lineWidth: CGFloat = 10
-                let rect = CGRect(origin: .zero, size: size).insetBy(dx: lineWidth / 2, dy: lineWidth / 2)
-                var startAngle = Angle(degrees: -90)
-                for entry in totals {
-                    let fraction = total > 0 ? entry.amount / total : 0
-                    // A tiny share still gets a visible sliver rather than vanishing entirely.
-                    let sweep = Angle(degrees: max(fraction * 360, totals.count > 1 ? 3 : 360))
-                    var path = Path()
-                    path.addArc(center: CGPoint(x: rect.midX, y: rect.midY), radius: rect.width / 2, startAngle: startAngle, endAngle: startAngle + sweep, clockwise: false)
-                    context.stroke(path, with: .color(brandColor(entry.provider)), style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
-                    startAngle += sweep
+            donut(entries: entries, total: total)
+            if isHoveringCenter {
+                Text(preciseCenterText(total: total))
+                    .font(.system(size: 9, weight: .bold))
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(2)
+                    .padding(4)
+            } else {
+                VStack(spacing: 0) {
+                    Text(compactCenterNumber(total: total))
+                        .font(.caption.weight(.bold).monospacedDigit())
+                    Text(centerUnit)
+                        .font(.system(size: 8))
+                        .foregroundStyle(.secondary)
                 }
             }
-            VStack(spacing: 0) {
-                Text(compactDollars(total))
-                    .font(.caption.weight(.bold).monospacedDigit())
-                Text("dollars")
-                    .font(.system(size: 8))
-                    .foregroundStyle(.secondary)
+        }
+        .onHover { isHoveringCenter = $0 }
+    }
+
+    private func donut(entries: [(provider: ProviderID, value: Double)], total: Double) -> some View {
+        Canvas { context, size in
+            let lineWidth: CGFloat = 10
+            let rect = CGRect(origin: .zero, size: size).insetBy(dx: lineWidth / 2, dy: lineWidth / 2)
+            var startAngle = Angle(degrees: -90)
+            for entry in entries {
+                let fraction = total > 0 ? entry.value / total : 0
+                // A tiny share still gets a visible sliver rather than vanishing entirely.
+                let sweep = Angle(degrees: max(fraction * 360, entries.count > 1 ? 3 : 360))
+                var path = Path()
+                path.addArc(center: CGPoint(x: rect.midX, y: rect.midY), radius: rect.width / 2, startAngle: startAngle, endAngle: startAngle + sweep, clockwise: false)
+                context.stroke(path, with: .color(BrandColor.forProvider(entry.provider)), style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
+                startAngle += sweep
             }
         }
     }
 
-    private func legend(totals: [(provider: ProviderID, amount: Double)], total: Double) -> some View {
+    private func legend(entries: [(provider: ProviderID, value: Double)], total: Double) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            ForEach(totals, id: \.provider) { entry in
+            ForEach(entries, id: \.provider) { entry in
                 HStack(spacing: 5) {
-                    Circle().fill(brandColor(entry.provider)).frame(width: 6, height: 6)
+                    Circle().fill(BrandColor.forProvider(entry.provider)).frame(width: 6, height: 6)
                     Text(entry.provider.displayName).font(.caption2)
                     Spacer(minLength: 8)
-                    Text(compactDollars(entry.amount)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                    Text(legendValueText(entry.value)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
                 }
             }
         }
     }
 
-    /// Fixed per-provider accent so the same provider always reads the same color across the
-    /// donut and its legend -- doesn't need to match every provider's real brand color exactly,
-    /// just stay stable and distinct.
-    private func brandColor(_ provider: ProviderID) -> Color {
-        switch provider {
-        case .claude: return Color(red: 0.82, green: 0.47, blue: 0.35)
-        case .codex, .openai: return .green
-        case .gemini, .antigravity: return .blue
-        case .cursor: return .purple
-        case .copilot: return .indigo
-        case .openrouter: return .pink
-        case .zai: return .teal
-        case .kimi: return .mint
-        case .amp: return .cyan
-        case .grok: return .gray
-        case .opencode: return .orange
+    private func shareToClipboard(entries: [(provider: ProviderID, value: Double)], total: Double) {
+        let content = VStack(spacing: 10) {
+            Text("TokenWatch — Total Spend").font(.headline)
+            donut(entries: entries, total: total).frame(width: 96, height: 96)
+            legend(entries: entries, total: total)
+        }
+        .padding(20)
+        .background(Color(nsColor: .windowBackgroundColor))
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = 2
+        guard let image = renderer.nsImage else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([image])
+    }
+
+    private var centerUnit: String {
+        switch mode {
+        case .cost: return "dollars"
+        case .tokens: return "million"
+        case .costPerMTok: return "MTok"
+        }
+    }
+
+    private func compactCenterNumber(total: Double) -> String {
+        switch mode {
+        case .cost: return compactDollars(total)
+        case .tokens: return String(format: "%.1f", total / 1_000_000)
+        case .costPerMTok: return String(format: "$%.2f", total)
+        }
+    }
+
+    private func preciseCenterText(total: Double) -> String {
+        switch mode {
+        case .cost: return String(format: "$%.2f", total)
+        case .tokens: return "\(Int(total)) tokens"
+        case .costPerMTok: return String(format: "$%.2f/MTok", total)
+        }
+    }
+
+    private func legendValueText(_ value: Double) -> String {
+        switch mode {
+        case .cost: return compactDollars(value)
+        case .tokens: return compactTokenCount(value)
+        case .costPerMTok: return String(format: "$%.2f/MTok", value)
         }
     }
 
@@ -141,5 +211,34 @@ struct TotalSpendCard: View {
         if amount >= 1000 { return String(format: "$%.1fK", amount / 1000) }
         if amount < 0.01 && amount > 0 { return "<$0.01" }
         return String(format: "$%.2f", amount)
+    }
+
+    private func compactTokenCount(_ tokens: Double) -> String {
+        if tokens >= 1_000_000 { return String(format: "%.1fM tok", tokens / 1_000_000) }
+        if tokens >= 1_000 { return String(format: "%.1fK tok", tokens / 1_000) }
+        return "\(Int(tokens)) tok"
+    }
+}
+
+/// Fixed per-provider accent so the same provider always reads the same color across the donut
+/// and its legend. Close, representative brand colors where widely known (Claude's terracotta,
+/// OpenAI's teal-green, Google's blue, GitHub's purple) -- not a claim of exact hex-for-hex
+/// accuracy for every provider, just stable and visually distinct.
+enum BrandColor {
+    static func forProvider(_ provider: ProviderID) -> Color {
+        switch provider {
+        case .claude: return Color(red: 0.851, green: 0.467, blue: 0.341) // Anthropic terracotta
+        case .codex, .openai: return Color(red: 0.063, green: 0.639, blue: 0.498) // OpenAI teal-green
+        case .gemini: return Color(red: 0.259, green: 0.522, blue: 0.957) // Google blue
+        case .antigravity: return Color(red: 0.204, green: 0.659, blue: 0.325) // Google green
+        case .cursor: return Color(red: 0.431, green: 0.337, blue: 0.812) // Anysphere purple
+        case .copilot: return Color(red: 0.537, green: 0.341, blue: 0.898) // GitHub purple
+        case .openrouter: return Color(red: 0.392, green: 0.404, blue: 0.949) // indigo
+        case .zai: return Color(red: 0.298, green: 0.435, blue: 1.0) // blue
+        case .kimi: return Color(red: 0.475, green: 0.325, blue: 0.796) // deep violet
+        case .amp: return Color(red: 0.910, green: 0.451, blue: 0.204) // amp orange
+        case .grok: return Color(white: 0.82) // xAI near-white/gray (visible on dark UI)
+        case .opencode: return Color(red: 0.204, green: 0.780, blue: 0.349) // terminal green
+        }
     }
 }
