@@ -65,17 +65,17 @@ struct TotalSpendCard: View {
 
     private func card(entries: [(provider: ProviderID, value: Double)]) -> some View {
         let total = entries.reduce(0) { $0 + $1.value }
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Menu {
                     ForEach(SpendMetricMode.allCases) { candidate in
                         Button(candidate.rawValue) { modeRaw = candidate.rawValue }
                     }
                 } label: {
-                    HStack(spacing: 3) {
-                        Text("Total Spend").font(.subheadline.weight(.semibold))
-                        Image(systemName: "chevron.down").font(.caption2)
-                    }
+                    // `Menu` already renders its own disclosure chevron -- confirmed via an
+                    // isolated render test (a second, manually-added chevron.down showed up as
+                    // a visible duplicate). Just the label text here.
+                    Text("Total Spend").font(.subheadline.weight(.semibold))
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
@@ -91,13 +91,12 @@ struct TotalSpendCard: View {
                 }
                 .buttonStyle(.plain)
                 .help("Copy a PNG of this card to the clipboard")
-                Picker("", selection: $periodRaw) {
-                    ForEach(SpendPeriod.allCases) { Text($0.rawValue).tag($0.rawValue) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
             }
+            Picker("", selection: $periodRaw) {
+                ForEach(SpendPeriod.allCases) { Text($0.rawValue).tag($0.rawValue) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
             HStack(spacing: 16) {
                 donutWithCenter(entries: entries, total: total)
                     .frame(width: 72, height: 72)
