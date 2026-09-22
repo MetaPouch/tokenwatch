@@ -78,7 +78,7 @@ public final class MultiAccountUsageService: ObservableObject {
         case .stale:
             return ProviderAccount(
                 id: id, providerID: .claude, label: label, isDefault: false, lines: [],
-                error: .credentialLapsed(selfHeals: true, detail: "Access token will refresh automatically the next time Claude Code runs on this profile -- no action needed."),
+                error: .credentialLapsed(selfHeals: true, detail: "Access token will refresh automatically next time you run CLAUDE_CONFIG_DIR=\(account.configDir) claude directly (not through a harness/wrapper) -- no action needed."),
                 fetchedAt: Date()
             )
         case .expired:

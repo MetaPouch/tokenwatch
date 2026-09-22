@@ -42,7 +42,7 @@ public struct ClaudeProvider: ProviderRuntime {
         case .stale:
             return .error(provider: Self.id, error: .credentialLapsed(
                 selfHeals: true,
-                detail: "Access token will refresh automatically the next time Claude Code runs -- no action needed."
+                detail: "Access token will refresh automatically next time you run the claude CLI directly (not through a harness/wrapper) -- no action needed."
             ))
         case .expired:
             return .error(provider: Self.id, error: .credentialLapsed(
