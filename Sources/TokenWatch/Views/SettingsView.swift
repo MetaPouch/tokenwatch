@@ -10,6 +10,8 @@ struct SettingsView: View {
     let apiKeyManagers: [ProviderID: any APIKeyManaging]
     @ObservedObject var displayStore: MeterDisplayStore
     @ObservedObject var appearanceStore: AppearanceStore
+    @ObservedObject var notificationSettingsStore: NotificationSettingsStore
+    let notificationService: QuotaNotificationService
     let toggleDashboardPanel: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -71,6 +73,29 @@ struct SettingsView: View {
                         .help(NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency ? "Disabled while macOS's own Reduce Transparency setting is on." : "")
                 }
 
+
+                Section("Notifications") {
+                    Toggle("Almost Out", isOn: notificationToggle(\.almostOut))
+                        .help("Alerts when a metric crosses under 10% remaining.")
+                    Toggle("Cutting It Close", isOn: notificationToggle(\.cuttingItClose))
+                        .help("Alerts when a metric is projected to finish the period with little left.")
+                    Toggle("Will Run Out", isOn: notificationToggle(\.willRunOut))
+                        .help("Alerts when a metric is projected to run out before it resets.")
+                    if notificationService.permissionDenied {
+                        HStack {
+                            Label("Notifications are blocked in System Settings", systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                            Spacer()
+                            Button("Open System Settings") {
+                                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
+                                    NSWorkspace.shared.open(url)
+                                }
+                            }
+                            .font(.caption)
+                        }
+                    }
+                }
                 Section("Refresh interval") {
                     Stepper(
                         "\(enablementStore.refreshIntervalSeconds) seconds",
@@ -92,6 +117,16 @@ struct SettingsView: View {
             }
             .formStyle(.grouped)
         }
+    }
+
+    private func notificationToggle(_ keyPath: ReferenceWritableKeyPath<NotificationSettingsStore, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { notificationSettingsStore[keyPath: keyPath] },
+            set: { newValue in
+                notificationSettingsStore[keyPath: keyPath] = newValue
+                if newValue { notificationService.requestPermissionIfNeeded() }
+            }
+        )
     }
 
     @ViewBuilder

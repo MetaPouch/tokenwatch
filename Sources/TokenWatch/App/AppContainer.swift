@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import TokenWatchCore
 
 /// Composition root: builds the provider list and wires stores together. `swift run TokenWatch`
@@ -12,6 +13,8 @@ public final class AppContainer {
     public let layoutStore: LayoutStore
     public let displayStore: MeterDisplayStore
     public let appearanceStore: AppearanceStore
+    public let notificationSettingsStore: NotificationSettingsStore
+    let notificationService: QuotaNotificationService
     public let pricingRefreshService: PricingRefreshService
     /// Providers backed by a plain API key, keyed by id, for Settings' secure text fields.
     public let apiKeyManagers: [ProviderID: any APIKeyManaging]
@@ -19,6 +22,8 @@ public final class AppContainer {
     /// shortcut recorder re-register the global hotkey without `AppContainer` needing to know
     /// about `StatusItemController` (which is itself constructed with `AppContainer` as input).
     public var toggleDashboardPanel: () -> Void = {}
+
+    private var notificationCancellable: AnyCancellable?
 
     public init() {
         let runtimes: [any ProviderRuntime] = Self.buildRuntimes()
@@ -31,8 +36,16 @@ public final class AppContainer {
         self.layoutStore = LayoutStore()
         self.displayStore = MeterDisplayStore()
         self.appearanceStore = AppearanceStore()
+        let notificationSettingsStore = NotificationSettingsStore()
+        self.notificationSettingsStore = notificationSettingsStore
+        self.notificationService = QuotaNotificationService(settingsStore: notificationSettingsStore)
         self.pricingRefreshService = PricingRefreshService()
         self.apiKeyManagers = Self.buildAPIKeyManagers()
+
+        let notificationService = self.notificationService
+        notificationCancellable = dataStore.$snapshots
+            .receive(on: RunLoop.main)
+            .sink { snapshots in notificationService.evaluate(snapshots: snapshots) }
     }
 
     /// Every registered provider runtime, in menu display order. Real providers are appended

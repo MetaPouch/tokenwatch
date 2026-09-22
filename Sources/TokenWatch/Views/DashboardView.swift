@@ -13,6 +13,8 @@ struct DashboardView: View {
     @ObservedObject var layoutStore: LayoutStore
     @ObservedObject var displayStore: MeterDisplayStore
     @ObservedObject var appearanceStore: AppearanceStore
+    @ObservedObject var notificationSettingsStore: NotificationSettingsStore
+    let notificationService: QuotaNotificationService
     let toggleDashboardPanel: () -> Void
 
     @State private var showingSettings = false
@@ -45,7 +47,7 @@ struct DashboardView: View {
         .preferredColorScheme(appearanceStore.theme.colorScheme)
         .environment(\.appDensity, appearanceStore.density)
         .sheet(isPresented: $showingSettings) {
-            SettingsView(enablementStore: enablementStore, apiKeyManagers: apiKeyManagers, displayStore: displayStore, appearanceStore: appearanceStore, toggleDashboardPanel: toggleDashboardPanel)
+            SettingsView(enablementStore: enablementStore, apiKeyManagers: apiKeyManagers, displayStore: displayStore, appearanceStore: appearanceStore, notificationSettingsStore: notificationSettingsStore, notificationService: notificationService, toggleDashboardPanel: toggleDashboardPanel)
                 .frame(width: 380, height: 460)
         }
         .sheet(item: $customizeTarget) { provider in
