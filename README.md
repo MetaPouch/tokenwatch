@@ -48,9 +48,13 @@ yet drops out of the strip entirely rather than showing a placeholder.
 
 ## Dashboard
 
-Click the status item to open the dashboard: every enabled provider stacked in one scrollable
-list (in whatever order Customize has them in), instead of a one-at-a-time picker. Provider
-logos are real, from [Lobe Icons](https://github.com/lobehub/lobe-icons) -- see
+One popover, three screens that slide horizontally instead of stacking as separate windows: the
+dashboard (default), Customize, and Settings all share one fixed top bar and footer, and the
+popover grows or shrinks to fit whichever screen is showing instead of staying one fixed size
+with an internal scrollbar for short content. Click the status item to open it: every enabled
+provider stacked in one scrollable list (in whatever order Customize has them in, drag any
+provider's header to reorder right there), instead of a one-at-a-time picker. Provider logos are
+real, from [Lobe Icons](https://github.com/lobehub/lobe-icons) -- see
 [Sources/TokenWatch/Icons/NOTICE.md](Sources/TokenWatch/Icons/NOTICE.md) for license and
 per-icon sourcing.
 
@@ -74,7 +78,10 @@ below). The title is a pull-down for **Cost** / **Cost per MTok** / **Tokens**; 
 use each provider's real brand color (Anthropic's terracotta, OpenAI's teal-green, and so on);
 hover the center for the exact figure instead of the rounded one; hover a provider's legend row
 for a ranked per-model spend breakdown (name, cost, share, tokens); the share icon copies a PNG
-of the card to your clipboard, and the ⓘ names which providers feed the total.
+of the card to your clipboard, and the ⓘ names which providers feed the total. Any provider with
+its own local spend history (today: Claude) also shows a **Today/Yesterday** line directly on
+its own card, chevron-collapsible to that provider's own per-model breakdown -- the same
+figures as the Total Spend card's hover popover, without needing to open it.
 
 
 Claude's and Codex's cards also list a compact row per locally active session (touched within
@@ -92,20 +99,30 @@ on that harness's own undocumented local session-log format, not a stable public
 way Claude Code's and Codex's are, so it's read defensively and fails soft if the format ever
 changes.
 
+A dismissible banner the first time providers are found ("Found N providers on this Mac") points
+at Customize; it's gone for good once dismissed, on this Mac or any other install sharing the
+same config.
+
+The footer shows the installed version and a live "Next update in Xs" countdown to the next
+background refresh (click it to refresh immediately); the ⋯ menu on the right opens Customize or
+Settings, shares a screenshot of any visible provider, opens the standard About panel, or quits.
+
 ## Customize
 
-Open from a card's right-click menu, or the gear icon: a provider list (on/off, drag to
-reorder) and, per provider, an **Always Visible** / **On Demand** split -- drag a metric between
-them to tuck it behind that provider's expand caret, or star it (up to two per provider) to pin
-it to the menu bar. **Reset** restores one provider's defaults; **Reset All** restores every
-provider's order and metrics.
+Open from a card's right-click menu, or the ⋯ menu in the footer: a provider list (on/off, drag
+to reorder) and, per provider, an **Always Visible** / **On Demand** split -- drag a metric
+between them to tuck it behind that provider's expand caret, or star it (up to two per provider)
+to pin it to the menu bar. **Reset** (in the shared top bar) restores one provider's defaults
+while its detail is open; **Reset All** restores every provider's order and metrics from the
+provider list. A dismissible tip at the top explains drag-to-reorder and starring the first time
+it's opened.
 
 ## Keyboard shortcuts
 
 | Key | Action |
 | --- | --- |
-| Return | Open Customize |
-| Esc | Close whichever sheet is open (Settings/Customize), else close the popover |
+| Return | Open Customize from the dashboard; on Customize's provider detail, go back to the list |
+| Esc | Go back one level (Customize detail → list → dashboard; Settings → dashboard); closes the popover if already on the dashboard |
 | ⌘Z | Undo the last customization change (hide/show, reorder, star, tier move), app-wide |
 | ⌘R | Refresh now |
 | ⌘, | Toggle Settings |
@@ -114,13 +131,15 @@ A global shortcut (recorded in Settings → General) also toggles the popover fr
 the Carbon Event Manager -- no external dependency and no Input Monitoring permission needed
 (unlike `NSEvent`'s global key monitor).
 
+
 ## Settings
 
 - **General** -- Show Total Spend, Launch at Login ([`SMAppService`](https://developer.apple.com/documentation/servicemanagement/smappservice), the modern login-item API), the global shortcut recorder.
 - **Appearance** -- menu-bar Icon Style (Text, or a compact **Bars** glyph of up to four starred
   bounded metrics' fill fractions), Theme (System/Light/Dark), Density (Default/Compact), Time
   Format (Auto/12-hour/24-hour) for exact reset times, Reduce Animations, Increase Transparency
-  (auto-disabled while macOS's own Reduce Transparency accessibility setting is on).
+  (auto-disabled while macOS's own Reduce Transparency accessibility setting is on), Hide From
+  Screen Share (excludes the popover from screen recordings/screen sharing).
 - **Notifications** -- three independent, default-off pace-crossing alerts: **Almost Out**
   (under 10% remaining), **Cutting It Close** (projected to land close to the limit),
   **Will Run Out** (projected to run out before reset). Deduplicated so a refresh loop doesn't
@@ -167,10 +186,10 @@ swift build
 swift run TokenWatch
 ```
 
-Enable providers and add API keys from the gear icon in the dashboard popover. Configuration
-lives at `~/Library/Application Support/TokenWatch/config.json`; API keys are stored in the macOS
-Keychain under the service `dev.tokenwatch.credentials`, and cached derived sessions (e.g. Cursor's
-Safari-cookie fallback) under `dev.tokenwatch.cookiecache`.
+Enable providers and add API keys from Settings, opened via the ⋯ menu in the popover's footer.
+Configuration lives at `~/Library/Application Support/TokenWatch/config.json`; API keys are
+stored in the macOS Keychain under the service `dev.tokenwatch.credentials`, and cached derived
+sessions (e.g. Cursor's Safari-cookie fallback) under `dev.tokenwatch.cookiecache`.
 
 ## Tests
 
