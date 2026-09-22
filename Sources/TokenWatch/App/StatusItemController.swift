@@ -48,6 +48,16 @@ final class StatusItemController {
         }
     }
 
+    /// Shows the dashboard panel programmatically, anchored to the status item button --
+    /// the status item's own faint, ratio-less icon is easy to miss on a first launch before
+    /// anything is configured, so `AppDelegate` calls this once to guide a brand-new install
+    /// straight to "no providers enabled, open Settings" instead of leaving the user to notice
+    /// the icon on their own.
+    func showPanel() {
+        guard let button = statusItem.button, !panel.isVisible else { return }
+        panel.show(relativeTo: button)
+    }
+
     /// Ratio to show for a provider's status-item percent/ring. Prefers a line explicitly
     /// identified as "session" (Claude's 5-hour window) over any other progress line -- plain
     /// max-of-all-lines let weekly (which only ever accumulates over days) dominate the display
@@ -160,7 +170,11 @@ final class StatusItemController {
         let rect = NSRect(origin: .zero, size: size).insetBy(dx: inset, dy: inset)
 
         let track = NSBezierPath(ovalIn: rect)
-        NSColor.secondaryLabelColor.withAlphaComponent(0.25).setStroke()
+        // A ratio-less icon (nothing enabled yet, or every enabled provider is still loading or
+        // erroring) draws *only* this track -- it has to read as a clear, deliberate icon on its
+        // own rather than fade into the menu bar, since there's no colored arc to carry the
+        // visual weight the way there is once a ratio exists.
+        NSColor.secondaryLabelColor.withAlphaComponent(filled ? 0.25 : 0.85).setStroke()
         track.lineWidth = 1.6
         track.stroke()
 

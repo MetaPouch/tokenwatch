@@ -29,6 +29,11 @@ default one. Everything runs locally: no telemetry, no data leaves your device.
 
 ## Menu bar behavior
 
+On the very first launch, before anything is configured, TokenWatch opens the dashboard once on
+its own -- the status item alone (a plain ring, nothing to show yet) is easy to miss the very
+first time. It goes straight to "No providers enabled -- Open Settings." Every later launch
+leaves discovery to the status item.
+
 If a provider has a recent local-activity signal (currently: Claude and Codex, from local
 session transcripts, refreshed within the last 24h), the status item shows that provider's name,
 its current session percent (never weekly, even if weekly happens to be higher -- session is the
