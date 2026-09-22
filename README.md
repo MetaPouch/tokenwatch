@@ -137,4 +137,8 @@ team budgets, enterprise hosts) that larger, multi-year usage trackers eventuall
 inline doc comments on each provider for the specific scope cuts.
 
 Distributed as a signed, notarized DMG and a Homebrew cask (see
-[DISTRIBUTION.md](DISTRIBUTION.md)); in-app auto-update is not implemented yet.
+[DISTRIBUTION.md](DISTRIBUTION.md)); in-app auto-update is not implemented yet, and the cask sets
+`auto_updates false` so Homebrew won't silently upgrade it either -- update by running
+`brew update && brew upgrade --cask tokenwatch` (Homebrew installs) or re-downloading the
+[latest release](https://github.com/MetaPouch/tokenwatch/releases/latest) DMG and dragging it
+over the old app (manual installs).
