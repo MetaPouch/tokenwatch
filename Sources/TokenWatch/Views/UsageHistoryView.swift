@@ -49,9 +49,14 @@ struct UsageHistoryView: View {
         .padding(10)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
         .task {
-            let result = await Task.detached(priority: .utility) {
-                ClaudeUsageHistoryScanner.dailyUsage(days: 7)
-            }.value
+            // App Nap can throttle this app's background work far more than a QoS bump alone
+            // fixes (see TotalSpendCard) -- explicitly opt out since this gates visible UI
+            // content the user is actively waiting on.
+            let result = await withBackgroundActivity(reason: "Scanning local Claude usage history") {
+                await Task.detached(priority: .userInitiated) {
+                    ClaudeUsageHistoryScanner.dailyUsage(days: 7)
+                }.value
+            }
             days = result
             isLoading = false
         }

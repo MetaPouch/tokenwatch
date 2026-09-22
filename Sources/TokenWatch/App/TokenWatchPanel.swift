@@ -7,7 +7,7 @@ import SwiftUI
 final class TokenWatchPanel: NSPanel {
     init<Content: View>(content: Content) {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 420),
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 480),
             styleMask: [.nonactivatingPanel, .titled, .fullSizeContentView],
             backing: .buffered,
             defer: false

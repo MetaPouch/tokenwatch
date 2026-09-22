@@ -20,12 +20,25 @@ struct TotalSpendCard: View {
         Group {
             if !isLoading, let totals = providerTotals, !totals.isEmpty {
                 card(totals: totals)
+            } else {
+                // A `Group` whose content is *conditionally entirely empty* on first render
+                // doesn't reliably fire `.task`/`.onAppear` in SwiftUI -- confirmed via direct
+                // instrumentation (the load below never even started). Always render something
+                // concrete, even a zero-size placeholder, so this view has a stable identity to
+                // attach the task to from the very first frame.
+                Color.clear.frame(width: 0, height: 0)
             }
         }
         .task {
-            let result = await Task.detached(priority: .utility) {
-                ClaudeUsageHistoryScanner.dailyUsage(days: 30)
-            }.value
+            // `.utility` QoS measured far slower than a foreground process for the identical
+            // scan under this app's background/App-Nap-eligible state -- this gates visible UI
+            // content the user is actively waiting on, so it runs at `.userInitiated` priority
+            // and explicitly opts out of App Nap (see `withBackgroundActivity`).
+            let result = await withBackgroundActivity(reason: "Scanning local Claude spend history") {
+                await Task.detached(priority: .userInitiated) {
+                    ClaudeUsageHistoryScanner.dailyUsage(days: 30)
+                }.value
+            }
             claudeDays = result
             isLoading = false
         }
