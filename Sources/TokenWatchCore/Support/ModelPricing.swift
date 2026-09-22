@@ -54,6 +54,17 @@ public enum ModelPricing {
         }
     }
 
+    /// A substring every live-fetched model id for this provider is expected to contain --
+    /// guards `DynamicPricingCache.bestMatch` against matching an unrelated vendor's similarly
+    /// prefixed model in the same flat price list.
+    private static func familyHint(for provider: ProviderID) -> String {
+        switch provider {
+        case .claude: return "claude"
+        case .codex: return "gpt"
+        default: return ""
+        }
+    }
+
     /// Longest-prefix match against the model id (lowercased); also tries the segment after a
     /// vendor-qualifying slash (`anthropic/claude-sonnet-4`), matching how multi-model harnesses
     /// -- including the one behind `OmpSessionScanner` -- qualify ids. Falls back to the
@@ -71,6 +82,14 @@ public enum ModelPricing {
                 candidates.append(String(normalized[afterSlash...]))
             }
         }
+
+        // A live-fetched rate (refreshed roughly hourly, see PricingRefreshService) wins over
+        // the static table when both would match -- it tracks real vendor pricing instead of
+        // whatever was hardcoded when this app version shipped.
+        if let dynamicRate = DynamicPricingCache.shared.bestMatch(candidates: candidates, familyHint: familyHint(for: provider)) {
+            return (dynamicRate, false)
+        }
+
 
         var best: (prefix: String, rate: Rate)?
         for candidate in candidates {

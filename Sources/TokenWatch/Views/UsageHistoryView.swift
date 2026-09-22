@@ -41,7 +41,7 @@ struct UsageHistoryView: View {
                     .padding(.vertical, 8)
             } else {
                 chart
-                Text("Estimated at API list rates (updated \(ModelPricing.pricingTableUpdatedOn)) -- subscription usage isn't billed per token.")
+                Text("Estimated at API list rates, refreshed against live pricing when reachable (static fallback updated \(ModelPricing.pricingTableUpdatedOn)) -- subscription usage isn't billed per token.")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }

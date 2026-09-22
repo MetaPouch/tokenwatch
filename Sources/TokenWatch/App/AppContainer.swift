@@ -11,6 +11,7 @@ public final class AppContainer {
     public let usageService: MultiAccountUsageService
     public let layoutStore: LayoutStore
     public let displayStore: MeterDisplayStore
+    public let pricingRefreshService: PricingRefreshService
     /// Providers backed by a plain API key, keyed by id, for Settings' secure text fields.
     /// Populated as `APIKeyManaging` providers land (Phase 1+).
     public let apiKeyManagers: [ProviderID: any APIKeyManaging]
@@ -25,6 +26,7 @@ public final class AppContainer {
         self.usageService = MultiAccountUsageService(dataStore: dataStore, enablementStore: enablementStore)
         self.layoutStore = LayoutStore()
         self.displayStore = MeterDisplayStore()
+        self.pricingRefreshService = PricingRefreshService()
         self.apiKeyManagers = Self.buildAPIKeyManagers()
     }
 
@@ -62,5 +64,6 @@ public final class AppContainer {
 
     public func start() {
         refreshScheduler.start()
+        Task { await pricingRefreshService.start() }
     }
 }
