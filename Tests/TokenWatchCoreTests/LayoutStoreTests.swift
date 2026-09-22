@@ -88,4 +88,51 @@ final class LayoutStoreTests: XCTestCase {
         XCTAssertTrue(second.layout(for: .grok, metricID: "weekly").starred)
         XCTAssertEqual(second.orderedProviders(enabled: [.claude, .grok]), [.grok, .claude])
     }
+
+    func testUndoRevertsTheMostRecentChange() {
+        let store = makeStore()
+        XCTAssertFalse(store.canUndo)
+        store.setHidden(true, provider: .claude, metricID: "session")
+        XCTAssertTrue(store.canUndo)
+        store.undo()
+        XCTAssertFalse(store.layout(for: .claude, metricID: "session").hidden)
+        XCTAssertFalse(store.canUndo)
+    }
+
+    func testUndoStepsBackThroughMultipleChangesOneAtATime() {
+        let store = makeStore()
+        store.setHidden(true, provider: .claude, metricID: "session")
+        store.setHidden(true, provider: .claude, metricID: "weekly")
+        store.undo()
+        XCTAssertFalse(store.layout(for: .claude, metricID: "weekly").hidden)
+        XCTAssertTrue(store.layout(for: .claude, metricID: "session").hidden) // earlier change stays
+        store.undo()
+        XCTAssertFalse(store.layout(for: .claude, metricID: "session").hidden)
+    }
+
+    func testUndoOnEmptyStackIsANoOp() {
+        let store = makeStore()
+        store.undo() // must not crash with nothing to undo
+        XCTAssertFalse(store.canUndo)
+    }
+
+    func testUndoCoversReorderAndStar() {
+        let store = makeStore()
+        let enabled: Set<ProviderID> = [.claude, .codex]
+        store.moveProvider(.codex, enabled: enabled, toIndex: 0)
+        _ = store.toggleStar(provider: .claude, metricID: "session")
+        store.undo() // undoes the star
+        XCTAssertFalse(store.layout(for: .claude, metricID: "session").starred)
+        XCTAssertEqual(store.orderedProviders(enabled: enabled), [.codex, .claude]) // reorder stays
+        store.undo() // undoes the reorder
+        XCTAssertEqual(store.orderedProviders(enabled: enabled), [.claude, .codex])
+    }
+
+    func testResetAllIsNotUndoable() {
+        // Matches the documented behavior: Reset All Customization can't be undone.
+        let store = makeStore()
+        store.setHidden(true, provider: .claude, metricID: "session")
+        store.resetAll()
+        XCTAssertFalse(store.canUndo)
+    }
 }

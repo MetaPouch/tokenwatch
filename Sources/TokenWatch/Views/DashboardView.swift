@@ -18,7 +18,8 @@ struct DashboardView: View {
     let toggleDashboardPanel: () -> Void
 
     @State private var showingSettings = false
-    @State private var customizeTarget: ProviderID?
+    @State private var showingCustomize = false
+    @State private var customizeInitialProvider: ProviderID?
     @State private var selectedTab: DashboardTab = .provider
 
     private enum DashboardTab: Hashable {
@@ -46,12 +47,41 @@ struct DashboardView: View {
         .background(appearanceStore.increaseTransparency && !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(.regularMaterial))
         .preferredColorScheme(appearanceStore.theme.colorScheme)
         .environment(\.appDensity, appearanceStore.density)
+        .focusable()
+        .focusEffectDisabled()
+        .onKeyPress(.escape) {
+            if showingSettings { showingSettings = false; return .handled }
+            if showingCustomize { showingCustomize = false; return .handled }
+            toggleDashboardPanel()
+            return .handled
+        }
+        .onKeyPress(.return) {
+            guard !showingSettings, !showingCustomize else { return .ignored }
+            customizeInitialProvider = nil
+            showingCustomize = true
+            return .handled
+        }
+        .onKeyPress("r", phases: .down) { press in
+            guard press.modifiers == .command, !showingSettings, !showingCustomize else { return .ignored }
+            refreshScheduler.refreshNow()
+            return .handled
+        }
+        .onKeyPress(",", phases: .down) { press in
+            guard press.modifiers == .command, !showingCustomize else { return .ignored }
+            showingSettings.toggle()
+            return .handled
+        }
+        .onKeyPress("z", phases: .down) { press in
+            guard press.modifiers == .command else { return .ignored }
+            layoutStore.undo()
+            return .handled
+        }
         .sheet(isPresented: $showingSettings) {
             SettingsView(enablementStore: enablementStore, apiKeyManagers: apiKeyManagers, displayStore: displayStore, appearanceStore: appearanceStore, notificationSettingsStore: notificationSettingsStore, notificationService: notificationService, toggleDashboardPanel: toggleDashboardPanel)
                 .frame(width: 380, height: 460)
         }
-        .sheet(item: $customizeTarget) { provider in
-            CustomizeView(initialProvider: provider, enablementStore: enablementStore, layoutStore: layoutStore, dataStore: dataStore)
+        .sheet(isPresented: $showingCustomize) {
+            CustomizeView(initialProvider: customizeInitialProvider, enablementStore: enablementStore, layoutStore: layoutStore, dataStore: dataStore)
                 .frame(width: 380, height: 460)
         }
     }
@@ -86,7 +116,7 @@ struct DashboardView: View {
                         timeFormat: appearanceStore.timeFormat,
                         onRefresh: { refreshScheduler.refreshProvider(provider) },
                         onHideProvider: { enablementStore.setEnabled(provider, false) },
-                        onCustomizeProvider: { customizeTarget = provider }
+                        onCustomizeProvider: { customizeInitialProvider = provider; showingCustomize = true }
                     )
                 }
             }

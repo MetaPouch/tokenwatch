@@ -41,6 +41,14 @@ public final class LayoutStore: ObservableObject {
     /// Matches the competitor UX this was modeled on: enough to keep the menu bar readable,
     /// forces a deliberate choice about which two numbers matter most for a given provider.
     public static let maxStarsPerProvider = 2
+    private static let maxUndoDepth = 20
+
+    /// Snapshots pushed before each customization mutation; `undo()` pops and restores the
+    /// most recent one, so repeated ⌘Z steps back through recent changes one at a time.
+    /// Deliberately in-memory only (not persisted) -- undo history starts fresh each launch.
+    private var undoStack: [(providerOrder: [ProviderID], metricLayouts: [String: MetricLayout])] = []
+
+    public var canUndo: Bool { !undoStack.isEmpty }
 
     public init(directory: URL? = nil) {
         let base = directory ?? ConfigStore.defaultDirectory()
@@ -72,6 +80,7 @@ public final class LayoutStore: ObservableObject {
     public func moveProvider(_ provider: ProviderID, enabled: Set<ProviderID>, toIndex: Int) {
         var order = orderedProviders(enabled: enabled)
         guard let from = order.firstIndex(of: provider) else { return }
+        recordUndoSnapshot()
         order.remove(at: from)
         order.insert(provider, at: min(max(toIndex, 0), order.count))
         let untouched = providerOrder.filter { !enabled.contains($0) }
@@ -86,6 +95,7 @@ public final class LayoutStore: ObservableObject {
     }
 
     public func setTier(_ tier: MetricVisibilityTier, provider: ProviderID, metricID: String) {
+        recordUndoSnapshot()
         var layout = layout(for: provider, metricID: metricID)
         layout.tier = tier
         metricLayouts[key(provider, metricID)] = layout
@@ -93,6 +103,7 @@ public final class LayoutStore: ObservableObject {
     }
 
     public func setHidden(_ hidden: Bool, provider: ProviderID, metricID: String) {
+        recordUndoSnapshot()
         var layout = layout(for: provider, metricID: metricID)
         layout.hidden = hidden
         metricLayouts[key(provider, metricID)] = layout
@@ -100,11 +111,13 @@ public final class LayoutStore: ObservableObject {
     }
 
     public func setOrder(_ order: Int, provider: ProviderID, metricID: String) {
+        recordUndoSnapshot()
         var layout = layout(for: provider, metricID: metricID)
         layout.order = order
         metricLayouts[key(provider, metricID)] = layout
         persist()
     }
+
 
     /// Returns `false` (state unchanged) when starring would exceed the per-provider cap --
     /// callers show a rejection instead of silently no-opping.
@@ -115,6 +128,7 @@ public final class LayoutStore: ObservableObject {
             let currentStars = starredMetricIDs(for: provider).count
             guard currentStars < Self.maxStarsPerProvider else { return false }
         }
+        recordUndoSnapshot()
         layout.starred.toggle()
         metricLayouts[key(provider, metricID)] = layout
         persist()
@@ -140,7 +154,24 @@ public final class LayoutStore: ObservableObject {
     public func resetAll() {
         providerOrder = []
         metricLayouts = [:]
+        undoStack.removeAll()
         persist()
+    }
+
+    /// Steps back one customization change: hiding/showing, reordering, starring, and moving a
+    /// metric across the tier boundary all undo. No-op when there's nothing to undo.
+    public func undo() {
+        guard let previous = undoStack.popLast() else { return }
+        providerOrder = previous.providerOrder
+        metricLayouts = previous.metricLayouts
+        persist()
+    }
+
+    private func recordUndoSnapshot() {
+        undoStack.append((providerOrder: providerOrder, metricLayouts: metricLayouts))
+        if undoStack.count > Self.maxUndoDepth {
+            undoStack.removeFirst(undoStack.count - Self.maxUndoDepth)
+        }
     }
 
     private func persist() {
