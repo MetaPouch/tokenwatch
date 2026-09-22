@@ -40,6 +40,14 @@ public final class RefreshScheduler {
         }
     }
 
+    /// Force-refreshes just one provider, skipping the cache -- the context-menu "Refresh
+    /// <Provider>" action, which shouldn't wait out or re-trigger every other provider's fetch.
+    public func refreshProvider(_ provider: ProviderID) {
+        Task { [dataStore] in
+            await dataStore.refreshAll(enabled: [provider])
+        }
+    }
+
     private func scheduleTimer(interval: Int) {
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: TimeInterval(interval), repeats: true) { [weak self] _ in

@@ -2,20 +2,19 @@ import SwiftUI
 import AppKit
 import TokenWatchCore
 
-/// Popover content: a provider picker (icon + name, all enabled providers) plus the selected
-/// provider's `ProviderCardView`, instead of every enabled provider stacked at once. Claude's
-/// snapshot may carry several `cacheTemperature*`-id badges -- one per locally active session --
-/// which the generic card renderer already shows as one row each, so picking Claude lists every
-/// session in play, not just the newest.
+/// Popover content: every enabled provider stacked in one scrollable list (in `LayoutStore`
+/// order), each rendered by `ProviderSectionView`, instead of a picker showing one at a time.
 struct DashboardView: View {
     @ObservedObject var dataStore: WidgetDataStore
     @ObservedObject var enablementStore: ProviderEnablementStore
     let refreshScheduler: RefreshScheduler
     let apiKeyManagers: [ProviderID: any APIKeyManaging]
     @ObservedObject var usageService: MultiAccountUsageService
+    @ObservedObject var layoutStore: LayoutStore
+    @ObservedObject var displayStore: MeterDisplayStore
 
     @State private var showingSettings = false
-    @State private var selectedProvider: ProviderID?
+    @State private var customizeTarget: ProviderID?
     @State private var selectedTab: DashboardTab = .provider
 
     private enum DashboardTab: Hashable {
@@ -26,28 +25,28 @@ struct DashboardView: View {
         VStack(spacing: 0) {
             header
             Divider()
-            if enabledProviders.isEmpty {
+            if orderedEnabledProviders.isEmpty {
                 emptyState
             } else {
                 tabSwitcher
                 Divider()
                 switch selectedTab {
                 case .provider:
-                    providerPicker
-                    Divider()
-                    detail
+                    providerList
                 case .usage:
-                    UsageTabView(usageService: usageService)
+                    UsageTabView(usageService: usageService, displayStore: displayStore)
                 }
             }
         }
-        .frame(width: 360, height: 420)
+        .frame(width: 360, height: 480)
         .background(.regularMaterial)
-        .onAppear { ensureValidSelection() }
-        .onChange(of: enabledProviders) { _, _ in ensureValidSelection() }
         .sheet(isPresented: $showingSettings) {
-            SettingsView(enablementStore: enablementStore, apiKeyManagers: apiKeyManagers)
-                .frame(width: 380, height: 420)
+            SettingsView(enablementStore: enablementStore, apiKeyManagers: apiKeyManagers, displayStore: displayStore)
+                .frame(width: 380, height: 460)
+        }
+        .sheet(item: $customizeTarget) { provider in
+            CustomizeView(initialProvider: provider, enablementStore: enablementStore, layoutStore: layoutStore, dataStore: dataStore)
+                .frame(width: 380, height: 460)
         }
     }
 
@@ -63,56 +62,25 @@ struct DashboardView: View {
         .padding(.bottom, 2)
     }
 
-    private var enabledProviders: [ProviderID] {
-        ProviderID.allCases.filter { enablementStore.isEnabled($0) }
+    private var orderedEnabledProviders: [ProviderID] {
+        layoutStore.orderedProviders(enabled: enablementStore.enabledProviders)
     }
 
-    /// Keeps `selectedProvider` valid as providers get enabled/disabled: leaves an already-valid
-    /// selection alone, otherwise falls back to `PreferredProviderSelector`.
-    private func ensureValidSelection() {
-        if let selectedProvider, enabledProviders.contains(selectedProvider) { return }
-        selectedProvider = PreferredProviderSelector.select(enabledProviders: enabledProviders, snapshots: dataStore.snapshots)
-    }
-
-    private var providerPicker: some View {
-        HStack(spacing: 8) {
-            if let selectedProvider {
-                ProviderIcon(provider: selectedProvider, size: 16)
-            }
-            // `Menu`'s own label/items render reliably only with plain SwiftUI content --
-            // a custom icon inside the label or an item breaks its native chrome entirely
-            // (verified via offscreen render: it silently drops to near-blank). The real logo
-            // above is a sibling instead, always showing the current selection.
-            Menu {
-                ForEach(enabledProviders) { provider in
-                    Button(provider.displayName) {
-                        selectedProvider = provider
-                    }
-                }
-            } label: {
-                Text(selectedProvider?.displayName ?? "Select a provider")
-                    .font(.subheadline.weight(.semibold))
-            }
-            .fixedSize()
-
-            Spacer()
-        }
-        .padding(.horizontal, 14)
-        .padding(.top, 10)
-        .padding(.bottom, 4)
-    }
-
-    private var detail: some View {
+    private var providerList: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 8) {
-                if let selectedProvider {
-                    if let snapshot = dataStore.snapshot(for: selectedProvider) {
-                        ProviderCardView(snapshot: snapshot)
-                    } else {
-                        Text("Loading…")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
+            VStack(alignment: .leading, spacing: 10) {
+                TotalSpendCard(dataStore: dataStore, enablementStore: enablementStore)
+                ForEach(orderedEnabledProviders) { provider in
+                    ProviderSectionView(
+                        provider: provider,
+                        snapshot: dataStore.snapshot(for: provider),
+                        layoutStore: layoutStore,
+                        displayStore: displayStore,
+                        refreshIntervalSeconds: enablementStore.refreshIntervalSeconds,
+                        onRefresh: { refreshScheduler.refreshProvider(provider) },
+                        onHideProvider: { enablementStore.setEnabled(provider, false) },
+                        onCustomizeProvider: { customizeTarget = provider }
+                    )
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

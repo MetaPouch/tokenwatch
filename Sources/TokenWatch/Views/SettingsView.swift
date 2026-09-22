@@ -7,6 +7,7 @@ import TokenWatchCore
 struct SettingsView: View {
     @ObservedObject var enablementStore: ProviderEnablementStore
     let apiKeyManagers: [ProviderID: any APIKeyManaging]
+    @ObservedObject var displayStore: MeterDisplayStore
 
     @Environment(\.dismiss) private var dismiss
     @State private var apiKeyDrafts: [ProviderID: String] = [:]
@@ -32,6 +33,11 @@ struct SettingsView: View {
                         in: 60...1800,
                         step: 30
                     )
+                }
+
+                Section("Usage display") {
+                    Toggle("Always show pacing", isOn: $displayStore.alwaysShowPacing)
+                        .help("Show every bounded metric's projection and pace tick, not just ones close to or over their limit.")
                 }
 
                 Section("Providers") {

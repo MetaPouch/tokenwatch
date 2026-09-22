@@ -10,6 +10,7 @@ import TokenWatchCore
 /// no provider gets bespoke SwiftUI in either tab.
 struct UsageTabView: View {
     @ObservedObject var usageService: MultiAccountUsageService
+    @ObservedObject var displayStore: MeterDisplayStore
 
     var body: some View {
         ScrollView {
@@ -65,7 +66,7 @@ struct UsageTabView: View {
                 lines: account.lines,
                 fetchedAt: account.fetchedAt,
                 error: account.error
-            ))
+            ), displayStore: displayStore)
         }
         .padding(10)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))

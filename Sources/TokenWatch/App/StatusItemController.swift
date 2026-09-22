@@ -17,13 +17,15 @@ final class StatusItemController {
     private let panel: TokenWatchPanel
     private let dataStore: WidgetDataStore
     private let enablementStore: ProviderEnablementStore
+    private let layoutStore: LayoutStore
     private var cancellables: Set<AnyCancellable> = []
 
     init(container: AppContainer) {
         self.dataStore = container.dataStore
         self.enablementStore = container.enablementStore
+        self.layoutStore = container.layoutStore
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        self.panel = TokenWatchPanel(content: DashboardView(dataStore: container.dataStore, enablementStore: container.enablementStore, refreshScheduler: container.refreshScheduler, apiKeyManagers: container.apiKeyManagers, usageService: container.usageService))
+        self.panel = TokenWatchPanel(content: DashboardView(dataStore: container.dataStore, enablementStore: container.enablementStore, refreshScheduler: container.refreshScheduler, apiKeyManagers: container.apiKeyManagers, usageService: container.usageService, layoutStore: container.layoutStore, displayStore: container.displayStore))
 
         if let button = statusItem.button {
             button.target = self
@@ -34,9 +36,9 @@ final class StatusItemController {
         render()
 
         dataStore.$snapshots
-            .combineLatest(enablementStore.$enabledProviders)
+            .combineLatest(enablementStore.$enabledProviders, layoutStore.$metricLayouts, layoutStore.$providerOrder)
             .receive(on: RunLoop.main)
-            .sink { [weak self] _, _ in self?.render() }
+            .sink { [weak self] _, _, _, _ in self?.render() }
             .store(in: &cancellables)
     }
 
@@ -111,9 +113,18 @@ final class StatusItemController {
     private func render() {
         guard let button = statusItem.button else { return }
 
+        let pins = pinnedSegments()
+        if !pins.isEmpty {
+            button.image = nil
+            button.attributedTitle = Self.stripTitle(segments: pins)
+            button.toolTip = pins.map { "\($0.provider.displayName): \($0.text)" }.joined(separator: "\n")
+            return
+        }
+
         if let (provider, snapshot) = mostRecentlyActive() {
             let ratio = primaryRatio(in: snapshot)
             let percentText = ratio.map { " \(Int(($0 * 100).rounded()))%" } ?? ""
+            button.attributedTitle = NSAttributedString(string: "")
             button.title = "\(shortName(provider))\(percentText)"
             button.toolTip = tooltip(for: provider, snapshot: snapshot)
 
@@ -130,13 +141,76 @@ final class StatusItemController {
 
         guard let (ratio, tone) = closestToLimitAcrossAll() else {
             button.image = Self.ringImage(ratio: 0, tone: .secondaryLabelColor, filled: false)
+            button.attributedTitle = NSAttributedString(string: "")
             button.title = ""
             button.toolTip = nil
             return
         }
+        button.attributedTitle = NSAttributedString(string: "")
         button.image = Self.ringImage(ratio: ratio, tone: tone, filled: true)
         button.title = " \(Int((ratio * 100).rounded()))%"
         button.toolTip = nil
+    }
+
+    private struct PinnedSegment {
+        let provider: ProviderID
+        let text: String
+    }
+
+    /// One segment per provider with at least one starred metric that currently has real data
+    /// -- a provider whose stars all lack data drops out entirely rather than showing a "--"
+    /// placeholder. Empty when nothing anywhere is starred, which is the common case until a
+    /// user stars something from a row's context menu or Customize.
+    private func pinnedSegments() -> [PinnedSegment] {
+        var segments: [PinnedSegment] = []
+        for provider in layoutStore.orderedProviders(enabled: enablementStore.enabledProviders) {
+            guard let snapshot = dataStore.snapshot(for: provider) else { continue }
+            let starredIDs = Set(layoutStore.starredMetricIDs(for: provider))
+            guard !starredIDs.isEmpty else { continue }
+            let parts = snapshot.lines
+                .filter { starredIDs.contains($0.id) }
+                .compactMap { pinText(for: $0) }
+            guard !parts.isEmpty else { continue }
+            segments.append(PinnedSegment(provider: provider, text: "\(shortName(provider)) \(parts.joined(separator: " "))"))
+        }
+        return segments
+    }
+
+    private func pinText(for line: MetricLine) -> String? {
+        switch line {
+        case let .progress(_, _, used, limit, format, _, _):
+            guard limit > 0 else { return nil }
+            switch format {
+            case .percent: return "\(Int((used / limit * 100).rounded()))%"
+            case .dollars: return String(format: "$%.0f", used)
+            case .count(let suffix): return "\(Int(used.rounded()))\(suffix)"
+            }
+        case let .values(_, _, values):
+            guard let first = values.first else { return nil }
+            let numberText = first.number.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(first.number)) : String(format: "%.1f", first.number)
+            return numberText
+        case let .badge(_, text, _, _, _):
+            return text
+        default:
+            return nil
+        }
+    }
+
+    /// Composes every pinned segment into one title string, separated by a thin divider --
+    /// this status item stays a single `NSStatusItem`, not one per provider.
+    private static func stripTitle(segments: [PinnedSegment]) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.menuBarFont(ofSize: 0),
+            .foregroundColor: NSColor.labelColor
+        ]
+        for (index, segment) in segments.enumerated() {
+            if index > 0 {
+                result.append(NSAttributedString(string: "  ·  ", attributes: [.font: NSFont.menuBarFont(ofSize: 0), .foregroundColor: NSColor.tertiaryLabelColor]))
+            }
+            result.append(NSAttributedString(string: segment.text, attributes: attrs))
+        }
+        return result
     }
 
     /// Spells out which local session the title/icon describe -- the percent is this provider's
