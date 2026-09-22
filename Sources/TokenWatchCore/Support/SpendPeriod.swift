@@ -38,6 +38,45 @@ public enum SpendAggregator {
         return cost / Double(totalTokens) * 1_000_000
     }
 
+    /// Per-model spend across every day in the period, merged by model name and sorted largest
+    /// first. Models past the top 5 or under 5% of the period's total cost fold into a single
+    /// "Other" entry, so a long tail of one-off model names doesn't crowd out a hover list.
+    public static func modelBreakdown(for period: SpendPeriod, days: [ClaudeUsageDay], calendar: Calendar = .current, now: Date = Date()) -> [ModelSpend] {
+        let relevantDays: [ClaudeUsageDay]
+        switch period {
+        case .today:
+            relevantDays = days.filter { calendar.isDate($0.date, inSameDayAs: now) }
+        case .yesterday:
+            guard let yesterday = calendar.date(byAdding: .day, value: -1, to: now) else { return [] }
+            relevantDays = days.filter { calendar.isDate($0.date, inSameDayAs: yesterday) }
+        case .thirtyDays:
+            relevantDays = days
+        }
+
+        var merged: [String: (cost: Double, tokens: Int)] = [:]
+        for day in relevantDays {
+            for entry in day.modelBreakdown {
+                var current = merged[entry.id] ?? (0, 0)
+                current.cost += entry.costUSD
+                current.tokens += entry.tokens
+                merged[entry.id] = current
+            }
+        }
+        let totalCost = merged.values.reduce(0) { $0 + $1.cost }
+        guard totalCost > 0 else { return [] }
+
+        let ranked = merged.map { ModelSpend(id: $0.key, costUSD: $0.value.cost, tokens: $0.value.tokens) }
+            .sorted { $0.costUSD > $1.costUSD }
+        let maxNamedModels = 5
+        let minShare = 0.05
+        let named = ranked.prefix(maxNamedModels).filter { $0.costUSD / totalCost >= minShare }
+        let rest = ranked.dropFirst(named.count)
+        guard !rest.isEmpty else { return Array(named) }
+        let otherCost = rest.reduce(0) { $0 + $1.costUSD }
+        let otherTokens = rest.reduce(0) { $0 + $1.tokens }
+        return Array(named) + [ModelSpend(id: "Other", costUSD: otherCost, tokens: otherTokens)]
+    }
+
     private static func sum(for period: SpendPeriod, days: [ClaudeUsageDay], calendar: Calendar, now: Date, value: (ClaudeUsageDay) -> Double) -> Double {
         switch period {
         case .today:

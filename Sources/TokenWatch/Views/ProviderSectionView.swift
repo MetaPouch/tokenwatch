@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import TokenWatchCore
 
 /// One provider's card in the stacked dashboard list: an icon/name/plan header (with its own
@@ -100,6 +101,10 @@ struct ProviderSectionView: View {
             Divider()
             Button("Refresh \(provider.displayName)") { onRefresh() }
             Button("Customize…") { onCustomizeProvider() }
+            if snapshot != nil {
+                Divider()
+                Button("Share Screenshot") { shareScreenshot() }
+            }
         }
     }
 
@@ -126,5 +131,30 @@ struct ProviderSectionView: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    /// Renders this provider's card -- header plus every currently visible metric row -- to a
+    /// PNG and copies it to the clipboard. Follows the current appearance (light/dark) since
+    /// it's rendered with the same view code, not a raw screen grab.
+    private func shareScreenshot() {
+        guard let snapshot else { return }
+        let content = VStack(alignment: .leading, spacing: Density.sectionSpacing(density)) {
+            HStack(spacing: 6) {
+                ProviderIcon(provider: provider, size: 16)
+                Text(provider.displayName).font(.subheadline.weight(.semibold))
+                if let plan = snapshot.plan, !plan.isEmpty {
+                    Text(plan).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            ProviderCardView(snapshot: snapshot, displayStore: displayStore, timeFormat: timeFormat)
+        }
+        .padding(Density.cardPadding(density))
+        .frame(width: 320, alignment: .leading)
+        .background(Color(nsColor: .windowBackgroundColor))
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = 2
+        guard let image = renderer.nsImage else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([image])
     }
 }

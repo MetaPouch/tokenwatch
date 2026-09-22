@@ -58,4 +58,45 @@ final class SpendAggregatorTests: XCTestCase {
         let zeroTokenDay = day(offsetFromNow: 0, cost: 5, tokens: 0)
         XCTAssertNil(SpendAggregator.costPerMillionTokens(for: .today, days: [zeroTokenDay], calendar: calendar, now: now))
     }
+
+    private func dayWithModels(offsetFromNow days: Int, models: [(name: String, cost: Double, tokens: Int)]) -> ClaudeUsageDay {
+        let date = calendar.date(byAdding: .day, value: days, to: now)!
+        let breakdown = models.map { ModelSpend(id: $0.name, costUSD: $0.cost, tokens: $0.tokens) }
+        let totalCost = models.reduce(0) { $0 + $1.cost }
+        let totalTokens = models.reduce(0) { $0 + $1.tokens }
+        return ClaudeUsageDay(id: "\(days)", date: date, inputTokens: totalTokens, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0, estimatedCostUSD: totalCost, hasApproximateRate: false, modelBreakdown: breakdown)
+    }
+
+    func testModelBreakdownMergesSameModelAcrossDays() {
+        let days = [
+            dayWithModels(offsetFromNow: 0, models: [("claude-sonnet-5", 10, 1000)]),
+            dayWithModels(offsetFromNow: -1, models: [("claude-sonnet-5", 5, 500)]),
+        ]
+        let breakdown = SpendAggregator.modelBreakdown(for: .thirtyDays, days: days, calendar: calendar, now: now)
+        XCTAssertEqual(breakdown.count, 1)
+        XCTAssertEqual(breakdown.first?.costUSD ?? -1, 15, accuracy: 0.001)
+        XCTAssertEqual(breakdown.first?.tokens, 1500)
+    }
+
+    func testModelBreakdownSortsLargestFirst() {
+        // 20/25 = 80% and 5/25 = 20% share -- both well above the 5%-fold threshold.
+        let days = [dayWithModels(offsetFromNow: 0, models: [("small-model", 5, 100), ("big-model", 20, 2000)])]
+        let breakdown = SpendAggregator.modelBreakdown(for: .today, days: days, calendar: calendar, now: now)
+        XCTAssertEqual(breakdown.map(\.id), ["big-model", "small-model"])
+    }
+
+    func testModelBreakdownFoldsLongTailIntoOther() {
+        // 6 models: 5 clearly above 5% share, one below -> the small one folds into "Other".
+        let models: [(String, Double, Int)] = [
+            ("m1", 40, 100), ("m2", 30, 100), ("m3", 15, 100), ("m4", 8, 100), ("m5", 5, 100), ("m6", 2, 100),
+        ]
+        let days = [dayWithModels(offsetFromNow: 0, models: models)]
+        let breakdown = SpendAggregator.modelBreakdown(for: .today, days: days, calendar: calendar, now: now)
+        XCTAssertEqual(breakdown.last?.id, "Other")
+        XCTAssertEqual(breakdown.last?.costUSD ?? -1, 2, accuracy: 0.001)
+    }
+
+    func testModelBreakdownEmptyWhenNoActivity() {
+        XCTAssertTrue(SpendAggregator.modelBreakdown(for: .today, days: [], calendar: calendar, now: now).isEmpty)
+    }
 }

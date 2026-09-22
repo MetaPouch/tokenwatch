@@ -19,6 +19,7 @@ struct TotalSpendCard: View {
     @State private var claudeDays: [ClaudeUsageDay] = []
     @State private var isLoading = true
     @State private var isHoveringCenter = false
+    @State private var hoveredProvider: ProviderID?
 
     private var period: SpendPeriod { SpendPeriod(rawValue: periodRaw) ?? .today }
     private var mode: SpendMetricMode { SpendMetricMode(rawValue: modeRaw) ?? .cost }
@@ -156,9 +157,58 @@ struct TotalSpendCard: View {
                     Spacer(minLength: 8)
                     Text(legendValueText(entry.value)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
                 }
+                .contentShape(Rectangle())
+                .background(hoveredProvider == entry.provider ? Color.secondary.opacity(0.12) : .clear)
+                .onHover { isHovering in
+                    hoveredProvider = isHovering ? entry.provider : (hoveredProvider == entry.provider ? nil : hoveredProvider)
+                }
+                .popover(isPresented: Binding(
+                    get: { hoveredProvider == entry.provider && entry.provider == .claude },
+                    set: { if !$0 { hoveredProvider = nil } }
+                ), arrowEdge: .trailing) {
+                    modelBreakdownPopover(provider: entry.provider)
+                }
             }
         }
     }
+
+    /// A ranked per-model spend list for `provider`, shown while hovering its legend row.
+    /// Currently only Claude has model-level data (`ClaudeUsageHistoryScanner`); other
+    /// providers simply never trigger this popover until they have a comparable local scanner.
+    private func modelBreakdownPopover(provider: ProviderID) -> some View {
+        let breakdown = SpendAggregator.modelBreakdown(for: period, days: claudeDays)
+        let breakdownTotal = breakdown.reduce(0) { $0 + $1.costUSD }
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("\(provider.displayName) by model").font(.caption.weight(.semibold))
+            ForEach(breakdown) { model in
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text(model.id).font(.caption2)
+                        Spacer()
+                        Text(compactDollars(model.costUSD)).font(.caption2.monospacedDigit())
+                    }
+                    HStack {
+                        let share = breakdownTotal > 0 ? model.costUSD / breakdownTotal : 0
+                        Text("\(Int((share * 100).rounded()))% · \(compactTokenCount(Double(model.tokens)))")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    GeometryReader { proxy in
+                        Capsule().fill(Color.secondary.opacity(0.2))
+                            .overlay(alignment: .leading) {
+                                let share = breakdownTotal > 0 ? model.costUSD / breakdownTotal : 0
+                                Capsule().fill(BrandColor.forProvider(provider)).frame(width: proxy.size.width * CGFloat(share))
+                            }
+                    }
+                    .frame(height: 3)
+                }
+            }
+        }
+        .padding(10)
+        .frame(width: 200)
+    }
+
 
     private func shareToClipboard(entries: [(provider: ProviderID, value: Double)], total: Double) {
         let content = VStack(spacing: 10) {
