@@ -127,7 +127,13 @@ struct DashboardView: View {
 
     private var header: some View {
         HStack {
-            Text("TokenWatch").font(.title3.weight(.semibold))
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                Text("TokenWatch").font(.title3.weight(.semibold))
+                Text("v\(AppVersion.displayString)")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .help("TokenWatch \(AppVersion.displayString)")
+            }
             Spacer()
             Button {
                 refreshScheduler.refreshNow()

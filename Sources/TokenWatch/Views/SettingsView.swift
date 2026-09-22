@@ -116,6 +116,10 @@ struct SettingsView: View {
                 }
             }
             .formStyle(.grouped)
+            Text("TokenWatch \(AppVersion.displayString)")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .padding(.vertical, 8)
         }
     }
 
