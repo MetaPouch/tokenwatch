@@ -16,7 +16,10 @@ struct ProviderCardView: View {
     var layoutStore: LayoutStore?
     var onRefreshProvider: (() -> Void)?
     var onCustomizeMetric: ((String) -> Void)?
+    var timeFormat: TimeFormatPreference = .auto
     var now: Date = Date()
+
+    @Environment(\.appDensity) private var density
 
     private var effectiveLines: [MetricLine] { lines ?? snapshot.lines }
 
@@ -62,9 +65,9 @@ struct ProviderCardView: View {
             let showPacing = severity.isProjected || (displayStore.alwaysShowPacing && resetsAt != nil)
             let tick = showPacing ? MeterPace.tickFraction(resetsAt: resetsAt, periodDurationMs: periodDurationMs, now: now) : nil
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: Density.rowSpacing(density)) {
                 HStack {
-                    Text(label).font(.subheadline)
+                    Text(label).font(Density.labelFont(density))
                     Spacer()
                     if showPacing, let note = paceNote(severity: severity) {
                         Text(note)
@@ -85,8 +88,8 @@ struct ProviderCardView: View {
             }
             .contextMenu { rowContextMenu(metricID: id) }
         case let .values(id, label, values):
-            VStack(alignment: .leading, spacing: 2) {
-                Text(label).font(.subheadline)
+            VStack(alignment: .leading, spacing: Density.rowSpacing(density)) {
+                Text(label).font(Density.labelFont(density))
                 ForEach(Array(values.enumerated()), id: \.offset) { _, value in
                     HStack {
                         Text(value.kind).font(.caption).foregroundStyle(.secondary)
@@ -162,7 +165,7 @@ struct ProviderCardView: View {
     private func resetText(_ resetsAt: Date) -> String {
         switch displayStore.resetDisplayMode {
         case .countdown: return "Resets \(relativeShort(resetsAt))"
-        case .exact: return "Resets \(resetsAt.formatted(date: .abbreviated, time: .shortened))"
+        case .exact: return "Resets \(exactTimeText(resetsAt, includeDate: true))"
         }
     }
 
@@ -178,12 +181,25 @@ struct ProviderCardView: View {
             guard let runOutAt else { return "Approaching limit" }
             switch displayStore.resetDisplayMode {
             case .countdown: return "Limit \(relativeShort(runOutAt))"
-            case .exact: return "Limit \(runOutAt.formatted(date: .omitted, time: .shortened))"
+            case .exact: return "Limit \(exactTimeText(runOutAt, includeDate: false))"
             }
         case .spent:
             return "Limit reached"
         case .level:
             return nil
+        }
+    }
+
+    /// An exact clock time, honoring the Appearance "Time Format" preference (Auto follows the
+    /// system 12/24-hour setting; the other two options force one regardless of it).
+    private func exactTimeText(_ date: Date, includeDate: Bool) -> String {
+        switch timeFormat {
+        case .auto:
+            return includeDate ? date.formatted(date: .abbreviated, time: .shortened) : date.formatted(date: .omitted, time: .shortened)
+        case .twelveHour, .twentyFourHour:
+            let formatter = DateFormatter()
+            formatter.dateFormat = includeDate ? (timeFormat == .twelveHour ? "MMM d, h:mm a" : "MMM d, HH:mm") : (timeFormat == .twelveHour ? "h:mm a" : "HH:mm")
+            return formatter.string(from: date)
         }
     }
 

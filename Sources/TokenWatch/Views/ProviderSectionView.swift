@@ -12,18 +12,21 @@ struct ProviderSectionView: View {
     @ObservedObject var layoutStore: LayoutStore
     @ObservedObject var displayStore: MeterDisplayStore
     let refreshIntervalSeconds: Int
+    var timeFormat: TimeFormatPreference = .auto
     var onRefresh: () -> Void
     var onHideProvider: () -> Void
     var onCustomizeProvider: () -> Void
 
+    @Environment(\.appDensity) private var density
     @State private var isExpanded: Bool
 
-    init(provider: ProviderID, snapshot: ProviderSnapshot?, layoutStore: LayoutStore, displayStore: MeterDisplayStore, refreshIntervalSeconds: Int, onRefresh: @escaping () -> Void, onHideProvider: @escaping () -> Void, onCustomizeProvider: @escaping () -> Void) {
+    init(provider: ProviderID, snapshot: ProviderSnapshot?, layoutStore: LayoutStore, displayStore: MeterDisplayStore, refreshIntervalSeconds: Int, timeFormat: TimeFormatPreference = .auto, onRefresh: @escaping () -> Void, onHideProvider: @escaping () -> Void, onCustomizeProvider: @escaping () -> Void) {
         self.provider = provider
         self.snapshot = snapshot
         self.layoutStore = layoutStore
         self.displayStore = displayStore
         self.refreshIntervalSeconds = refreshIntervalSeconds
+        self.timeFormat = timeFormat
         self.onRefresh = onRefresh
         self.onHideProvider = onHideProvider
         self.onCustomizeProvider = onCustomizeProvider
@@ -31,7 +34,7 @@ struct ProviderSectionView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Density.sectionSpacing(density)) {
             header
             if let snapshot {
                 let alwaysVisible = filteredLines(snapshot: snapshot, tier: .alwaysVisible)
@@ -44,7 +47,8 @@ struct ProviderSectionView: View {
                     lines: showAll ? nil : alwaysVisible,
                     displayStore: displayStore,
                     layoutStore: layoutStore,
-                    onRefreshProvider: onRefresh
+                    onRefreshProvider: onRefresh,
+                    timeFormat: timeFormat
                 )
                 if isExpanded && !onDemand.isEmpty {
                     ProviderCardView(
@@ -52,7 +56,8 @@ struct ProviderSectionView: View {
                         lines: onDemand,
                         displayStore: displayStore,
                         layoutStore: layoutStore,
-                        onRefreshProvider: onRefresh
+                        onRefreshProvider: onRefresh,
+                        timeFormat: timeFormat
                     )
                 }
             } else {
@@ -61,7 +66,7 @@ struct ProviderSectionView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(12)
+        .padding(Density.cardPadding(density))
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
     }
 

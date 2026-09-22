@@ -11,10 +11,14 @@ public final class AppContainer {
     public let usageService: MultiAccountUsageService
     public let layoutStore: LayoutStore
     public let displayStore: MeterDisplayStore
+    public let appearanceStore: AppearanceStore
     public let pricingRefreshService: PricingRefreshService
     /// Providers backed by a plain API key, keyed by id, for Settings' secure text fields.
-    /// Populated as `APIKeyManaging` providers land (Phase 1+).
     public let apiKeyManagers: [ProviderID: any APIKeyManaging]
+    /// Assigned by `AppDelegate` once the status item controller exists -- lets Settings'
+    /// shortcut recorder re-register the global hotkey without `AppContainer` needing to know
+    /// about `StatusItemController` (which is itself constructed with `AppContainer` as input).
+    public var toggleDashboardPanel: () -> Void = {}
 
     public init() {
         let runtimes: [any ProviderRuntime] = Self.buildRuntimes()
@@ -26,6 +30,7 @@ public final class AppContainer {
         self.usageService = MultiAccountUsageService(dataStore: dataStore, enablementStore: enablementStore)
         self.layoutStore = LayoutStore()
         self.displayStore = MeterDisplayStore()
+        self.appearanceStore = AppearanceStore()
         self.pricingRefreshService = PricingRefreshService()
         self.apiKeyManagers = Self.buildAPIKeyManagers()
     }

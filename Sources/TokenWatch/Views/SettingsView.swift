@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import TokenWatchCore
 
 /// Lists every `ProviderID` with an enable/disable toggle; `APIKeyManaging` providers get a
@@ -8,9 +9,13 @@ struct SettingsView: View {
     @ObservedObject var enablementStore: ProviderEnablementStore
     let apiKeyManagers: [ProviderID: any APIKeyManaging]
     @ObservedObject var displayStore: MeterDisplayStore
+    @ObservedObject var appearanceStore: AppearanceStore
+    let toggleDashboardPanel: () -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var apiKeyDrafts: [ProviderID: String] = [:]
+    @State private var launchAtLoginEnabled = LaunchAtLogin.isEnabled
+    @State private var shortcutCombo = KeyCombo.loadPersisted()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,6 +31,41 @@ struct SettingsView: View {
                 Section("General") {
                     Toggle("Show Total Spend", isOn: $displayStore.showTotalSpend)
                         .help("Whether the cross-provider Total Spend card shows at the top of the dashboard.")
+                    Toggle("Launch at Login", isOn: Binding(
+                        get: { launchAtLoginEnabled },
+                        set: { newValue in
+                            LaunchAtLogin.setEnabled(newValue)
+                            launchAtLoginEnabled = LaunchAtLogin.isEnabled
+                        }
+                    ))
+                    HStack {
+                        Text("Global Shortcut")
+                        Spacer()
+                        ShortcutRecorderField(combo: $shortcutCombo) { newCombo in
+                            KeyCombo.persist(newCombo)
+                            GlobalHotKeyManager.shared.unregister()
+                            if let newCombo {
+                                GlobalHotKeyManager.shared.register(combo: newCombo, action: toggleDashboardPanel)
+                            }
+                        }
+                    }
+                    .help("A global shortcut that toggles the popover from anywhere.")
+                }
+
+                Section("Appearance") {
+                    Picker("Theme", selection: $appearanceStore.theme) {
+                        ForEach(AppTheme.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    Picker("Density", selection: $appearanceStore.density) {
+                        ForEach(AppDensity.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    Picker("Time Format", selection: $appearanceStore.timeFormat) {
+                        ForEach(TimeFormatPreference.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    Toggle("Reduce Animations", isOn: $appearanceStore.reduceAnimations)
+                    Toggle("Increase Transparency", isOn: $appearanceStore.increaseTransparency)
+                        .disabled(NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency)
+                        .help(NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency ? "Disabled while macOS's own Reduce Transparency setting is on." : "")
                 }
 
                 Section("Refresh interval") {
@@ -38,11 +78,6 @@ struct SettingsView: View {
                         in: 60...1800,
                         step: 30
                     )
-                }
-
-                Section("Usage display") {
-                    Toggle("Always show pacing", isOn: $displayStore.alwaysShowPacing)
-                        .help("Show every bounded metric's projection and pace tick, not just ones close to or over their limit.")
                 }
 
 

@@ -14,6 +14,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.container = container
         self.statusItemController = StatusItemController(container: container)
         container.start()
+        container.toggleDashboardPanel = { [weak statusItemController] in statusItemController?.togglePanel() }
+
+        if let combo = KeyCombo.loadPersisted() {
+            GlobalHotKeyManager.shared.register(combo: combo) { [weak statusItemController] in
+                statusItemController?.togglePanel()
+            }
+        }
 
         // First launch ever: the status item alone (a bare, low-key ring with nothing enabled
         // yet to show) is easy for a brand-new install to miss entirely -- surface the panel

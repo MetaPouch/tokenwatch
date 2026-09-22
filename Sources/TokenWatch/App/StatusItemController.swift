@@ -25,7 +25,7 @@ final class StatusItemController {
         self.enablementStore = container.enablementStore
         self.layoutStore = container.layoutStore
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        self.panel = TokenWatchPanel(content: DashboardView(dataStore: container.dataStore, enablementStore: container.enablementStore, refreshScheduler: container.refreshScheduler, apiKeyManagers: container.apiKeyManagers, usageService: container.usageService, layoutStore: container.layoutStore, displayStore: container.displayStore))
+        self.panel = TokenWatchPanel(content: DashboardView(dataStore: container.dataStore, enablementStore: container.enablementStore, refreshScheduler: container.refreshScheduler, apiKeyManagers: container.apiKeyManagers, usageService: container.usageService, layoutStore: container.layoutStore, displayStore: container.displayStore, appearanceStore: container.appearanceStore, toggleDashboardPanel: { container.toggleDashboardPanel() }))
 
         if let button = statusItem.button {
             button.target = self
@@ -42,7 +42,7 @@ final class StatusItemController {
             .store(in: &cancellables)
     }
 
-    @objc private func togglePanel() {
+    @objc func togglePanel() {
         if panel.isVisible {
             panel.orderOut(nil)
         } else if let button = statusItem.button {

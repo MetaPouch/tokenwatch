@@ -12,6 +12,8 @@ struct DashboardView: View {
     @ObservedObject var usageService: MultiAccountUsageService
     @ObservedObject var layoutStore: LayoutStore
     @ObservedObject var displayStore: MeterDisplayStore
+    @ObservedObject var appearanceStore: AppearanceStore
+    let toggleDashboardPanel: () -> Void
 
     @State private var showingSettings = false
     @State private var customizeTarget: ProviderID?
@@ -39,9 +41,11 @@ struct DashboardView: View {
             }
         }
         .frame(width: 360, height: 480)
-        .background(.regularMaterial)
+        .background(appearanceStore.increaseTransparency && !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(.regularMaterial))
+        .preferredColorScheme(appearanceStore.theme.colorScheme)
+        .environment(\.appDensity, appearanceStore.density)
         .sheet(isPresented: $showingSettings) {
-            SettingsView(enablementStore: enablementStore, apiKeyManagers: apiKeyManagers, displayStore: displayStore)
+            SettingsView(enablementStore: enablementStore, apiKeyManagers: apiKeyManagers, displayStore: displayStore, appearanceStore: appearanceStore, toggleDashboardPanel: toggleDashboardPanel)
                 .frame(width: 380, height: 460)
         }
         .sheet(item: $customizeTarget) { provider in
@@ -77,6 +81,7 @@ struct DashboardView: View {
                         layoutStore: layoutStore,
                         displayStore: displayStore,
                         refreshIntervalSeconds: enablementStore.refreshIntervalSeconds,
+                        timeFormat: appearanceStore.timeFormat,
                         onRefresh: { refreshScheduler.refreshProvider(provider) },
                         onHideProvider: { enablementStore.setEnabled(provider, false) },
                         onCustomizeProvider: { customizeTarget = provider }
