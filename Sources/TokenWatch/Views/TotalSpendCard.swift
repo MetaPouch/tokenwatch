@@ -13,16 +13,17 @@ struct TotalSpendCard: View {
     @ObservedObject var dataStore: WidgetDataStore
     @ObservedObject var enablementStore: ProviderEnablementStore
     @ObservedObject var displayStore: MeterDisplayStore
+    @ObservedObject var spendHistoryStore: ClaudeSpendHistoryStore
 
     @AppStorage("totalSpendPeriod") private var periodRaw: String = SpendPeriod.today.rawValue
     @AppStorage("totalSpendMode") private var modeRaw: String = SpendMetricMode.cost.rawValue
-    @State private var claudeDays: [ClaudeUsageDay] = []
-    @State private var isLoading = true
     @State private var isHoveringCenter = false
     @State private var hoveredProvider: ProviderID?
 
     private var period: SpendPeriod { SpendPeriod(rawValue: periodRaw) ?? .today }
     private var mode: SpendMetricMode { SpendMetricMode(rawValue: modeRaw) ?? .cost }
+    private var claudeDays: [ClaudeUsageDay] { spendHistoryStore.days }
+    private var isLoading: Bool { spendHistoryStore.isLoading }
 
     var body: some View {
         Group {
@@ -35,15 +36,7 @@ struct TotalSpendCard: View {
                 Color.clear.frame(width: 0, height: 0)
             }
         }
-        .task {
-            let result = await withBackgroundActivity(reason: "Scanning local Claude spend history") {
-                await Task.detached(priority: .userInitiated) {
-                    ClaudeUsageHistoryScanner.dailyUsage(days: 30)
-                }.value
-            }
-            claudeDays = result
-            isLoading = false
-        }
+        .task { spendHistoryStore.loadIfNeeded() }
     }
 
     /// One entry per provider with a nonzero value for the current mode/period, largest first.

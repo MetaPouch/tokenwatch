@@ -14,29 +14,38 @@ struct ProviderSectionView: View {
     @ObservedObject var displayStore: MeterDisplayStore
     let refreshIntervalSeconds: Int
     var timeFormat: TimeFormatPreference = .auto
+    /// Non-nil only for providers with a local spend-history scanner (today: Claude only). The
+    /// inline Today/Yesterday spend row is simply absent for every other provider.
+    var spendHistoryStore: ClaudeSpendHistoryStore?
     var onRefresh: () -> Void
     var onHideProvider: () -> Void
     var onCustomizeProvider: () -> Void
 
     @Environment(\.appDensity) private var density
     @State private var isExpanded: Bool
+    @State private var isSpendRowExpanded: Bool
 
-    init(provider: ProviderID, snapshot: ProviderSnapshot?, layoutStore: LayoutStore, displayStore: MeterDisplayStore, refreshIntervalSeconds: Int, timeFormat: TimeFormatPreference = .auto, onRefresh: @escaping () -> Void, onHideProvider: @escaping () -> Void, onCustomizeProvider: @escaping () -> Void) {
+    init(provider: ProviderID, snapshot: ProviderSnapshot?, layoutStore: LayoutStore, displayStore: MeterDisplayStore, refreshIntervalSeconds: Int, timeFormat: TimeFormatPreference = .auto, spendHistoryStore: ClaudeSpendHistoryStore? = nil, onRefresh: @escaping () -> Void, onHideProvider: @escaping () -> Void, onCustomizeProvider: @escaping () -> Void) {
         self.provider = provider
         self.snapshot = snapshot
         self.layoutStore = layoutStore
         self.displayStore = displayStore
         self.refreshIntervalSeconds = refreshIntervalSeconds
         self.timeFormat = timeFormat
+        self.spendHistoryStore = spendHistoryStore
         self.onRefresh = onRefresh
         self.onHideProvider = onHideProvider
         self.onCustomizeProvider = onCustomizeProvider
         _isExpanded = State(initialValue: UserDefaults.standard.bool(forKey: "sectionExpanded.\(provider.rawValue)"))
+        _isSpendRowExpanded = State(initialValue: UserDefaults.standard.object(forKey: "spendRowExpanded.\(provider.rawValue)") as? Bool ?? true)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Density.sectionSpacing(density)) {
             header
+            if let spendHistoryStore, !spendHistoryStore.isLoading {
+                inlineSpendRow(store: spendHistoryStore)
+            }
             if let snapshot {
                 let alwaysVisible = filteredLines(snapshot: snapshot, tier: .alwaysVisible)
                 let onDemand = filteredLines(snapshot: snapshot, tier: .onDemand)
@@ -111,6 +120,72 @@ struct ProviderSectionView: View {
     private func toggleExpanded() {
         isExpanded.toggle()
         UserDefaults.standard.set(isExpanded, forKey: "sectionExpanded.\(provider.rawValue)")
+    }
+
+    /// Today/Yesterday local spend, chevron-collapsible to a per-model cost breakdown --
+    /// mirrors `TotalSpendCard`'s cross-provider donut, scoped to just this provider. Absent
+    /// entirely when neither day has any recorded spend (a brand-new install, or a provider with
+    /// no local spend-history scanner never gets here at all -- see `spendHistoryStore`).
+    @ViewBuilder
+    private func inlineSpendRow(store: ClaudeSpendHistoryStore) -> some View {
+        let today = SpendAggregator.amount(for: .today, days: store.days)
+        let yesterday = SpendAggregator.amount(for: .yesterday, days: store.days)
+        if today > 0 || yesterday > 0 {
+            VStack(alignment: .leading, spacing: 4) {
+                Button(action: toggleSpendRow) {
+                    HStack(spacing: 4) {
+                        Image(systemName: isSpendRowExpanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 8))
+                            .foregroundStyle(.secondary)
+                        Text("Today \(compactDollars(today))")
+                            .font(.caption2.weight(.medium))
+                        Text("·").font(.caption2).foregroundStyle(.tertiary)
+                        Text("Yesterday \(compactDollars(yesterday))")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                if isSpendRowExpanded {
+                    modelBreakdown(days: store.days)
+                }
+            }
+        }
+    }
+
+    private func toggleSpendRow() {
+        isSpendRowExpanded.toggle()
+        UserDefaults.standard.set(isSpendRowExpanded, forKey: "spendRowExpanded.\(provider.rawValue)")
+    }
+
+    /// Ranked per-model spend for today, shown inline under the spend row once expanded.
+    private func modelBreakdown(days: [ClaudeUsageDay]) -> some View {
+        let breakdown = SpendAggregator.modelBreakdown(for: .today, days: days)
+        let total = breakdown.reduce(0) { $0 + $1.costUSD }
+        return VStack(alignment: .leading, spacing: 3) {
+            ForEach(breakdown) { model in
+                HStack(spacing: 6) {
+                    Text(model.id)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    let share = total > 0 ? model.costUSD / total : 0
+                    Text("\(Int((share * 100).rounded()))%")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.tertiary)
+                    Text(compactDollars(model.costUSD))
+                        .font(.system(size: 10).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.leading, 12)
+        .padding(.top, 2)
+    }
+
+    private func compactDollars(_ amount: Double) -> String {
+        amount < 10 ? String(format: "$%.2f", amount) : String(format: "$%.0f", amount)
     }
 
     private func filteredLines(snapshot: ProviderSnapshot, tier: MetricVisibilityTier) -> [MetricLine] {

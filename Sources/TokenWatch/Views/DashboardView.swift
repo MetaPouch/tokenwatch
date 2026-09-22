@@ -17,6 +17,7 @@ struct DashboardView: View {
     @ObservedObject var displayStore: MeterDisplayStore
     @ObservedObject var appearanceStore: AppearanceStore
     @ObservedObject var notificationSettingsStore: NotificationSettingsStore
+    @ObservedObject var claudeSpendHistoryStore: ClaudeSpendHistoryStore
     let notificationService: QuotaNotificationService
     let toggleDashboardPanel: () -> Void
     /// Reports this view's total natural height (top bar + current screen + footer) so the
@@ -289,7 +290,7 @@ struct DashboardView: View {
     private var providerList: some View {
         MeasuredScrollView(maxHeight: maxContentHeight, refreshID: "\(orderedEnabledProviders.count)-\(dataStore.snapshots.count)") {
             VStack(alignment: .leading, spacing: 10) {
-                TotalSpendCard(dataStore: dataStore, enablementStore: enablementStore, displayStore: displayStore)
+                TotalSpendCard(dataStore: dataStore, enablementStore: enablementStore, displayStore: displayStore, spendHistoryStore: claudeSpendHistoryStore)
                 ForEach(orderedEnabledProviders) { provider in
                     ProviderSectionView(
                         provider: provider,
@@ -298,6 +299,7 @@ struct DashboardView: View {
                         displayStore: displayStore,
                         refreshIntervalSeconds: enablementStore.refreshIntervalSeconds,
                         timeFormat: appearanceStore.timeFormat,
+                        spendHistoryStore: provider == .claude ? claudeSpendHistoryStore : nil,
                         onRefresh: { refreshScheduler.refreshProvider(provider) },
                         onHideProvider: { enablementStore.setEnabled(provider, false) },
                         onCustomizeProvider: { customizeDetailProvider = provider; currentScreen = .customize }
