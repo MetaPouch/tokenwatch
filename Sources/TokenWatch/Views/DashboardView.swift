@@ -18,6 +18,7 @@ struct DashboardView: View {
     @ObservedObject var appearanceStore: AppearanceStore
     @ObservedObject var notificationSettingsStore: NotificationSettingsStore
     @ObservedObject var claudeSpendHistoryStore: ClaudeSpendHistoryStore
+    @ObservedObject var hintStore: HintStore
     let notificationService: QuotaNotificationService
     let toggleDashboardPanel: () -> Void
     /// Reports this view's total natural height (top bar + current screen + footer) so the
@@ -106,6 +107,9 @@ struct DashboardView: View {
                 emptyState
             } else {
                 VStack(spacing: 0) {
+                    if !hintStore.providerDetectionDismissed {
+                        providerDetectionHint
+                    }
                     tabSwitcher
                     Divider()
                     switch selectedTab {
@@ -120,8 +124,34 @@ struct DashboardView: View {
         .reportPanelHeight(for: .dashboard)
     }
 
+    /// Shown once, the first time providers are enabled -- dismissed permanently via `HintStore`.
+    private var providerDetectionHint: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Found \(orderedEnabledProviders.count) provider\(orderedEnabledProviders.count == 1 ? "" : "s") on this Mac")
+                    .font(.caption.weight(.semibold))
+                Text("Drag to reorder, or open Customize to pick which metrics show.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 4)
+            Button(action: hintStore.dismissProviderDetection) {
+                Image(systemName: "xmark")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(10)
+        .background(Color.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+    }
+
     private var customizeScreenContent: some View {
-        CustomizeView(enablementStore: enablementStore, layoutStore: layoutStore, dataStore: dataStore, detailProvider: $customizeDetailProvider)
+        CustomizeView(enablementStore: enablementStore, layoutStore: layoutStore, dataStore: dataStore, detailProvider: $customizeDetailProvider, hintStore: hintStore)
     }
 
     private var settingsScreenContent: some View {

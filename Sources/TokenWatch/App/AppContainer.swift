@@ -17,6 +17,7 @@ public final class AppContainer {
     let notificationService: QuotaNotificationService
     public let pricingRefreshService: PricingRefreshService
     public let claudeSpendHistoryStore = ClaudeSpendHistoryStore()
+    public let hintStore = HintStore()
     /// Providers backed by a plain API key, keyed by id, for Settings' secure text fields.
     public let apiKeyManagers: [ProviderID: any APIKeyManaging]
     /// Assigned by `AppDelegate` once the status item controller exists -- lets Settings'

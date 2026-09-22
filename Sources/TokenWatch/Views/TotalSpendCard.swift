@@ -274,7 +274,7 @@ enum BrandColor {
         case .gemini: return Color(red: 0.259, green: 0.522, blue: 0.957) // Google blue
         case .antigravity: return Color(red: 0.204, green: 0.659, blue: 0.325) // Google green
         case .cursor: return Color(red: 0.431, green: 0.337, blue: 0.812) // Anysphere purple
-        case .copilot: return Color(red: 0.537, green: 0.341, blue: 0.898) // GitHub purple
+        case .copilot: return Color(red: 0.431, green: 0.251, blue: 0.788) // GitHub Copilot purple (#6E40C9, brand.github.com)
         case .openrouter: return Color(red: 0.392, green: 0.404, blue: 0.949) // indigo
         case .zai: return Color(red: 0.298, green: 0.435, blue: 1.0) // blue
         case .kimi: return Color(red: 0.475, green: 0.325, blue: 0.796) // deep violet

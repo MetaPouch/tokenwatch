@@ -28,7 +28,7 @@ final class StatusItemController {
         self.appearanceStore = container.appearanceStore
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.panel = TokenWatchPanel(initialHeight: 420) { onHeightChange in
-            DashboardView(dataStore: container.dataStore, enablementStore: container.enablementStore, refreshScheduler: container.refreshScheduler, apiKeyManagers: container.apiKeyManagers, usageService: container.usageService, layoutStore: container.layoutStore, displayStore: container.displayStore, appearanceStore: container.appearanceStore, notificationSettingsStore: container.notificationSettingsStore, claudeSpendHistoryStore: container.claudeSpendHistoryStore, notificationService: container.notificationService, toggleDashboardPanel: { container.toggleDashboardPanel() }, onHeightChange: onHeightChange)
+            DashboardView(dataStore: container.dataStore, enablementStore: container.enablementStore, refreshScheduler: container.refreshScheduler, apiKeyManagers: container.apiKeyManagers, usageService: container.usageService, layoutStore: container.layoutStore, displayStore: container.displayStore, appearanceStore: container.appearanceStore, notificationSettingsStore: container.notificationSettingsStore, claudeSpendHistoryStore: container.claudeSpendHistoryStore, hintStore: container.hintStore, notificationService: container.notificationService, toggleDashboardPanel: { container.toggleDashboardPanel() }, onHeightChange: onHeightChange)
         }
 
         if let button = statusItem.button {

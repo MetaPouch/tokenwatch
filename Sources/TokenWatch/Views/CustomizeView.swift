@@ -11,6 +11,7 @@ struct CustomizeView: View {
     @ObservedObject var layoutStore: LayoutStore
     @ObservedObject var dataStore: WidgetDataStore
     @Binding var detailProvider: ProviderID?
+    @ObservedObject var hintStore: HintStore
 
     @State private var draggingProvider: ProviderID?
     @State private var draggingMetricID: String?
@@ -43,6 +44,9 @@ struct CustomizeView: View {
     private var providerList: some View {
         MeasuredScrollView(maxHeight: 640, refreshID: "\(enablementStore.enabledProviders.count)-\(dataStore.snapshots.count)") {
             VStack(spacing: 4) {
+                if !hintStore.customizeTipDismissed {
+                    customizeTip
+                }
                 ForEach(ProviderID.allCases) { provider in
                     providerListRow(provider)
                         .opacity(draggingProvider == provider ? 0.4 : 1)
@@ -60,6 +64,26 @@ struct CustomizeView: View {
             }
             .padding(14)
         }
+    }
+
+    /// Shown once -- dismissed permanently via `HintStore`.
+    private var customizeTip: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "hand.point.up.left.fill")
+                .foregroundStyle(.blue)
+            Text("Drag rows to reorder. Tap a provider to move metrics between Always Visible and On Demand, and star up to two for the menu bar.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 4)
+            Button(action: hintStore.dismissCustomizeTip) {
+                Image(systemName: "xmark")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(10)
+        .background(Color.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func providerListRow(_ provider: ProviderID) -> some View {
