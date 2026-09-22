@@ -14,23 +14,14 @@ struct SettingsView: View {
     let notificationService: QuotaNotificationService
     let toggleDashboardPanel: () -> Void
 
-    @Environment(\.dismiss) private var dismiss
     @State private var apiKeyDrafts: [ProviderID: String] = [:]
     @State private var launchAtLoginEnabled = LaunchAtLogin.isEnabled
     @State private var shortcutCombo = KeyCombo.loadPersisted()
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Settings").font(.title3.weight(.semibold))
-                Spacer()
-                Button("Done") { dismiss() }
-            }
-            .padding(14)
-            Divider()
-
-            Form {
-                Section("General") {
+        MeasuredScrollView(maxHeight: 640) {
+            VStack(alignment: .leading, spacing: 14) {
+                settingsSection("General") {
                     Toggle("Show Total Spend", isOn: $displayStore.showTotalSpend)
                         .help("Whether the cross-provider Total Spend card shows at the top of the dashboard.")
                     Toggle("Launch at Login", isOn: Binding(
@@ -54,7 +45,7 @@ struct SettingsView: View {
                     .help("A global shortcut that toggles the popover from anywhere.")
                 }
 
-                Section("Appearance") {
+                settingsSection("Appearance") {
                     Picker("Icon Style", selection: $appearanceStore.iconStyle) {
                         ForEach(MenuBarIconStyle.allCases) { Text($0.rawValue).tag($0) }
                     }
@@ -73,8 +64,7 @@ struct SettingsView: View {
                         .help(NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency ? "Disabled while macOS's own Reduce Transparency setting is on." : "")
                 }
 
-
-                Section("Notifications") {
+                settingsSection("Notifications") {
                     Toggle("Almost Out", isOn: notificationToggle(\.almostOut))
                         .help("Alerts when a metric crosses under 10% remaining.")
                     Toggle("Cutting It Close", isOn: notificationToggle(\.cuttingItClose))
@@ -96,7 +86,8 @@ struct SettingsView: View {
                         }
                     }
                 }
-                Section("Refresh interval") {
+
+                settingsSection("Refresh Interval") {
                     Stepper(
                         "\(enablementStore.refreshIntervalSeconds) seconds",
                         value: Binding(
@@ -108,18 +99,34 @@ struct SettingsView: View {
                     )
                 }
 
-
-                Section("Providers") {
+                settingsSection("Providers") {
                     ForEach(ProviderID.allCases) { provider in
                         providerRow(provider)
+                        if provider != ProviderID.allCases.last {
+                            Divider()
+                        }
                     }
                 }
             }
-            .formStyle(.grouped)
-            Text("TokenWatch \(AppVersion.displayString)")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .padding(.vertical, 8)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .reportPanelHeight(for: .settings)
+    }
+
+    @ViewBuilder
+    private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+            VStack(alignment: .leading, spacing: 10) {
+                content()
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
         }
     }
 

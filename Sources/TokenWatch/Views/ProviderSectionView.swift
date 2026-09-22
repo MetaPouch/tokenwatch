@@ -133,28 +133,9 @@ struct ProviderSectionView: View {
         return formatter.localizedString(for: date, relativeTo: Date())
     }
 
-    /// Renders this provider's card -- header plus every currently visible metric row -- to a
-    /// PNG and copies it to the clipboard. Follows the current appearance (light/dark) since
-    /// it's rendered with the same view code, not a raw screen grab.
+    /// Renders this provider's card to a PNG and copies it to the clipboard.
     private func shareScreenshot() {
         guard let snapshot else { return }
-        let content = VStack(alignment: .leading, spacing: Density.sectionSpacing(density)) {
-            HStack(spacing: 6) {
-                ProviderIcon(provider: provider, size: 16)
-                Text(provider.displayName).font(.subheadline.weight(.semibold))
-                if let plan = snapshot.plan, !plan.isEmpty {
-                    Text(plan).font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            ProviderCardView(snapshot: snapshot, displayStore: displayStore, timeFormat: timeFormat)
-        }
-        .padding(Density.cardPadding(density))
-        .frame(width: 320, alignment: .leading)
-        .background(Color(nsColor: .windowBackgroundColor))
-        let renderer = ImageRenderer(content: content)
-        renderer.scale = 2
-        guard let image = renderer.nsImage else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.writeObjects([image])
+        ProviderScreenshot.share(provider: provider, snapshot: snapshot, displayStore: displayStore, density: density, timeFormat: timeFormat)
     }
 }

@@ -5,7 +5,12 @@ import Combine
 /// `refreshIntervalSeconds` (default 300s, settings-adjustable 60-1800s), plus a manual
 /// `refreshNow()` entry point for UI-triggered refreshes.
 @MainActor
-public final class RefreshScheduler {
+public final class RefreshScheduler: ObservableObject {
+    /// When the next automatic refresh is due -- the footer's live countdown reads this.
+    /// `nil` before `start()` has run, or immediately after a manual refresh completes and
+    /// before the next cycle is rescheduled (a brief gap, not a meaningful state to show).
+    @Published public private(set) var nextRefreshAt: Date?
+
     private let dataStore: WidgetDataStore
     private let enablementStore: ProviderEnablementStore
     private var timer: Timer?
@@ -31,6 +36,7 @@ public final class RefreshScheduler {
         timer?.invalidate()
         timer = nil
         cancellable = nil
+        nextRefreshAt = nil
     }
 
     public func refreshNow() {
@@ -50,8 +56,10 @@ public final class RefreshScheduler {
 
     private func scheduleTimer(interval: Int) {
         timer?.invalidate()
+        nextRefreshAt = Date().addingTimeInterval(TimeInterval(interval))
         timer = Timer.scheduledTimer(withTimeInterval: TimeInterval(interval), repeats: true) { [weak self] _ in
             Task { @MainActor in
+                self?.nextRefreshAt = Date().addingTimeInterval(TimeInterval(interval))
                 self?.refreshNow()
             }
         }

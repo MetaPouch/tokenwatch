@@ -11,9 +11,10 @@ import TokenWatchCore
 struct UsageTabView: View {
     @ObservedObject var usageService: MultiAccountUsageService
     @ObservedObject var displayStore: MeterDisplayStore
+    var maxContentHeight: CGFloat = 640
 
     var body: some View {
-        ScrollView {
+        MeasuredScrollView(maxHeight: maxContentHeight, refreshID: usageService.accounts.count) {
             VStack(alignment: .leading, spacing: 10) {
                 if usageService.accounts.isEmpty {
                     Text(usageService.isRefreshing ? "Loading…" : "No accounts found")

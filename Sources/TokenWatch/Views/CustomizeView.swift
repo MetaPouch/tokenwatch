@@ -1,34 +1,23 @@
 import SwiftUI
 import TokenWatchCore
 
-/// Customize screen: a provider list (on/off, drag to reorder, tap into detail) plus a
-/// per-provider detail (Always Visible / On Demand sections, drag a metric between them, star
-/// up to two for the menu bar). Opens straight to `initialProvider`'s detail when launched from
-/// a card's "Customize…" context menu, otherwise starts on the provider list.
+/// Customize screen (pure content -- chrome/back-navigation lives in `DashboardView`'s shared
+/// pager top bar): a provider list (on/off, drag to reorder, tap into detail) plus a per-provider
+/// detail (Always Visible / On Demand sections, drag a metric between them, star up to two for
+/// the menu bar). `detailProvider` is owned by `DashboardView` so its shared top bar can show
+/// the right title/back-chevron/Reset-vs-Reset-All for whichever level is showing.
 struct CustomizeView: View {
-    let initialProvider: ProviderID?
     @ObservedObject var enablementStore: ProviderEnablementStore
     @ObservedObject var layoutStore: LayoutStore
     @ObservedObject var dataStore: WidgetDataStore
+    @Binding var detailProvider: ProviderID?
 
-    @Environment(\.dismiss) private var dismiss
-    @State private var detailProvider: ProviderID?
     @State private var draggingProvider: ProviderID?
     @State private var draggingMetricID: String?
     @State private var starRejectionMessage: String?
 
-    init(initialProvider: ProviderID? = nil, enablementStore: ProviderEnablementStore, layoutStore: LayoutStore, dataStore: WidgetDataStore) {
-        self.initialProvider = initialProvider
-        self.enablementStore = enablementStore
-        self.layoutStore = layoutStore
-        self.dataStore = dataStore
-        _detailProvider = State(initialValue: initialProvider)
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            topBar
-            Divider()
             if let detailProvider {
                 providerDetail(detailProvider)
             } else {
@@ -45,34 +34,14 @@ struct CustomizeView: View {
                     .transition(.opacity)
             }
         }
+        .reportPanelHeight(for: .customize)
     }
 
-    private var topBar: some View {
-        HStack {
-            if detailProvider != nil {
-                Button(action: { detailProvider = nil }) {
-                    Image(systemName: "chevron.left")
-                }
-                .buttonStyle(.plain)
-            }
-            Text(detailProvider?.displayName ?? "Customize").font(.title3.weight(.semibold))
-            Spacer()
-            if let detailProvider {
-                Button("Reset") { layoutStore.resetProvider(detailProvider) }
-                    .font(.caption)
-            } else {
-                Button("Reset All", role: .destructive) { layoutStore.resetAll() }
-                    .font(.caption)
-            }
-            Button("Done") { dismiss() }
-        }
-        .padding(14)
-    }
 
     // MARK: - Provider list
 
     private var providerList: some View {
-        ScrollView {
+        MeasuredScrollView(maxHeight: 640, refreshID: "\(enablementStore.enabledProviders.count)-\(dataStore.snapshots.count)") {
             VStack(spacing: 4) {
                 ForEach(ProviderID.allCases) { provider in
                     providerListRow(provider)
@@ -134,7 +103,7 @@ struct CustomizeView: View {
         let alwaysVisible = lines.filter { layoutStore.layout(for: provider, metricID: $0.id).tier == .alwaysVisible }
         let onDemand = lines.filter { layoutStore.layout(for: provider, metricID: $0.id).tier == .onDemand }
 
-        return ScrollView {
+        return MeasuredScrollView(maxHeight: 640, refreshID: "\(provider.rawValue)-\(alwaysVisible.count)-\(onDemand.count)") {
             VStack(alignment: .leading, spacing: 16) {
                 metricTierSection(title: "Always Visible", provider: provider, lines: alwaysVisible, tier: .alwaysVisible, emptyHint: "Drag metrics here")
                 metricTierSection(title: "On Demand", provider: provider, lines: onDemand, tier: .onDemand, emptyHint: "Drag metrics here")
