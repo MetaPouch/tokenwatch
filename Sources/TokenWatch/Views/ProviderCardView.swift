@@ -52,8 +52,7 @@ struct ProviderCardView: View {
                         .font(.subheadline.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
-                ProgressView(value: limit > 0 ? min(used / limit, 1) : 0)
-                    .tint(progressColor(used: used, limit: limit))
+                ThresholdProgressBar(fraction: limit > 0 ? used / limit : 0, tint: progressColor(used: used, limit: limit))
                 if let resetsAt {
                     Text("Resets \(resetsAt, style: .relative)")
                         .font(.caption2)
@@ -171,5 +170,23 @@ private struct Sparkline: View {
                 .stroke(Color.accentColor, lineWidth: 1.5)
             }
         }
+    }
+}
+
+/// macOS's `ProgressView` linear style ignores both `.tint()` and an explicit
+/// `LinearProgressViewStyle(tint:)` -- confirmed via isolated render test, not a hunch. Draw the
+/// bar by hand so the green/amber/red threshold coloring actually shows up on screen.
+private struct ThresholdProgressBar: View {
+    let fraction: Double
+    let tint: Color
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.secondary.opacity(0.25))
+                Capsule().fill(tint).frame(width: proxy.size.width * CGFloat(max(0, min(fraction, 1))))
+            }
+        }
+        .frame(height: 6)
     }
 }
