@@ -10,7 +10,8 @@ swift test
 swift run TokenWatch
 ```
 
-Requires Xcode 15+ / Swift 5.10 toolchain on macOS 14+. No external dependencies to install —
+Requires Xcode 26+ / Swift 6.2 toolchain on macOS 26 (Tahoe)+ -- the popover uses real Liquid
+Glass (`glassEffect`), which needs the macOS 26 SDK. No external dependencies to install —
 `Package.swift` has none.
 
 ## Project layout

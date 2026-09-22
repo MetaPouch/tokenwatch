@@ -179,7 +179,8 @@ every enabled provider, instead of one provider at a time.
 
 ## Build & run
 
-Requires Xcode 15+ / Swift 5.10 toolchain on macOS 14+.
+Requires Xcode 26+ / Swift 6.2 toolchain on macOS 26 (Tahoe)+ -- the popover's background uses
+real Liquid Glass (`glassEffect`), which needs the macOS 26 SDK.
 
 ```sh
 swift build

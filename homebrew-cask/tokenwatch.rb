@@ -8,7 +8,7 @@ cask "tokenwatch" do
   homepage "https://tokenwatch.fyi"
 
   auto_updates false
-  depends_on macos: :sonoma
+  depends_on macos: :tahoe
 
   app "TokenWatch.app"
 

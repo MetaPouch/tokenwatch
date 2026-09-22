@@ -50,7 +50,14 @@ struct DashboardView: View {
                 .frame(height: footerHeight)
         }
         .frame(width: TokenWatchPanel.width)
-        .background(appearanceStore.increaseTransparency && !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(.regularMaterial))
+        .background {
+            let reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+            if reduceTransparency {
+                Color(nsColor: .windowBackgroundColor)
+            } else {
+                Rectangle().glassEffect(appearanceStore.increaseTransparency ? .clear : .regular, in: .rect)
+            }
+        }
         .preferredColorScheme(appearanceStore.theme.colorScheme)
         .environment(\.appDensity, appearanceStore.density)
         .focusable()
