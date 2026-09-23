@@ -45,12 +45,12 @@ final class UsageSourcesTests: XCTestCase {
         write("pi/-proj/s.jsonl", [harnessTurn("openrouter", "google/gemini-3-flash", input: 5, cost: 0.05)])
         let roots = [root.appendingPathComponent("omp").path, root.appendingPathComponent("pi").path]
 
-        let others = HarnessUsageHistoryScanner.dailyUsage(days: 30, now: now, roots: roots)
+        let others = LocalUsageHistoryScanner.dailyUsage(days: 30, now: now, locations: LocalUsageLocations(harnessRoots: roots))
         XCTAssertEqual(Set(others.keys), [.provider(.openrouter), .other])
         XCTAssertEqual(day15(others[.provider(.openrouter)])?.inputTokens, 25)
         XCTAssertEqual(day15(others[.other])?.estimatedCostUSD ?? -1, 0.03, accuracy: 1e-9)
 
-        let claude = ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: now, claudeRoots: ["/nonexistent"], harnessRoots: roots)
+        let claude = ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: now, claudeRoots: ["/nonexistent"], localLogs: LocalUsageLocations(harnessRoots: roots))
         XCTAssertEqual(day15(claude)?.inputTokens, 100)
     }
 
@@ -61,7 +61,7 @@ final class UsageSourcesTests: XCTestCase {
             harnessTurn("openrouter", "x-ai/grok-4.6", input: 1_000_000),
             harnessTurn("deepseek", "deepseek-v4", input: 1_000_000),
         ])
-        let others = HarnessUsageHistoryScanner.dailyUsage(days: 30, now: now, roots: [root.appendingPathComponent("omp").path])
+        let others = LocalUsageHistoryScanner.dailyUsage(days: 30, now: now, locations: LocalUsageLocations(harnessRoots: [root.appendingPathComponent("omp").path]))
         XCTAssertEqual(day15(others[.provider(.openrouter)])?.estimatedCostUSD ?? -1, 2, accuracy: 1e-9) // grok-4.6 $2/M input
         XCTAssertEqual(day15(others[.provider(.openrouter)])?.hasApproximateRate, false)
         XCTAssertEqual(day15(others[.other])?.hasApproximateRate, true)

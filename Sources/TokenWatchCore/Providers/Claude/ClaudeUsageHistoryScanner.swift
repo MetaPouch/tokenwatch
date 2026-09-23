@@ -2,7 +2,8 @@ import Foundation
 
 /// Scans every local Claude transcript -- Claude Code's own session logs in every Claude config
 /// dir (`ClaudeAccountDiscovery.historyRoots`: the defaults, `CLAUDE_CONFIG_DIR`, and other
-/// account profiles) and the Anthropic turns in the omp/pi harness logs (`HarnessUsageLog`) -- for
+/// account profiles) and the Anthropic turns in other agents' logs (`LocalUsageLogs`: omp, pi,
+/// OpenCode) -- for
 /// a bounded trailing window, summing *every* turn's token usage per calendar day and pricing it
 /// at API list rates. Unlike the session scanners (which only care about the single newest turn
 /// per file, for cache-temperature), this reads every qualifying line of every file modified
@@ -10,9 +11,8 @@ import Foundation
 /// history -- callers should run it off the main actor. Every read is defensive: a
 /// missing/unreadable file, or one that doesn't parse, is skipped, never thrown.
 public enum ClaudeUsageHistoryScanner {
-    public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, claudeRoots: [String]? = nil, harnessRoots: [String]? = nil) -> [UsageDay] {
+    public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, claudeRoots: [String]? = nil, localLogs: LocalUsageLocations = .standard()) -> [UsageDay] {
         let claudeRoots = claudeRoots ?? ClaudeAccountDiscovery.historyRoots()
-        let harnessRoots = harnessRoots ?? HarnessUsageLog.roots()
         var accumulator = UsageDayAccumulator(days: days, now: now, calendar: calendar)
         let cutoff = accumulator.cutoff
 
@@ -29,11 +29,11 @@ public enum ClaudeUsageHistoryScanner {
         for turn in dedup(claudeCodeCache.items(for: codeFiles, parse: claudeCodeTurns)) where turn.timestamp >= cutoff {
             record(turn)
         }
-        for omp in HarnessUsageLog.turns(roots: harnessRoots, modifiedSince: cutoff) where omp.source == .provider(.claude) && omp.timestamp >= cutoff {
+        for local in LocalUsageLogs.turns(localLogs, modifiedSince: cutoff) where local.source == .provider(.claude) {
             record(Turn(
-                timestamp: omp.timestamp, model: omp.model,
-                input: omp.input, cacheRead: omp.cacheRead, cacheWrite: omp.cacheWrite, output: omp.output,
-                cacheWrite1h: omp.cacheWrite1h, carriedCostUSD: omp.costUSD
+                timestamp: local.timestamp, model: local.model,
+                input: local.input, cacheRead: local.cacheRead, cacheWrite: local.cacheWrite, output: local.output,
+                cacheWrite1h: local.cacheWrite1h, carriedCostUSD: local.costUSD
             ))
         }
         return accumulator.build()

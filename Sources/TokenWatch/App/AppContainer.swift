@@ -16,7 +16,7 @@ public final class AppContainer {
     public let notificationSettingsStore: NotificationSettingsStore
     let notificationService: QuotaNotificationService
     public let pricingRefreshService: PricingRefreshService
-    public let spendHistoryStore = SpendHistoryStore()
+    public let spendHistoryStore: SpendHistoryStore
     public let detectionStore: ProviderDetectionStore
     public let hintStore = HintStore()
     /// Providers backed by a plain API key, keyed by id, for Settings' secure text fields.
@@ -46,6 +46,7 @@ public final class AppContainer {
         self.notificationService = QuotaNotificationService(settingsStore: notificationSettingsStore)
         self.pricingRefreshService = PricingRefreshService()
         self.apiKeyManagers = Self.buildAPIKeyManagers()
+        self.spendHistoryStore = SpendHistoryStore(includeCursor: { enablementStore.isEnabled(.cursor) })
 
         let notificationService = self.notificationService
         notificationCancellable = dataStore.$snapshots

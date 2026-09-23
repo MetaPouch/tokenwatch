@@ -116,10 +116,10 @@ provider with something to actually show here gets a card; most providers have n
 
 A cross-provider **Total Spend** card sits at the top when Settings' **Show Total Spend** is on
 and anything on this Mac has local activity in the last 7 days, via a 30-day scan shared with the
-per-provider spend rows below it (one scan, cached). It totals every source with local history --
-Claude and Codex from their CLIs and harnesses, any other provider a harness called, and
-**Other** for providers TokenWatch has no card for -- whether or not that provider's card is
-enabled: it's what was spent locally, not just what's tracked. The title is a
+per-provider spend rows below it (one scan, cached). It totals every source with history --
+Claude and Codex from their CLIs, every other coding agent's local logs (below), Cursor's account
+usage, and **Other** for providers TokenWatch has no card for -- whether or not that provider's
+card is enabled: it's what was spent, not just what's tracked. The title is a
 pull-down for **Cost** / **Cost per MTok** / **Tokens**; a **Today** / **Yesterday** / **30 Days**
 segmented toggle sits alongside it. The donut's segments use each provider's real brand color
 (Anthropic's terracotta, OpenAI's teal-green, and so on); hover the center for the exact figure
@@ -152,9 +152,30 @@ and spend even though it's real usage. One harness session can switch providers 
 each turn counts toward the provider that served it: Anthropic turns as Claude, `openai-codex`
 turns (a ChatGPT sign-in, the Codex quota) as Codex, and OpenRouter, OpenAI, Gemini, xAI, z.ai,
 Kimi, Copilot, Cursor, OpenCode and Amp turns as their own providers' spend; anything else is
-Other. This depends on the harnesses' own undocumented local session-log format, not a stable
-public contract the way Claude Code's and Codex's are, so it's read defensively and fails soft if
-the format ever changes.
+Other.
+
+Spend also reads the other coding agents' own local usage records, each attributed to the service
+it's billed through:
+
+| Agent | Where | Counts toward |
+| --- | --- | --- |
+| OpenCode | `~/.local/share/opencode/opencode.db` (or the pre-database `storage/` tree) | The provider that served each message, like omp; `openai` is Codex when OpenCode's `auth.json` holds a ChatGPT sign-in |
+| GitHub Copilot CLI | `~/.copilot/session-store.db` | Copilot |
+| Grok CLI | `~/.grok/logs/unified.jsonl` (and `$GROK_HOME`) | Grok |
+| Antigravity CLI | `~/.gemini/antigravity-cli/brain/*/…/transcript_full.jsonl` | Antigravity |
+| Devin CLI | `~/.local/share/devin/cli/sessions.db` | Other |
+| fx | `~/.fx/sessions/*/events.jsonl` | Other |
+| Muse Code | `~/.local/share/muse/sessions/**/session.jsonl` | Other |
+
+(`~/.local/share` follows `XDG_DATA_HOME`.) Databases are opened read-only while the agent may be
+using them. None of these formats is a public contract the way Claude Code's and Codex's are, so
+each is read defensively and fails soft if the format ever changes.
+
+Cursor keeps no token counts on disk, so while the Cursor provider is enabled its spend comes from
+Cursor's own per-request usage history for the account (the dashboard's usage-events call, with
+Cursor.app's saved sign-in, fetched at most every 5 minutes) -- covering the app, `cursor-agent`,
+and any other client signed into it, omp's `cursor` provider included, so it replaces any locally
+logged Cursor turns rather than adding to them.
 
 Every spend figure -- the donut, the 7-day bars, each provider's spend row -- is built by summing
 *every* turn's local session tokens (not just the newest, the way cache-temperature works) and
@@ -164,24 +185,28 @@ reads + cache writes + output.
 - **Claude** (Claude Code logs in every Claude config dir on this Mac -- `~/.claude`,
   `~/.config/claude`, each `CLAUDE_CONFIG_DIR` entry, and any other account profile holding
   Claude's own `.claude.json` or `.credentials.json`, a folder shared through a symlink counted
-  once -- plus harness Anthropic turns): each Claude Code API response counts once,
+  once -- plus Anthropic turns from omp, pi and OpenCode): each Claude Code API response counts once,
   deduplicated the way OpenUsage and ccusage do it -- Claude Code writes one line per content
   block of a response, each repeating the full usage, and subagent (sidechain) and
   resumed-session logs replay earlier messages. A cost the log itself records (Claude Code's
-  `costUSD`, a harness's per-turn cost) is used as-is; otherwise tokens are priced at list rates,
+  `costUSD`, another agent's per-turn cost) is used as-is; otherwise tokens are priced at list rates,
   with 1-hour cache writes at 2x input and 5-minute ones at 1.25x. A dotted version
   (`claude-haiku-4.5`, as OpenRouter and harnesses spell it) prices as Anthropic's dashed id,
   and `<synthetic>` (locally generated) messages cost nothing.
 - **Codex** (`sessions` and `archived_sessions` in `$CODEX_HOME` and every other `~/.codex*`
-  home, plus harness `openai-codex` turns at the harness's own recorded cost), ported from
+  home, plus omp/pi's `openai-codex` turns and OpenCode's ChatGPT-sign-in turns at the agent's
+  own recorded cost), ported from
   OpenUsage's Codex scanner: a turn is a `token_count` event's `last_token_usage` (or its delta
   from the previous running total); a re-emitted, unchanged running total isn't a new turn; a
   subagent or forked session's replay of its parent's history isn't counted; and an identical
   event in two files counts once. Cached input bills at the cache-read rate and cache writes
   (also counted inside Codex's input) at 1.25x input, a request above 272K input tokens at the
   model's long-context rate, and a priority ("fast") tier session at 2x (2.5x for gpt-5.5).
-- **Every other harness provider** at the harness's own recorded cost, or, when a turn has none,
-  at the list rate of whichever known model family (Claude, OpenAI, Grok, Gemini) matches its id.
+- **Every other agent and provider** at the agent's own recorded cost (omp, pi, OpenCode, fx, Muse
+  Code; Cursor's token-rate cost), or, when there is none, at the list rate of whichever known
+  model family (Claude, OpenAI, Grok, Gemini) matches the model id. Each agent's token buckets
+  are normalized to input / cache reads / cache writes / output -- OpenCode's reasoning tokens,
+  which it logs apart from output, count as output, and so do Gemini's thinking tokens.
 
 All of it shares one 30-day scan with the Total Spend card and each provider's inline spend row,
 rescanned when the Usage tab is opened more than a minute after the last scan -- instant after

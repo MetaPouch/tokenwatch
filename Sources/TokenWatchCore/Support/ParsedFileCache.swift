@@ -8,23 +8,37 @@ struct TranscriptFile: Sendable {
 }
 
 enum TranscriptFiles {
-    /// Every `.jsonl` under `roots`, recursively, modified at or after `modifiedSince`.
-    static func recursive(roots: [String], modifiedSince: Date) -> [TranscriptFile] {
+    /// Every file under `roots`, recursively, whose root-relative path `matches` (by default every
+    /// `.jsonl`), modified at or after `modifiedSince`.
+    static func recursive(roots: [String], modifiedSince: Date, matching matches: (String) -> Bool = { $0.hasSuffix(".jsonl") }) -> [TranscriptFile] {
         let fileManager = FileManager.default
         var results: [TranscriptFile] = []
-        for root in roots {
+        for root in roots where !root.isEmpty {
             guard let enumerator = fileManager.enumerator(atPath: root) else { continue }
             for case let relativePath as String in enumerator {
-                guard relativePath.hasSuffix(".jsonl") else { continue }
-                let fullPath = root + "/" + relativePath
-                guard let attributes = try? fileManager.attributesOfItem(atPath: fullPath),
-                      let modified = attributes[.modificationDate] as? Date,
-                      modified >= modifiedSince
-                else { continue }
-                results.append(TranscriptFile(path: fullPath, size: (attributes[.size] as? Int) ?? -1, modified: modified))
+                guard matches(relativePath) else { continue }
+                if let file = file(atPath: root + "/" + relativePath), file.modified >= modifiedSince {
+                    results.append(file)
+                }
             }
         }
         return results
+    }
+
+    /// One file's cache signature, or `nil` if it doesn't exist.
+    static func file(atPath path: String) -> TranscriptFile? {
+        guard !path.isEmpty, let attributes = try? FileManager.default.attributesOfItem(atPath: path),
+              let modified = attributes[.modificationDate] as? Date
+        else { return nil }
+        return TranscriptFile(path: path, size: (attributes[.size] as? Int) ?? -1, modified: modified)
+    }
+
+    /// A SQLite database's cache signature, covering its write-ahead log too: in WAL mode new rows
+    /// land in `-wal` long before the main file changes.
+    static func database(atPath path: String) -> TranscriptFile? {
+        guard let main = file(atPath: path) else { return nil }
+        guard let wal = file(atPath: path + "-wal") else { return main }
+        return TranscriptFile(path: path, size: main.size &+ wal.size &* 1_000_003, modified: max(main.modified, wal.modified))
     }
 }
 

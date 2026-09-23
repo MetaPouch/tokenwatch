@@ -46,7 +46,7 @@ final class CodexUsageHistoryScannerTests: XCTestCase {
     }
 
     private func day15() -> UsageDay? {
-        CodexUsageHistoryScanner.dailyUsage(days: 30, now: now, roots: [root.appendingPathComponent("sessions").path, root.appendingPathComponent("archived_sessions").path], harnessRoots: [root.appendingPathComponent("omp").path])
+        CodexUsageHistoryScanner.dailyUsage(days: 30, now: now, roots: [root.appendingPathComponent("sessions").path, root.appendingPathComponent("archived_sessions").path], localLogs: LocalUsageLocations(harnessRoots: [root.appendingPathComponent("omp").path]))
             .first { $0.id == "2026-06-15" }
     }
 

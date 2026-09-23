@@ -2,10 +2,11 @@ import Foundation
 
 /// Daily token usage and estimated spend for Codex, from the Codex CLI's local rollout logs in
 /// every Codex home (`$CODEX_HOME` and other `~/.codex*` accounts: `sessions/**/*.jsonl` plus
-/// `archived_sessions/`) and the Codex turns in the omp/pi harness logs (`HarnessUsageLog`,
-/// provider `openai-codex` -- a harness calls the API directly, so those never appear in a
-/// rollout), priced at API list rates. The counterpart of `ClaudeUsageHistoryScanner`; both feed
-/// `UsageDay`s into the same Usage-tab views.
+/// `archived_sessions/`) and the ChatGPT-sign-in turns in other agents' logs (`LocalUsageLogs`:
+/// omp/pi's `openai-codex` provider, OpenCode's `openai` with a ChatGPT sign-in -- those agents
+/// call the API directly, so their turns never appear in a rollout), priced at API list rates.
+/// The counterpart of `ClaudeUsageHistoryScanner`; both feed `UsageDay`s into the same Usage-tab
+/// views.
 ///
 /// Ported from OpenUsage's `CodexLogUsageScanner`/`CodexLogFileParser` (itself ccusage's Codex
 /// adapter), whose rules each prevent a real miscount:
@@ -24,7 +25,7 @@ public enum CodexUsageHistoryScanner {
         CodexAccountDiscovery.historyRoots(homeDirectory: homeDirectory, environment: environment)
     }
 
-    public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, roots: [String]? = nil, harnessRoots: [String]? = nil) -> [UsageDay] {
+    public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, roots: [String]? = nil, localLogs: LocalUsageLocations = .standard()) -> [UsageDay] {
         var accumulator = UsageDayAccumulator(days: days, now: now, calendar: calendar)
         var seen = Set<Event>()
         for path in rolloutPaths(roots: roots ?? Self.roots(), modifiedSince: accumulator.cutoff) {
@@ -46,9 +47,8 @@ public enum CodexUsageHistoryScanner {
             }
         }
 
-        // Harness buckets are already disjoint; the harness's recorded cost wins over re-pricing.
-        for turn in HarnessUsageLog.turns(roots: harnessRoots ?? HarnessUsageLog.roots(), modifiedSince: accumulator.cutoff)
-            where turn.source == .provider(.codex) && turn.timestamp >= accumulator.cutoff {
+        // Other agents' buckets are already disjoint; the agent's recorded cost wins over re-pricing.
+        for turn in LocalUsageLogs.turns(localLogs, modifiedSince: accumulator.cutoff) where turn.source == .provider(.codex) {
             let repriced = ModelPricing.codexCostUSD(
                 model: turn.model, inputTokens: turn.input + turn.cacheRead + turn.cacheWrite,
                 cachedInputTokens: turn.cacheRead, cacheWriteInputTokens: turn.cacheWrite, outputTokens: turn.output

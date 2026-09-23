@@ -11,19 +11,6 @@ import Foundation
 /// The harness normalizes every provider's usage to disjoint buckets -- `input` excludes cache
 /// reads and writes, and the four add up to `totalTokens` -- and records its own per-turn cost.
 enum HarnessUsageLog {
-    struct Turn: Sendable {
-        let timestamp: Date
-        /// The harness's provider name: `anthropic`, `openai-codex`, `openrouter`, ...
-        let provider: String
-        let source: SpendSource
-        let model: String
-        let input: Int, cacheRead: Int, cacheWrite: Int, output: Int
-        /// The part of `cacheWrite` written with a 1-hour TTL (Anthropic only).
-        let cacheWrite1h: Int
-        /// The harness's own cost for the turn, in USD.
-        let costUSD: Double?
-    }
-
     /// omp's and pi's session directories. pi honors `PI_CODING_AGENT_SESSION_DIR`, else
     /// `PI_CODING_AGENT_DIR/sessions`, else `~/.pi/agent/sessions`.
     static func roots(homeDirectory: String = NSHomeDirectory(), environment: [String: String] = ProcessInfo.processInfo.environment) -> [String] {
@@ -38,9 +25,10 @@ enum HarnessUsageLog {
         return [homeDirectory + "/.omp/agent/sessions", pi]
     }
 
-    /// Which `SpendSource` a harness provider's usage belongs to -- the service it's billed through.
-    /// A provider with no TokenWatch counterpart (DeepSeek, Mistral, Bedrock, Vertex, Groq, ...) is
-    /// `other`: still counted, just not on a provider's card.
+    /// Which `SpendSource` a provider's usage belongs to -- the service it's billed through -- by
+    /// the provider ids omp/pi and OpenCode use. A provider with no TokenWatch counterpart
+    /// (DeepSeek, Mistral, Bedrock, Vertex, Groq, ...) is `other`: still counted, just not on a
+    /// provider's card.
     static func source(forHarnessProvider provider: String) -> SpendSource {
         switch provider.lowercased() {
         case "anthropic": return .provider(.claude)
@@ -51,8 +39,8 @@ enum HarnessUsageLog {
         case "github-copilot": return .provider(.copilot)
         case "cursor": return .provider(.cursor)
         case "openrouter": return .provider(.openrouter)
-        case "zai": return .provider(.zai)
-        case "moonshot", "kimi", "kimi-coding": return .provider(.kimi)
+        case "zai", "zai-coding-plan", "zhipuai", "zhipuai-coding-plan": return .provider(.zai)
+        case "moonshot", "moonshotai", "moonshotai-cn", "kimi", "kimi-coding", "kimi-for-coding": return .provider(.kimi)
         case "xai": return .provider(.grok)
         case "opencode": return .provider(.opencode)
         case "amp": return .provider(.amp)
@@ -60,11 +48,11 @@ enum HarnessUsageLog {
         }
     }
 
-    static func turns(roots: [String] = roots(), modifiedSince: Date) -> [Turn] {
+    static func turns(roots: [String] = roots(), modifiedSince: Date) -> [LocalUsageTurn] {
         cache.items(for: TranscriptFiles.recursive(roots: roots, modifiedSince: modifiedSince), parse: turns(inFileAtPath:))
     }
 
-    private static let cache = ParsedFileCache<Turn>()
+    private static let cache = ParsedFileCache<LocalUsageTurn>()
 
     private struct Line: Decodable {
         struct Message: Decodable {
@@ -92,16 +80,16 @@ enum HarnessUsageLog {
         let message: Message?
     }
 
-    private static func turns(inFileAtPath path: String) -> [Turn] {
+    private static func turns(inFileAtPath path: String) -> [LocalUsageTurn] {
         guard let data = FileManager.default.contents(atPath: path), let text = String(data: data, encoding: .utf8) else { return [] }
-        var turns: [Turn] = []
+        var turns: [LocalUsageTurn] = []
         for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
             guard let lineData = line.data(using: .utf8), let entry = try? JSONDecoder().decode(Line.self, from: lineData) else { continue }
             guard entry.type == "message", let message = entry.message, message.role == "assistant", let provider = message.provider,
                   let usage = message.usage, let timestampString = entry.timestamp, let timestamp = FlexibleISO8601.parse(timestampString)
             else { continue }
-            turns.append(Turn(
-                timestamp: timestamp, provider: provider, source: source(forHarnessProvider: provider), model: message.model ?? "",
+            turns.append(LocalUsageTurn(
+                timestamp: timestamp, source: source(forHarnessProvider: provider), model: message.model ?? "",
                 input: usage.input ?? 0, cacheRead: usage.cacheRead ?? 0,
                 cacheWrite: usage.cacheWrite ?? 0, output: usage.output ?? 0,
                 cacheWrite1h: usage.cttl?.ephemeral1h ?? 0, costUSD: usage.cost?.total

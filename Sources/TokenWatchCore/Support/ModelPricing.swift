@@ -67,9 +67,8 @@ public enum ModelPricing {
         "gpt-4o": Rate(inputPerMillion: 2.5, outputPerMillion: 10, cacheReadPerMillion: nil),
     ]
 
-    /// xAI and Google rates, for the harness turns routed to them (see `harnessCostUSD`) --
-    /// from Superset's maintained table. Gemini's >200K long-context tier isn't modeled: harness
-    /// turns carry their own cost almost always, so these are a rarely used fallback.
+    /// xAI and Google rates, for the local agent turns routed to them (see `listCostUSD`) --
+    /// from Superset's maintained table. Gemini's >200K long-context tier isn't modeled.
     private static let grokRates: [String: Rate] = [
         "grok-4.6": Rate(inputPerMillion: 2, outputPerMillion: 6, cacheReadPerMillion: nil),
         "grok-4.5": Rate(inputPerMillion: 2, outputPerMillion: 6, cacheReadPerMillion: nil),
@@ -173,11 +172,11 @@ public enum ModelPricing {
             + (Double(write1h) / 1_000_000) * rate.inputPerMillion * cacheWrite1hMultiplier
     }
 
-    /// Cost of a harness turn (omp, pi) served by a model provider TokenWatch may have no table
-    /// for, from disjoint token buckets: the model is matched against every table (Claude, OpenAI,
-    /// xAI, Google), else priced at the cheapest known rate and flagged approximate. Harness turns
-    /// carry their own recorded cost almost always; this is the fallback when one doesn't.
-    static func harnessCostUSD(model: String, inputTokens: Int, cacheReadTokens: Int, cacheWriteTokens: Int, cacheWrite1hTokens: Int, outputTokens: Int) -> (cost: Double, approximate: Bool) {
+    /// Cost of a local agent turn (omp, pi, OpenCode, the Copilot/Grok/Antigravity/Devin CLIs, ...)
+    /// served by a model TokenWatch may have no table for, from disjoint token buckets: the model
+    /// is matched against every table (Claude, OpenAI, xAI, Google), else priced at the cheapest
+    /// known rate and flagged approximate. The fallback when a turn has no recorded cost.
+    static func listCostUSD(model: String, inputTokens: Int, cacheReadTokens: Int, cacheWriteTokens: Int, cacheWrite1hTokens: Int, outputTokens: Int) -> (cost: Double, approximate: Bool) {
         let families: [ProviderID] = [.claude, .codex, .grok, .gemini]
         var matched: Rate?
         for family in families {
