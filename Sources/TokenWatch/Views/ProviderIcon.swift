@@ -71,8 +71,21 @@ struct ProviderIcon: View {
             // subdirectory inside the generated bundle rather than flattening it to the
             // bundle's top level, so the lookup must say so explicitly -- omitting
             // `subdirectory:` silently finds nothing even though the file is right there.
-            if let moduleURL = Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "Icons") {
-                return moduleURL
+            //
+            // SwiftPM's generated `Bundle.module` accessor calls `Swift.fatalError` -- an
+            // unconditional, uncatchable process abort -- if it can't find its `.bundle` wrapper
+            // either next to the running binary or at the exact path it was built at on this
+            // machine. A packaged `.app` never ships that wrapper (see this type's doc comment),
+            // so merely *referencing* `Bundle.module` here -- even just to ask it for a resource
+            // that happens to be missing -- would crash the entire app over one bad icon file
+            // instead of falling back to the placeholder glyph `ProviderIcon.body` already
+            // handles. Only take this path outside a real `.app` bundle (`swift run`/`swift
+            // test`), where `Bundle.module` is expected to actually resolve.
+            guard Bundle.main.bundlePath.hasSuffix(".app") else {
+                if let moduleURL = Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "Icons") {
+                    return moduleURL
+                }
+                continue
             }
         }
         return nil
