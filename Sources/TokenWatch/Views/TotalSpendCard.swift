@@ -233,11 +233,18 @@ struct TotalSpendCard: View {
         }
     }
 
+    /// Forces Western thousands-grouping regardless of the system locale -- the rest of the
+    /// app's number formatting (`String(format: "%.2f", ...)`, the hand-rolled K/M/B suffixes)
+    /// is already locale-independent, and Foundation's default `.formatted()` grouping follows
+    /// the *current* locale, which on an Indian-locale system renders "74,20,123" (lakhs/crores
+    /// grouping) instead of "7,420,123" -- confirmed directly, not assumed.
+    private static let groupingLocale = Locale(identifier: "en_US")
+
     private func preciseCenterText(total: Double) -> String {
         switch mode {
-        case .cost: return String(format: "$%.2f", total)
-        case .tokens: return "\(Int(total)) tokens"
-        case .costPerMTok: return String(format: "$%.2f/MTok", total)
+        case .cost: return "$" + total.formatted(.number.locale(Self.groupingLocale).precision(.fractionLength(2)))
+        case .tokens: return "\(Int(total).formatted(.number.locale(Self.groupingLocale))) tokens"
+        case .costPerMTok: return "$" + total.formatted(.number.locale(Self.groupingLocale).precision(.fractionLength(2))) + "/MTok"
         }
     }
 
