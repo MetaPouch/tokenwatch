@@ -46,7 +46,7 @@ enum ClaudeCacheTemperature {
             return .badge(id: badgeID, text: activity.sessionLabel, tone: .neutral, icon: "flame.fill", detail: detail)
         }
 
-        let detail = "cold · re-reads ~\(formatTokenCount(contextTokens)) tok"
+        let detail = "cold · re-reads ~\(TokenCountFormatter.compact(contextTokens)) tok"
         return .badge(id: badgeID, text: activity.sessionLabel, tone: .warning, icon: "snowflake", detail: detail)
     }
 
@@ -64,14 +64,5 @@ enum ClaudeCacheTemperature {
         formatter.dateFormat = "HH:mm"
         return formatter.string(from: date)
     }
-
-    private static func formatTokenCount(_ tokens: Int) -> String {
-        if tokens >= 1_000_000 {
-            return String(format: "%.1fM", Double(tokens) / 1_000_000)
-        }
-        if tokens >= 1_000 {
-            return "\(Int((Double(tokens) / 1_000).rounded()))k"
-        }
-        return String(tokens)
-    }
 }
+

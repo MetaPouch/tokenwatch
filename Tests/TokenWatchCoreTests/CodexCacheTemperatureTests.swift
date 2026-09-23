@@ -44,7 +44,7 @@ final class CodexCacheTemperatureTests: XCTestCase {
         XCTAssertEqual(tone, .warning)
         XCTAssertEqual(icon, "snowflake")
         XCTAssertEqual(text, "my-project")
-        XCTAssertEqual(detail, "no hit last turn · re-reads ~5k tok if cold")
+        XCTAssertEqual(detail, "no hit last turn · re-reads ~5.0K tok if cold")
     }
 
     func testCustomBadgeIDDistinguishesMultipleSessions() {

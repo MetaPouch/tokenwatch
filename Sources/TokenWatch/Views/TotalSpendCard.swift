@@ -114,7 +114,7 @@ struct TotalSpendCard: View {
                 VStack(spacing: 0) {
                     Text(compactCenterNumber(total: total))
                         .font(.caption.weight(.bold).monospacedDigit())
-                    Text(centerUnit)
+                    Text(centerUnit(total: total))
                         .font(.system(size: 8))
                         .foregroundStyle(.secondary)
                 }
@@ -217,10 +217,10 @@ struct TotalSpendCard: View {
         NSPasteboard.general.writeObjects([image])
     }
 
-    private var centerUnit: String {
+    private func centerUnit(total: Double) -> String {
         switch mode {
         case .cost: return "dollars"
-        case .tokens: return "million"
+        case .tokens: return total >= 1_000_000_000 ? "billion" : "million"
         case .costPerMTok: return "MTok"
         }
     }
@@ -228,7 +228,7 @@ struct TotalSpendCard: View {
     private func compactCenterNumber(total: Double) -> String {
         switch mode {
         case .cost: return compactDollars(total)
-        case .tokens: return String(format: "%.1f", total / 1_000_000)
+        case .tokens: return String(format: "%.1f", total / (total >= 1_000_000_000 ? 1_000_000_000 : 1_000_000))
         case .costPerMTok: return String(format: "$%.2f", total)
         }
     }
@@ -256,9 +256,7 @@ struct TotalSpendCard: View {
     }
 
     private func compactTokenCount(_ tokens: Double) -> String {
-        if tokens >= 1_000_000 { return String(format: "%.1fM tok", tokens / 1_000_000) }
-        if tokens >= 1_000 { return String(format: "%.1fK tok", tokens / 1_000) }
-        return "\(Int(tokens)) tok"
+        "\(TokenCountFormatter.compact(tokens)) tok"
     }
 }
 

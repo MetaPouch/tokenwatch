@@ -29,7 +29,7 @@ enum CodexCacheTemperature {
             return .badge(id: badgeID, text: activity.sessionLabel, tone: .neutral, icon: "flame.fill", detail: hitSuffix)
         }
 
-        let detail = "no hit last turn · re-reads ~\(formatTokenCount(activity.inputTokens)) tok if cold"
+        let detail = "no hit last turn · re-reads ~\(TokenCountFormatter.compact(activity.inputTokens)) tok if cold"
         return .badge(id: badgeID, text: activity.sessionLabel, tone: .warning, icon: "snowflake", detail: detail)
     }
 
@@ -37,15 +37,5 @@ enum CodexCacheTemperature {
         guard activity.inputTokens > 0 else { return nil }
         let percent = Double(activity.cachedInputTokens) / Double(activity.inputTokens) * 100
         return "\(Int(percent.rounded()))%"
-    }
-
-    private static func formatTokenCount(_ tokens: Int) -> String {
-        if tokens >= 1_000_000 {
-            return String(format: "%.1fM", Double(tokens) / 1_000_000)
-        }
-        if tokens >= 1_000 {
-            return "\(Int((Double(tokens) / 1_000).rounded()))k"
-        }
-        return String(tokens)
     }
 }

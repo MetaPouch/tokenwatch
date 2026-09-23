@@ -85,10 +85,7 @@ struct UsageHistoryView: View {
     }
 
     private func formatTokenCount(_ tokens: Int) -> String {
-        if tokens == 0 { return "" }
-        if tokens >= 1_000_000 { return String(format: "%.1fM", Double(tokens) / 1_000_000) }
-        if tokens >= 1_000 { return "\(Int((Double(tokens) / 1_000).rounded()))k" }
-        return "\(tokens)"
+        tokens == 0 ? "" : TokenCountFormatter.compact(tokens)
     }
 
     private func dayLabel(_ date: Date) -> String {

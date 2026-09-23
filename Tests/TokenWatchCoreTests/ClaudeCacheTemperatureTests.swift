@@ -67,7 +67,7 @@ final class ClaudeCacheTemperatureTests: XCTestCase {
         XCTAssertEqual(tone, .warning)
         XCTAssertEqual(icon, "snowflake")
         XCTAssertEqual(text, "my-project")
-        XCTAssertEqual(detail, "cold · re-reads ~5k tok") // 500 + 4500 = 5000 -> "5k"
+        XCTAssertEqual(detail, "cold · re-reads ~5.0K tok") // 500 + 4500 = 5000 -> "5.0K"
     }
 
     func testResolveTTLSecondsDefaultsAndClampsAndRejectsInvalid() {
