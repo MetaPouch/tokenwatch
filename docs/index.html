@@ -3,12 +3,24 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>TokenWatch — one glance at every AI account you're burning through</title>
-<meta name="description" content="A native macOS menu-bar app for session, weekly, and credit usage across Claude, Codex, Cursor, Copilot, Gemini, OpenRouter, and more. Shows which tool you just used and whether its prompt cache is warm or cold. Local only, nothing leaves your device." />
+<title>TokenWatch: every AI limit, spend, and cache in your Mac's menu bar</title>
+<meta name="description" content="A free, open-source macOS menu-bar app that tracks usage limits, spend, and prompt-cache state across Claude, Codex, Cursor, Copilot, Gemini, OpenRouter and 7 more providers. Local only, zero telemetry." />
+<meta name="theme-color" content="#0c0d0e" />
+<link rel="canonical" href="https://tokenwatch.fyi/" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://tokenwatch.fyi/" />
+<meta property="og:title" content="TokenWatch: every AI limit, spend, and cache in your menu bar" />
+<meta property="og:description" content="Track usage limits, spend, and prompt-cache state across 13 AI providers from your Mac's menu bar. Free, open source, local only." />
+<meta property="og:image" content="https://tokenwatch.fyi/og.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:image" content="https://tokenwatch.fyi/og.png" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23151719'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%2358e6a8' stroke-width='2.4'/%3E%3Cpath d='M16 16 L21.2 11.4' stroke='%2358e6a8' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"TokenWatch","operatingSystem":"macOS 26+","applicationCategory":"DeveloperApplication","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://opensource.org/licenses/MIT","url":"https://tokenwatch.fyi/","downloadUrl":"https://github.com/MetaPouch/tokenwatch/releases/latest"}
+</script>
 <style>
   :root {
     --bg: #0c0d0e;
@@ -17,193 +29,349 @@
     --border: #2a2e32;
     --text: #eef0f2;
     --muted: #9aa3ab;
+    --faint: #6b747c;
     --accent: #58e6a8;
-    --warn: #e6b658;
-    --crit: #e65858;
-    --cold: #5ea8e6;
     --sans: "Space Grotesk", -apple-system, BlinkMacSystemFont, sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --system: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    /* macOS dark-mode system colors, used only inside the app replicas */
+    --mac-blue: #0a84ff;
+    --mac-orange: #ff9f0a;
+    --mac-red: #ff453a;
+    --mac-green: #30d158;
+    --claude: #d97757;
+    --openai: #10a37f;
   }
   * { box-sizing: border-box; }
   html { background: var(--bg); scroll-behavior: smooth; }
   body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--sans);
-    line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
+    margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans);
+    line-height: 1.55; -webkit-font-smoothing: antialiased;
   }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
   code, .mono { font-family: var(--mono); }
+  code { font-size: 0.92em; background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; }
   ::selection { background: var(--accent); color: #06120c; }
+  img { max-width: 100%; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
 
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
-
+  /* ---------- Header ---------- */
   header.top {
-    position: sticky; top: 0; z-index: 20;
-    border-bottom: 1px solid var(--border);
-    padding: 16px 0;
-    background: rgba(12, 13, 14, 0.82);
-    backdrop-filter: blur(10px);
+    position: sticky; top: 0; z-index: 30; border-bottom: 1px solid var(--border);
+    padding: 14px 0; background: rgba(12, 13, 14, 0.82); backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
   }
   header.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; white-space: nowrap; }
-  .brand .mark {
-    width: 22px; height: 22px; border-radius: 6px; background: var(--surface-2);
-    border: 1px solid var(--border); position: relative; flex: none;
-  }
-  .brand .mark::after {
-    content: ""; position: absolute; inset: 4px;
-    border: 2px solid var(--accent); border-radius: 50%;
-  }
-  .brand .mark::before {
-    content: ""; position: absolute; top: 4px; right: 4px; width: 6px; height: 2px;
-    background: var(--accent); transform: rotate(-45deg); transform-origin: right center;
-  }
-  nav.top-links { display: flex; align-items: center; gap: 22px; font-size: 13px; color: var(--muted); font-family: var(--mono); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; white-space: nowrap; color: var(--text); }
+  .brand:hover { text-decoration: none; }
+  .brand svg { width: 24px; height: 24px; display: block; }
+  nav.top-links { display: flex; align-items: center; gap: 22px; font-size: 13px; font-family: var(--mono); }
   nav.top-links a.navlink { color: var(--muted); }
-  nav.top-links a.navlink:hover { color: var(--text); }
+  nav.top-links a.navlink:hover { color: var(--text); text-decoration: none; }
   .btn-small {
     font-family: var(--sans); font-weight: 600; font-size: 13px; color: #06120c !important;
     background: var(--accent); padding: 7px 14px; border-radius: 7px;
   }
   .btn-small:hover { background: #6ef0b8; text-decoration: none; }
 
-  .hero { padding: 76px 0 56px; border-bottom: 1px solid var(--border); }
-  .hero-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 48px; align-items: start; }
-  @media (min-width: 920px) {
-    .hero-grid { grid-template-columns: 1.05fr 0.95fr; }
+  /* ---------- Hero ---------- */
+  .hero { padding: 72px 0 64px; border-bottom: 1px solid var(--border); position: relative; overflow: hidden; }
+  .hero::before {
+    content: ""; position: absolute; inset: -40% -10% auto auto; width: 720px; height: 720px;
+    background: radial-gradient(circle, rgba(88,230,168,0.10), transparent 62%); pointer-events: none;
   }
+  .hero-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 56px; align-items: center; position: relative; }
+  @media (min-width: 960px) { .hero-grid { grid-template-columns: 1.1fr 0.9fr; } }
   .kicker {
     font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
     color: var(--accent); margin: 0 0 18px;
   }
-  h1 {
-    font-size: clamp(32px, 4.4vw, 50px); line-height: 1.08; margin: 0 0 20px; font-weight: 700;
-  }
-  .lede { font-size: 17px; color: var(--muted); max-width: 52ch; margin: 0 0 30px; }
+  h1 { font-size: clamp(34px, 4.8vw, 56px); line-height: 1.05; margin: 0 0 22px; font-weight: 700; letter-spacing: -0.02em; }
+  h1 .hl { color: var(--accent); }
+  .lede { font-size: 18px; color: var(--muted); max-width: 54ch; margin: 0 0 30px; }
   .cta-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
   .btn {
-    display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 8px;
-    font-size: 14px; font-weight: 600; font-family: var(--sans);
+    display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 9px;
+    font-size: 14.5px; font-weight: 600; font-family: var(--sans); border: 1px solid transparent;
   }
+  .btn svg { width: 16px; height: 16px; }
   .btn-primary { background: var(--accent); color: #06120c; }
   .btn-primary:hover { background: #6ef0b8; text-decoration: none; }
-  .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost { background: transparent; color: var(--text); border-color: var(--border); }
   .btn-ghost:hover { border-color: var(--muted); text-decoration: none; }
 
   .install {
     margin-top: 22px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-    padding: 14px 16px; font-family: var(--mono); font-size: 13px; max-width: 480px; color: var(--muted);
+    padding: 6px 6px 6px 16px; font-family: var(--mono); font-size: 13px; max-width: 520px;
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
   }
-  .install .line { color: var(--text); overflow-x: auto; }
+  .install .line { color: var(--text); overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
   .install .line::before { content: "$ "; color: var(--accent); }
-  .badge-row { margin-top: 18px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap; }
-  .badge-row span { display: inline-flex; align-items: center; gap: 6px; }
+  .copy {
+    flex: none; font-family: var(--mono); font-size: 12px; color: var(--muted); background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 7px; padding: 7px 11px; cursor: pointer;
+  }
+  .copy:hover { color: var(--text); border-color: var(--muted); }
+  .copy.done { color: var(--accent); border-color: var(--accent); }
+  .badge-row { margin-top: 20px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); display: flex; gap: 8px 18px; flex-wrap: wrap; }
+  .badge-row span { display: inline-flex; align-items: center; gap: 7px; }
   .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: inline-block; }
 
-  /* ---- Menu bar + dashboard mockup ---- */
-  .mockup {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-    overflow: hidden; box-shadow: 0 30px 80px -30px rgba(0,0,0,0.6);
-  }
-  .mockup-menubar {
-    background: #05070a; padding: 7px 14px; display: flex; justify-content: flex-end;
-    align-items: center; gap: 14px; font-family: var(--mono); font-size: 11.5px; color: #7d8791;
-    border-bottom: 1px solid var(--border);
-  }
-  .mb-icon { opacity: 0.6; }
-  .mb-status {
-    display: flex; align-items: center; gap: 5px; background: rgba(88,230,168,0.12);
-    color: var(--accent); padding: 3px 9px; border-radius: 999px; font-weight: 600;
-  }
-  .mb-flame { font-size: 11px; }
-  .mockup-body { padding: 18px; }
-  .mockup-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; }
-  .mockup-card:last-child { margin-bottom: 0; }
-  .mc-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
-  .mc-head .name { font-weight: 600; font-size: 13.5px; }
-  .mc-head .plan { font-family: var(--mono); font-size: 11px; color: var(--muted); }
-  .mc-row { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; margin-bottom: 7px; }
-  .mc-row .label { color: var(--muted); }
-  .mc-row .value { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-  .mc-bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; margin-bottom: 10px; }
-  .mc-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
-  .mc-bar.amber > span { background: var(--warn); }
-  .mc-bar.red > span { background: var(--crit); }
-  .mc-pill {
-    display: flex; width: fit-content; align-items: baseline; gap: 6px; font-size: 12px;
-    margin-bottom: 8px; color: var(--text);
-  }
-  .mc-pill:last-child { margin-bottom: 0; }
-  .mc-pill .mp-icon { font-size: 11px; }
-  .mc-pill b { font-weight: 600; }
-  .mc-pill .mp-detail { font-family: var(--mono); font-size: 11px; color: var(--muted); }
-  .mc-pill.cold b { color: var(--cold); }
-  .mockup-picker {
-    display: flex; width: fit-content; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;
-    padding: 7px 12px; border-radius: 999px; background: rgba(255,255,255,0.08); color: var(--text);
-    margin-bottom: 14px;
-  }
-  .mockup-picker img { width: 16px; height: 16px; display: block; }
-  .mp-chevron { color: var(--muted); font-size: 11px; }
-  .provider-icon { width: 15px; height: 15px; display: block; flex: none; }
+  .stage { position: relative; display: flex; flex-direction: column; align-items: center; }
+  .stage-hint { margin-top: 16px; font-family: var(--mono); font-size: 12px; color: var(--faint); text-align: center; }
+  .stage-hint b { color: var(--muted); font-weight: 500; }
 
-  section.section { padding: 60px 0; border-bottom: 1px solid var(--border); scroll-margin-top: 70px; }
-  section.section:last-of-type { border-bottom: none; }
-  h2 { font-size: 25px; margin: 0 0 10px; font-weight: 700; }
-  .section-lede { color: var(--muted); max-width: 62ch; margin: 0 0 36px; font-size: 15px; }
+  /* ---------- macOS menu bar replica ---------- */
+  .menubar {
+    width: 100%; max-width: 400px; height: 28px; border-radius: 9px 9px 0 0;
+    background: rgba(30, 32, 36, 0.9); border: 1px solid rgba(255,255,255,0.08); border-bottom: none;
+    display: flex; align-items: center; justify-content: flex-end; gap: 14px; padding: 0 12px;
+    font-family: var(--system); font-size: 13px; color: #e8e8ea;
+  }
+  .menubar .mb-dim { color: #b8b8bc; font-size: 12.5px; }
+  .menubar .mb-item { display: inline-flex; align-items: center; gap: 5px; padding: 2px 7px; border-radius: 5px; white-space: nowrap; }
+  .menubar .mb-item.active { background: rgba(255,255,255,0.18); }
+  .menubar .sep { color: rgba(255,255,255,0.35); }
+  .ring { width: 14px; height: 14px; display: block; flex: none; }
+  .bars-glyph { display: inline-flex; gap: 2px; align-items: flex-end; height: 14px; }
+  .bars-glyph i { display: block; width: 4px; height: 14px; border-radius: 1.5px; background: rgba(255,255,255,0.25); position: relative; overflow: hidden; }
+  .bars-glyph i::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: var(--f); background: #fff; }
 
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
-  .card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px;
+  /* ---------- Popover replica ---------- */
+  .popover {
+    width: 340px; max-width: 100%; border-radius: 14px; font-family: var(--system); color: #f2f2f4;
+    background: linear-gradient(180deg, rgba(46,47,51,0.97), rgba(36,37,40,0.97));
+    border: 1px solid rgba(255,255,255,0.10);
+    box-shadow: 0 40px 90px -30px rgba(0,0,0,0.8), 0 0 0 0.5px rgba(0,0,0,0.6);
+    overflow: hidden; font-size: 12px; user-select: none; -webkit-user-select: none; text-align: left;
   }
-  .card h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-  .card p { margin: 0; color: var(--muted); font-size: 13.5px; }
-  .card .icon { font-size: 15px; }
+  .pop-top { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 10px; }
+  .pop-top b { font-size: 15px; font-weight: 700; }
+  .pop-top .refresh { width: 15px; height: 15px; color: #d0d0d4; }
+  .pop-tabs { display: flex; justify-content: center; padding: 0 14px 10px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .seg { display: inline-flex; background: rgba(255,255,255,0.08); border-radius: 7px; padding: 2px; gap: 2px; }
+  .seg button {
+    all: unset; cursor: pointer; font-family: var(--system); font-size: 12.5px; font-weight: 500;
+    padding: 3px 12px; border-radius: 5px; color: #e6e6e9;
+  }
+  .seg button[aria-selected="true"] { background: var(--mac-blue); color: #fff; }
+  .seg.small button { font-size: 12px; padding: 3px 0; flex: 1; text-align: center; }
+  .seg.small { display: flex; width: 100%; }
+  .seg.small button[aria-selected="true"] { background: rgba(255,255,255,0.16); }
+  .pop-body { padding: 10px 10px 4px; height: 470px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.2) transparent; }
+  .pop-pane[hidden] { display: none; }
+  .pcard { background: rgba(255,255,255,0.06); border-radius: 10px; padding: 11px 12px; margin-bottom: 8px; }
+  .pcard-head { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; }
+  .pcard-head .grip { color: rgba(255,255,255,0.3); font-size: 11px; letter-spacing: -1px; }
+  .pcard-head img { width: 15px; height: 15px; }
+  .pcard-head b { font-size: 12.5px; font-weight: 600; }
+  .pcard-head .plan { color: #a0a0a6; font-size: 11px; }
+  .pcard-head .outdated { margin-left: auto; font-size: 10px; color: #a0a0a6; background: rgba(255,255,255,0.08); padding: 1px 6px; border-radius: 4px; }
+  .metric { margin-bottom: 11px; }
+  .metric:last-child { margin-bottom: 2px; }
+  .m-top { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 4px; font-size: 12px; }
+  .m-top .note { color: #a0a0a6; font-size: 11px; }
+  .m-bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.14); position: relative; }
+  .m-bar > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--mac-blue); }
+  .m-bar.caution > span { background: var(--mac-orange); }
+  .m-bar.urgent > span { background: var(--mac-red); }
+  .m-bar .tick { position: absolute; top: -3px; bottom: -3px; width: 2px; border-radius: 1px; background: rgba(255,255,255,0.75); }
+  .m-foot { display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; color: #a0a0a6; }
+  .m-foot .flip { cursor: pointer; border-radius: 3px; }
+  .m-foot .flip:hover { color: #e6e6e9; }
+  .m-kv { display: flex; justify-content: space-between; font-size: 11.5px; color: #c4c4c8; }
+  .m-kv b { font-weight: 500; color: #f2f2f4; font-variant-numeric: tabular-nums; }
+  .pop-foot {
+    display: flex; justify-content: space-between; align-items: center; padding: 9px 14px;
+    border-top: 1px solid rgba(255,255,255,0.08); font-size: 11.5px; color: #b0b0b6;
+  }
+  .pop-foot .more { width: 30px; display: inline-flex; justify-content: flex-end; gap: 2px; color: #c8c8cc; }
 
-  .providers { display: flex; flex-wrap: wrap; gap: 10px; }
-  .chip {
-    font-family: var(--mono); font-size: 12.5px; padding: 8px 13px; border-radius: 999px;
-    border: 1px solid var(--border); background: var(--surface); color: var(--text);
-    display: inline-flex; align-items: center; gap: 7px;
-  }
-  .chip .auth { color: var(--muted); }
+  /* Usage pane */
+  .ts-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .ts-head b { font-size: 12.5px; }
+  .ts-head .ts-icons { color: #a0a0a6; font-size: 12px; display: flex; gap: 10px; }
+  .ts-body { display: flex; align-items: center; gap: 16px; margin-top: 12px; }
+  .donut { width: 84px; height: 84px; flex: none; position: relative; cursor: default; }
+  .donut svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .donut .center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .donut .center b { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .donut .center small { font-size: 9.5px; color: #a0a0a6; }
+  .donut .precise { display: none; }
+  .donut:hover .rounded { display: none; }
+  .donut:hover .precise { display: block; font-size: 11.5px; }
+  .legend { flex: 1; display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; }
+  .legend div { display: flex; align-items: center; gap: 6px; }
+  .legend .sw { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .legend .v { margin-left: auto; font-variant-numeric: tabular-nums; color: #d6d6da; }
+  .spend-line { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 6px; cursor: pointer; }
+  .spend-line .chev { color: #a0a0a6; font-size: 9px; transition: transform 0.15s; display: inline-block; }
+  .spend-line.open .chev { transform: rotate(90deg); }
+  .spend-line .y { color: #a0a0a6; }
+  .models { margin: 0 0 8px 14px; display: none; }
+  .spend-line.open + .models { display: block; }
+  .models div { display: grid; grid-template-columns: 1fr 36px 44px; font-size: 11px; color: #b8b8bd; padding: 1px 0; }
+  .models div span:nth-child(2) { color: #7c7c82; text-align: right; }
+  .models div span:nth-child(3) { text-align: right; color: #e2e2e6; }
+  .sess { display: flex; align-items: baseline; gap: 6px; font-size: 11.5px; padding: 2.5px 0; white-space: nowrap; overflow: hidden; }
+  .sess .ic { width: 10px; height: 10px; flex: none; align-self: center; }
+  .h-ic { width: 16px; height: 16px; display: inline-block; vertical-align: -2px; }
+  .sess.warm .ic { color: var(--mac-green); }
+  .sess.cold .ic { color: var(--mac-blue); }
+  .sess b { font-weight: 600; }
+  .sess span.d { color: #a0a0a6; font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; }
+  .hist-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .hist-head b { font-size: 12px; }
+  .hist-head .seg button { font-size: 11px; padding: 2px 9px; }
+  .hist { display: flex; align-items: flex-end; gap: 6px; height: 74px; }
+  .hist div { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+  .hist i { display: block; width: 100%; border-radius: 3px 3px 1px 1px; background: var(--claude); opacity: 0.9; transition: height 0.25s; }
+  .hist small { font-size: 9.5px; color: #8c8c92; }
+  .est { font-size: 10px; color: #8c8c92; margin-top: 8px; }
 
-  /* ---- Steps ---- */
-  .steps { counter-reset: step; display: flex; flex-direction: column; gap: 0; }
-  .step { display: grid; grid-template-columns: 40px 1fr; gap: 16px; padding: 20px 0; border-top: 1px solid var(--border); }
-  .step:first-child { border-top: none; }
-  .step .num {
-    counter-increment: step; width: 32px; height: 32px; border-radius: 50%; background: var(--surface-2);
-    border: 1px solid var(--border); display: flex; align-items: center; justify-content: center;
-    font-family: var(--mono); font-size: 13px; color: var(--accent); font-weight: 600;
-  }
-  .step .num::before { content: counter(step); }
-  .step h3 { margin: 0 0 6px; font-size: 15.5px; }
-  .step p { margin: 0 0 8px; color: var(--muted); font-size: 14px; max-width: 62ch; }
-  .step .snippet {
-    font-family: var(--mono); font-size: 12.5px; background: var(--surface); border: 1px solid var(--border);
-    border-radius: 7px; padding: 9px 12px; display: inline-block; color: var(--text); margin-top: 4px;
+  /* ---------- Generic sections ---------- */
+  section.section { padding: 88px 0; border-bottom: 1px solid var(--border); scroll-margin-top: 60px; }
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin: 0 0 12px; }
+  h2 { font-size: clamp(26px, 3.2vw, 36px); line-height: 1.15; margin: 0 0 14px; font-weight: 700; letter-spacing: -0.015em; }
+  h3 { font-weight: 600; }
+  .section-lede { color: var(--muted); max-width: 64ch; margin: 0 0 44px; font-size: 16.5px; }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--border); }
+  .stats div { padding: 26px 24px; border-left: 1px solid var(--border); }
+  .stats div:first-child { border-left: none; }
+  .stats b { display: block; font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
+  .stats span { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  @media (max-width: 760px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .stats div:nth-child(3) { border-left: none; }
+    .stats div:nth-child(n+3) { border-top: 1px solid var(--border); }
   }
 
-  /* ---- Roadmap ---- */
-  .roadmap { display: flex; flex-direction: column; gap: 10px; }
-  .rm-row {
-    display: grid; grid-template-columns: 92px 1fr; gap: 16px; align-items: start;
-    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+  .split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 48px; align-items: center; }
+  @media (min-width: 960px) {
+    .split { grid-template-columns: 1fr 1fr; gap: 64px; }
+    .split.flip > :first-child { order: 2; }
   }
-  .rm-status {
-    font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 4px 0; text-align: center;
-    border-radius: 999px; height: fit-content;
+  .feature-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 20px; }
+  .feature-list li { display: grid; grid-template-columns: 30px 1fr; gap: 12px; }
+  .feature-list .fi {
+    width: 30px; height: 30px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--accent);
   }
-  .rm-status.shipped { background: rgba(88,230,168,0.14); color: var(--accent); }
-  .rm-status.planned { background: rgba(255,255,255,0.06); color: var(--muted); }
-  .rm-row h3 { margin: 0 0 4px; font-size: 14.5px; }
-  .rm-row p { margin: 0; color: var(--muted); font-size: 13px; }
+  .feature-list h3 { margin: 3px 0 4px; font-size: 15.5px; }
+  .feature-list p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; }
+  .panel-title { font-family: var(--mono); font-size: 11.5px; color: var(--faint); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 18px; }
+
+  /* Menu bar modes */
+  .modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .mode { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+  .mode .menubar { border-radius: 7px; border-bottom: 1px solid rgba(255,255,255,0.08); max-width: none; justify-content: flex-end; }
+  .mode h3 { margin: 0; font-size: 15px; }
+  .mode p { margin: 0; color: var(--muted); font-size: 14px; }
+  .legend-row { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 26px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+  .legend-row span { display: inline-flex; align-items: center; gap: 8px; }
+  .legend-row .ring { width: 16px; height: 16px; }
+
+  /* Pace demo */
+  .pace-demo .metric { margin-bottom: 20px; font-family: var(--system); }
+  .pace-demo .metric:last-child { margin-bottom: 0; }
+  .pace-demo .m-top { font-size: 13px; }
+  .pace-demo .m-top .note { font-size: 12px; }
+  .pace-demo .m-bar { height: 7px; }
+  .pace-demo .m-foot { font-size: 12px; }
+  .pace-demo .explain { margin-top: 6px; font-family: var(--sans); font-size: 13px; color: var(--muted); }
+  .pace-demo .explain b { color: var(--text); font-weight: 600; }
+
+  /* Cache explainer */
+  .cache-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-top: 56px; }
+  .cache-card { border-radius: 12px; padding: 22px; border: 1px solid var(--border); background: var(--surface); }
+  .cache-card.warm { border-color: rgba(48,209,88,0.35); background: linear-gradient(180deg, rgba(48,209,88,0.07), var(--surface) 70%); }
+  .cache-card.cold { border-color: rgba(10,132,255,0.35); background: linear-gradient(180deg, rgba(10,132,255,0.08), var(--surface) 70%); }
+  .cache-card h3 { margin: 0 0 8px; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+  .cache-card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  .cache-card .sample { margin-top: 14px; font-family: var(--system); background: rgba(0,0,0,0.25); border-radius: 8px; padding: 10px 12px; }
+
+  /* Feature cards */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 22px; transition: border-color 0.15s; }
+  .card:hover { border-color: #3a3f44; }
+  .card .ci { font-size: 18px; line-height: 18px; height: 18px; margin-bottom: 12px; display: block; color: var(--accent); }
+  .card h3 { margin: 0 0 8px; font-size: 15.5px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+  .card ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+  .card ul li { margin-bottom: 3px; }
+
+  .kbd-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .kbd-table td { padding: 11px 0; border-top: 1px solid var(--border); color: var(--muted); vertical-align: top; }
+  .kbd-table tr:first-child td { border-top: none; }
+  .kbd-table td:first-child { width: 120px; white-space: nowrap; }
+  kbd {
+    font-family: var(--mono); font-size: 12px; color: var(--text); background: var(--surface-2);
+    border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 6px; padding: 2px 7px; margin-right: 3px;
+  }
+
+  /* Providers */
+  .prov-group { margin-bottom: 40px; }
+  .prov-group:last-child { margin-bottom: 0; }
+  .prov-group h3 { font-size: 15px; margin: 0 0 4px; }
+  .prov-group > p { color: var(--muted); font-size: 14px; margin: 0 0 16px; }
+  .prov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+  .prov { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; display: grid; grid-template-columns: 28px 1fr; gap: 4px 12px; align-items: center; }
+  .prov img { width: 24px; height: 24px; grid-row: span 2; align-self: start; margin-top: 2px; }
+  .prov b { font-size: 14.5px; font-weight: 600; }
+  .prov span { color: var(--muted); font-size: 13px; }
+  .prov .auth { grid-column: 2; font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-top: 6px; }
+
+  /* Steps */
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; counter-reset: step; }
+  .step { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 22px; position: relative; }
+  .step::before {
+    counter-increment: step; content: counter(step); width: 30px; height: 30px; border-radius: 50%;
+    background: rgba(88,230,168,0.12); color: var(--accent); display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 13px; font-weight: 600; margin-bottom: 14px;
+  }
+  .step h3 { margin: 0 0 8px; font-size: 15.5px; }
+  .step p { margin: 0 0 10px; color: var(--muted); font-size: 14px; }
+  .step p:last-child { margin-bottom: 0; }
+  .step .snippet { white-space: normal; word-break: break-all; }
+  .snippet {
+    font-family: var(--mono); font-size: 12px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 7px; padding: 8px 10px; display: block; color: var(--text); overflow-x: auto; white-space: nowrap;
+  }
+  .callout {
+    margin-top: 18px; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: 10px; padding: 18px 20px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px;
+  }
+  @media (min-width: 820px) { .callout { grid-template-columns: 1fr auto; align-items: center; } }
+  .callout h3 { margin: 0 0 4px; font-size: 15px; }
+  .callout p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  /* Privacy */
+  .flow { display: flex; flex-direction: column; gap: 10px; }
+  .flow-row { display: grid; grid-template-columns: 1fr 34px 1fr; align-items: center; gap: 10px; }
+  .flow-row .node { background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; font-size: 13.5px; }
+  .flow-row .node small { display: block; color: var(--muted); font-family: var(--mono); font-size: 11px; }
+  .flow-row .arrow { text-align: center; color: var(--accent); font-family: var(--mono); }
+  .flow-row.never .arrow { color: #e65858; }
+  .flow-row.never .node:last-child { text-decoration: line-through; color: var(--faint); }
+
+  /* FAQ */
+  .faq { display: flex; flex-direction: column; gap: 10px; max-width: 820px; }
+  .faq details { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+  .faq summary { cursor: pointer; padding: 16px 20px; font-weight: 600; font-size: 15px; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: "+"; font-family: var(--mono); color: var(--muted); font-weight: 400; }
+  .faq details[open] summary::after { content: "\2212"; }
+  .faq details p { margin: 0; padding: 0 20px 18px; color: var(--muted); font-size: 14.5px; }
+
+  .final-cta { text-align: center; padding: 96px 0; border-bottom: 1px solid var(--border); }
+  .final-cta h2 { margin-bottom: 12px; }
+  .final-cta p { color: var(--muted); margin: 0 auto 28px; max-width: 52ch; font-size: 16.5px; }
+  .final-cta .cta-row { justify-content: center; }
+  .final-cta .install { margin: 22px auto 0; text-align: left; }
 
   footer { padding: 40px 0 60px; }
   footer .wrap { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
@@ -211,311 +379,560 @@
   footer nav { display: flex; gap: 18px; font-size: 13px; font-family: var(--mono); flex-wrap: wrap; }
   footer nav a { color: var(--muted); }
   footer nav a:hover { color: var(--text); }
+  footer .credit { margin-top: 14px; font-size: 12px; color: var(--faint); font-family: var(--sans); }
 
-  @media (max-width: 700px) {
+  @media (max-width: 760px) {
     nav.top-links .navlink { display: none; }
-    .hero { padding: 52px 0 40px; }
-    section.section { padding: 44px 0; }
+    .hero { padding: 48px 0 48px; }
+    section.section { padding: 60px 0; }
+    .flow { gap: 26px; }
+    .flow-row { grid-template-columns: 1fr; gap: 6px; }
+    .flow-row .arrow { transform: rotate(90deg); }
+    .snippet { white-space: normal; word-break: break-all; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { transition: none !important; }
   }
 </style>
 </head>
 <body>
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M13.2 6.2A5.5 5.5 0 1 0 13.5 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M13.6 2.6v3.8H9.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-apple" viewBox="0 0 16 16"><path fill="currentColor" d="M11.2 8.5c0-1.6 1.3-2.3 1.4-2.4-.8-1.1-1.9-1.3-2.3-1.3-1-.1-1.9.6-2.4.6s-1.3-.6-2.1-.5c-1.1 0-2.1.6-2.6 1.6-1.1 2-.3 4.9.8 6.5.5.8 1.1 1.6 1.9 1.6s1.1-.5 2-.5 1.2.5 2 .5 1.4-.8 1.9-1.6c.6-.9.8-1.7.8-1.8 0 0-1.4-.6-1.4-2.7zM9.7 3.8c.4-.5.7-1.3.6-2-.6 0-1.4.4-1.8.9-.4.5-.8 1.2-.7 1.9.7.1 1.4-.3 1.9-.8z"/></symbol>
+    <symbol id="i-github" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0a8 8 0 0 0-2.5 15.6c.4 0 .5-.2.5-.4v-1.5c-2.2.5-2.7-1-2.7-1-.4-.9-.9-1.2-.9-1.2-.7-.5.1-.5.1-.5.8.1 1.2.8 1.2.8.7 1.3 1.9.9 2.3.7.1-.5.3-.9.5-1.1-1.8-.2-3.6-.9-3.6-4 0-.9.3-1.6.8-2.1-.1-.2-.4-1 .1-2.1 0 0 .7-.2 2.2.8a7.4 7.4 0 0 1 4 0c1.5-1 2.2-.8 2.2-.8.4 1.1.2 1.9.1 2.1.5.6.8 1.3.8 2.1 0 3.1-1.9 3.7-3.6 3.9.3.3.5.8.5 1.5v2.2c0 .2.1.5.6.4A8 8 0 0 0 8 0z"/></symbol>
+    <symbol id="i-flame" viewBox="0 0 16 16"><path fill="currentColor" d="M8.6 1.2c.3 2.1-.9 3.3-2 4.5C5.4 7 4.2 8.3 4.2 10.3 4.2 12.9 6 14.8 8 14.8s3.8-1.7 3.8-4.4c0-1.6-.7-2.8-1.4-3.7-.1 1-.6 1.8-1.3 2.1.4-2.6-.3-5.4-.5-7.6z"/></symbol>
+    <symbol id="i-snow" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 1.5v13M2.4 4.75l11.2 6.5M2.4 11.25l11.2-6.5"/><path d="M6.3 2.6 8 4l1.7-1.4M6.3 13.4 8 12l1.7 1.4"/></g></symbol>
+    <symbol id="i-bell" viewBox="0 0 16 16"><path d="M4 11.5V7a4 4 0 0 1 8 0v4.5l1.2 1.2H2.8zM6.5 13.8a1.6 1.6 0 0 0 3 0" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 13.5l11-11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-key" viewBox="0 0 16 16"><circle cx="5.5" cy="10.5" r="3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M7.7 8.3 13.5 2.5M11.2 4.8l1.6 1.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  </defs>
+</svg>
+
 <header class="top">
   <div class="wrap">
-    <div class="brand"><span class="mark"></span> TokenWatch</div>
+    <a class="brand" href="#">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#1c1f22" stroke="#2a2e32"/><circle cx="16" cy="16" r="8.5" fill="none" stroke="#58e6a8" stroke-width="2.4"/><path d="M16 16 L21 11.6" stroke="#58e6a8" stroke-width="2.4" stroke-linecap="round"/></svg>
+      TokenWatch
+    </a>
     <nav class="top-links">
-      <a class="navlink" href="#features">Features</a>
+      <a class="navlink" href="#menubar">Menu bar</a>
+      <a class="navlink" href="#dashboard">Dashboard</a>
       <a class="navlink" href="#providers">Providers</a>
       <a class="navlink" href="#start">Get started</a>
-      <a class="navlink" href="#roadmap">Roadmap</a>
+      <a class="navlink" href="#faq">FAQ</a>
       <a class="navlink" href="https://github.com/MetaPouch/tokenwatch">GitHub</a>
       <a class="btn-small" href="https://github.com/MetaPouch/tokenwatch/releases/latest">Download</a>
     </nav>
   </div>
 </header>
 
+<!-- ================= HERO ================= -->
 <section class="hero">
   <div class="wrap hero-grid">
     <div>
-      <p class="kicker">macOS menu bar &middot; open source &middot; local only</p>
-      <h1>One glance at every AI account you're burning through.</h1>
+      <p class="kicker">Free &middot; open source &middot; native macOS menu bar app</p>
+      <h1>Know how close you are to <span class="hl">every AI limit</span> before it stops you.</h1>
       <p class="lede">
-        TokenWatch sits in your menu bar and shows session, weekly, and credit usage across the AI
-        subscriptions, routing providers, and API keys you actually use &mdash; and tells you which
-        one you just used, and whether its prompt cache is still warm.
+        TokenWatch tracks usage limits, spend, and prompt-cache state for Claude, Codex, Cursor,
+        Copilot, Gemini, OpenRouter, and seven more, all from your menu bar. It reads the sign-ins
+        you already have. No account to create, and nothing leaves your Mac.
       </p>
       <div class="cta-row">
-        <a class="btn btn-primary" href="https://github.com/MetaPouch/tokenwatch/releases/latest">Download for macOS</a>
-        <a class="btn btn-ghost" href="https://github.com/MetaPouch/tokenwatch">View on GitHub</a>
+        <a class="btn btn-primary" href="https://github.com/MetaPouch/tokenwatch/releases/latest"><svg><use href="#i-apple"/></svg> Download for macOS</a>
+        <a class="btn btn-ghost" href="https://github.com/MetaPouch/tokenwatch"><svg><use href="#i-github"/></svg> View source</a>
       </div>
       <div class="install">
         <span class="line">brew install --cask MetaPouch/tokenwatch/tokenwatch</span>
+        <button class="copy" data-copy="brew install --cask MetaPouch/tokenwatch/tokenwatch">Copy</button>
       </div>
       <div class="badge-row">
+        <span><span class="dot"></span> macOS 26 Tahoe or later</span>
         <span><span class="dot"></span> Signed &amp; notarized</span>
-        <span><span class="dot"></span> macOS 26 (Tahoe)+</span>
+        <span><span class="dot"></span> Zero telemetry</span>
         <span><span class="dot"></span> MIT licensed</span>
-        <span><span class="dot"></span> Zero dependencies</span>
       </div>
     </div>
 
-    <div class="mockup" aria-hidden="true">
-      <div class="mockup-menubar">
-        <span class="mb-icon">◐ 68%</span>
-        <span class="mb-icon">▤</span>
-        <span class="mb-status"><span class="mb-flame">🔥</span> Claude 29%</span>
+    <div class="stage">
+      <div class="menubar" aria-hidden="true">
+        <span class="mb-dim">&#63743;</span>
+        <span style="flex:1"></span>
+        <span class="mb-dim">Wed 14:02</span>
+        <span class="mb-item active">
+          <svg class="ring" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2.2"/><circle cx="8" cy="8" r="6" fill="none" stroke="#30d158" stroke-width="2.2" stroke-dasharray="8.3 37.7" stroke-linecap="round" transform="rotate(-90 8 8)"/></svg>
+          Claude 22%
+        </span>
       </div>
-      <div class="mockup-body">
-        <div class="mockup-picker"><img src="icons/claude.svg" alt=""> Claude <span class="mp-chevron">⌄</span></div>
-        <div class="mockup-card">
-          <div class="mc-row"><span class="label">Session (5h)</span><span class="value">29%</span></div>
-          <div class="mc-bar"><span style="width:29%"></span></div>
-          <div class="mc-row"><span class="label">Weekly</span><span class="value">88%</span></div>
-          <div class="mc-bar amber"><span style="width:88%"></span></div>
-          <span class="mc-pill"><span class="mp-icon">🔥</span> <b>api-gateway</b> <span class="mp-detail">100% hit &middot; expires 14:15</span></span>
-          <span class="mc-pill cold"><span class="mp-icon">❄️</span> <b>mobile-app</b> <span class="mp-detail">cold &middot; re-reads ~5k tok</span></span>
-          <span class="mc-pill"><span class="mp-icon">🔥</span> <b>infra-scripts</b> <span class="mp-detail">87% hit &middot; expires 13:58</span></span>
+      <div class="popover" id="pop" role="region" aria-label="Interactive replica of the TokenWatch popover">
+        <div class="pop-top"><b>TokenWatch</b><svg class="refresh"><use href="#i-refresh"/></svg></div>
+        <div class="pop-tabs">
+          <div class="seg" role="tablist">
+            <button role="tab" aria-selected="true" data-tab="limits">Limits</button>
+            <button role="tab" aria-selected="false" data-tab="usage">Usage</button>
+          </div>
         </div>
+        <div class="pop-body">
+          <!-- Limits pane -->
+          <div class="pop-pane" data-pane="limits">
+            <div class="pcard">
+              <div class="pcard-head"><span class="grip">&#8801;</span><img src="icons/claude.svg" alt=""><b>Claude</b><span class="plan">max</span></div>
+              <div class="metric">
+                <div class="m-top"><span>Session (5h)</span><span class="note">~62% left at reset</span></div>
+                <div class="m-bar"><span style="width:22%"></span><i class="tick" style="left:58%"></i></div>
+                <div class="m-foot"><span class="flip" data-used="22">22% used</span><span class="flip reset" data-rel="Resets in 2h" data-abs="Resets 16:10">Resets in 2h</span></div>
+              </div>
+              <div class="metric">
+                <div class="m-top"><span>Weekly</span><span class="note">~6% spare</span></div>
+                <div class="m-bar caution"><span style="width:64%"></span><i class="tick" style="left:68%"></i></div>
+                <div class="m-foot"><span class="flip" data-used="64">64% used</span><span class="flip reset" data-rel="Resets in 2d" data-abs="Resets Fri 09:00">Resets in 2d</span></div>
+              </div>
+            </div>
+            <div class="pcard">
+              <div class="pcard-head"><span class="grip">&#8801;</span><img src="icons/codex.svg" alt=""><b>Codex</b><span class="plan">plus</span></div>
+              <div class="metric">
+                <div class="m-top"><span>Session</span><span class="note">Limit in 38m</span></div>
+                <div class="m-bar urgent"><span style="width:81%"></span><i class="tick" style="left:47%"></i></div>
+                <div class="m-foot"><span class="flip" data-used="81">81% used</span><span class="flip reset" data-rel="Resets in 3h" data-abs="Resets 17:05">Resets in 3h</span></div>
+              </div>
+              <div class="metric">
+                <div class="m-top"><span>Weekly</span><span class="note">~52% left at reset</span></div>
+                <div class="m-bar"><span style="width:30%"></span><i class="tick" style="left:61%"></i></div>
+                <div class="m-foot"><span class="flip" data-used="30">30% used</span><span class="flip reset" data-rel="Resets in 3d" data-abs="Resets Sat 11:30">Resets in 3d</span></div>
+              </div>
+            </div>
+            <div class="pcard">
+              <div class="pcard-head"><span class="grip">&#8801;</span><img src="icons/cursor.svg" alt=""><b>Cursor</b><span class="plan">pro</span></div>
+              <div class="metric">
+                <div class="m-top"><span>Plan usage</span><span class="note">~39% left at reset</span></div>
+                <div class="m-bar"><span style="width:45%"></span><i class="tick" style="left:74%"></i></div>
+                <div class="m-foot"><span class="flip" data-used="45">45% used</span><span class="flip reset" data-rel="Resets in 8d" data-abs="Resets Oct 1">Resets in 8d</span></div>
+              </div>
+            </div>
+            <div class="pcard">
+              <div class="pcard-head"><span class="grip">&#8801;</span><img src="icons/openrouter.svg" alt=""><b>OpenRouter</b></div>
+              <div class="metric">
+                <div class="m-top"><span>Key limit</span></div>
+                <div class="m-bar"><span style="width:50%"></span></div>
+                <div class="m-foot"><span>$5.03 used</span><span>of $10.00</span></div>
+              </div>
+              <div class="metric">
+                <div class="m-top"><span>Balance</span></div>
+                <div class="m-kv"><span>Remaining</span><b>12.27 USD</b></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Usage pane -->
+          <div class="pop-pane" data-pane="usage" hidden>
+            <div class="pcard">
+              <div class="ts-head"><b>Total Spend <span style="color:#a0a0a6;font-weight:400">&#8964;</span></b><span class="ts-icons"><span>&#9432;</span><span>&#8679;</span></span></div>
+              <div class="seg small" role="tablist" id="range">
+                <button aria-selected="true" data-range="0">Today</button>
+                <button aria-selected="false" data-range="1">Yesterday</button>
+                <button aria-selected="false" data-range="2">30 Days</button>
+              </div>
+              <div class="ts-body">
+                <div class="donut" title="Hover for the exact figure">
+                  <svg viewBox="0 0 42 42"><circle cx="21" cy="21" r="16" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="6"/><circle id="donut-claude" cx="21" cy="21" r="16" fill="none" stroke="#d97757" stroke-width="6" stroke-dasharray="100.5 0"/></svg>
+                  <div class="center"><b class="rounded" id="ts-round">$133</b><b class="precise" id="ts-precise">$133.12</b><small id="ts-unit">today</small></div>
+                </div>
+                <div class="legend">
+                  <div><span class="sw" style="background:#d97757"></span>Claude<span class="v" id="ts-claude">$133.12</span></div>
+                  <div style="color:#8c8c92;font-size:10.5px">Estimated at API list rates</div>
+                </div>
+              </div>
+            </div>
+            <div class="pcard">
+              <div class="pcard-head"><img src="icons/claude.svg" alt=""><b>Claude</b><span class="plan">max</span></div>
+              <div class="spend-line open"><span class="chev">&#9654;</span><b>Today $133</b><span class="y">&middot; Yesterday $254</span></div>
+              <div class="models">
+                <div><span>claude-opus-4-5</span><span>71%</span><span>$94.51</span></div>
+                <div><span>claude-sonnet-4-5</span><span>28%</span><span>$37.28</span></div>
+                <div><span>Other</span><span>1%</span><span>$1.33</span></div>
+              </div>
+              <div class="sess warm"><svg class="ic"><use href="#i-flame"/></svg><b>api-gateway</b><span class="d">100% hit &middot; expires 14:06</span></div>
+              <div class="sess warm"><svg class="ic"><use href="#i-flame"/></svg><b>web-app</b><span class="d">87% hit &middot; expires 14:04</span></div>
+              <div class="sess cold"><svg class="ic"><use href="#i-snow"/></svg><b>mobile-app</b><span class="d">cold &middot; re-reads ~412.8K tok</span></div>
+            </div>
+            <div class="pcard">
+              <div class="pcard-head"><img src="icons/codex.svg" alt=""><b>Codex</b><span class="plan">plus</span></div>
+              <div class="sess warm"><svg class="ic"><use href="#i-flame"/></svg><b>infra-scripts</b><span class="d">98% hit last turn</span></div>
+              <div class="sess cold"><svg class="ic"><use href="#i-snow"/></svg><b>docs-site</b><span class="d">no hit last turn &middot; re-reads ~86.2K tok if cold</span></div>
+            </div>
+            <div class="pcard">
+              <div class="hist-head"><b>Claude &middot; last 7 days</b>
+                <div class="seg" id="histmode"><button aria-selected="true" data-mode="cost">Cost</button><button aria-selected="false" data-mode="tokens">Tokens</button></div>
+              </div>
+              <div class="hist" id="hist"></div>
+              <div class="est">Estimate at API list rates. Subscriptions aren't billed per token.</div>
+            </div>
+          </div>
+        </div>
+        <div class="pop-foot"><span>TokenWatch &middot; Next update in <span id="countdown">42</span>s</span><span class="more">&middot;&middot;&middot; &#8964;</span></div>
+      </div>
+      <p class="stage-hint">This replica works. Switch <b>tabs</b>, click a <b>% used</b> or <b>reset</b> label, or hover the donut.</p>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+  <div class="stats">
+    <div><b>13</b><span>providers supported</span></div>
+    <div><b>0</b><span>accounts to create</span></div>
+    <div><b>0</b><span>telemetry or analytics</span></div>
+    <div><b>0</b><span>third-party dependencies</span></div>
+  </div>
+</div>
+
+<!-- ================= MENU BAR ================= -->
+<section class="section" id="menubar">
+  <div class="wrap">
+    <p class="eyebrow">The menu bar</p>
+    <h2>It shows the tool you're actually using.</h2>
+    <p class="section-lede">
+      A bare percentage doesn't tell you which tool it belongs to. TokenWatch shows whichever tool you used most
+      recently, its session usage, and whether its prompt cache is still warm. You can also pin
+      exactly the numbers you care about.
+    </p>
+    <div class="modes">
+      <div class="mode">
+        <div class="menubar" aria-hidden="true">
+          <span class="mb-item"><svg class="ring" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2.2"/><circle cx="8" cy="8" r="6" fill="none" stroke="#30d158" stroke-width="2.2" stroke-dasharray="8.3 37.7" stroke-linecap="round" transform="rotate(-90 8 8)"/></svg>Claude 22%</span>
+        </div>
+        <h3>Follows you</h3>
+        <p>The default. Shows the provider you used in the last 24 hours, with its session percent. The ring turns green while the cache is warm and blue once it goes cold. Hover it to see which project it means.</p>
+      </div>
+      <div class="mode">
+        <div class="menubar" aria-hidden="true">
+          <span class="mb-item">Claude 22% 64%<span class="sep">&nbsp;&middot;&nbsp;</span>Codex 81%</span>
+        </div>
+        <h3>Pin what matters</h3>
+        <p>Star up to two metrics per provider from any right-click menu or from Customize. The menu bar then shows exactly those, one segment per provider.</p>
+      </div>
+      <div class="mode">
+        <div class="menubar" aria-hidden="true">
+          <span class="mb-item"><span class="bars-glyph"><i style="--f:22%"></i><i style="--f:64%"></i><i style="--f:81%"></i><i style="--f:45%"></i></span></span>
+        </div>
+        <h3>Or keep it tiny</h3>
+        <p>Set the <b>Bars</b> icon style to get a compact glyph that shows how full up to four starred metrics are, without taking much menu bar space.</p>
+      </div>
+      <div class="mode">
+        <div class="menubar" aria-hidden="true">
+          <span class="mb-item"><svg class="ring" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2.2"/><circle cx="8" cy="8" r="6" fill="none" stroke="#ff453a" stroke-width="2.2" stroke-dasharray="30.5 37.7" stroke-linecap="round" transform="rotate(-90 8 8)"/></svg>81%</span>
+        </div>
+        <h3>Warns you when it's close</h3>
+        <p>No recent activity? The icon shows whichever enabled provider is closest to its limit, colored green, orange, or red, so you see a limit coming before you hit it.</p>
+      </div>
+    </div>
+    <div class="legend-row">
+      <span><svg class="ring" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="#30d158" stroke-width="2.4"/></svg> warm cache</span>
+      <span><svg class="ring" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="#0a84ff" stroke-width="2.4"/></svg> cold cache</span>
+      <span><svg class="ring" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="#ff9f0a" stroke-width="2.4"/></svg> 70%+ used</span>
+      <span><svg class="ring" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="#ff453a" stroke-width="2.4"/></svg> 90%+ used</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= LIMITS ================= -->
+<section class="section" id="dashboard">
+  <div class="wrap split">
+    <div>
+      <p class="eyebrow">Dashboard &middot; Limits tab</p>
+      <h2>See whether you'll run out, not just how much you've used.</h2>
+      <p class="section-lede" style="margin-bottom:32px">
+        Every enabled provider's limits in one scrolling list. Bar color is based on your pace,
+        so 64% used can be fine or a problem depending on how much of the window is left.
+      </p>
+      <ul class="feature-list">
+        <li><span class="fi">&#9656;</span><div><h3>Pace-aware colors</h3><p>Blue means you'll finish the window with room to spare. Orange means you'll land close to the limit. Red means you're on course to run out before it resets, and the note tells you when.</p></div></li>
+        <li><span class="fi">&#9474;</span><div><h3>A "now" marker on every bar</h3><p>A tick shows how far through the window you are. If the fill is past the tick, you're using it faster than the window allows.</p></div></li>
+        <li><span class="fi">&#8646;</span><div><h3>Switch the view with one click</h3><p>Click a headline to switch every metric between <i>% used</i> and <i>% left</i>. Click a reset label to switch between a countdown and the exact reset time.</p></div></li>
+        <li><span class="fi">&#9783;</span><div><h3>All your Claude &amp; Codex accounts</h3><p>A second Claude or Codex profile on this Mac shows up as its own card with its own limits. You don't need to switch accounts to check it.</p></div></li>
+        <li><span class="fi">&#8645;</span><div><h3>Arrange it your way</h3><p>Drag a provider's header to reorder. Right-click to star, hide, refresh, or copy a PNG screenshot of the card to the clipboard. Data from more than two refreshes ago is marked <i>Outdated</i>.</p></div></li>
+      </ul>
+    </div>
+    <div class="panel pace-demo">
+      <p class="panel-title">Same window, three paces</p>
+      <div class="metric">
+        <div class="m-top"><span>Weekly</span><span class="note">~52% left at reset</span></div>
+        <div class="m-bar"><span style="width:30%"></span><i class="tick" style="left:61%"></i></div>
+        <div class="m-foot"><span>30% used</span><span>Resets in 3d</span></div>
+        <p class="explain"><b>Ahead.</b> The fill is well behind the "now" tick. Keep going.</p>
+      </div>
+      <div class="metric">
+        <div class="m-top"><span>Weekly</span><span class="note">~6% spare</span></div>
+        <div class="m-bar caution"><span style="width:64%"></span><i class="tick" style="left:68%"></i></div>
+        <div class="m-foot"><span>64% used</span><span>Resets in 2d</span></div>
+        <p class="explain"><b>Cutting it close.</b> At this rate you'll end the window with very little left.</p>
+      </div>
+      <div class="metric">
+        <div class="m-top"><span>Session</span><span class="note">Limit in 38m</span></div>
+        <div class="m-bar urgent"><span style="width:81%"></span><i class="tick" style="left:47%"></i></div>
+        <div class="m-foot"><span>81% used</span><span>Resets in 3h</span></div>
+        <p class="explain"><b>Will run out.</b> You'll hit the limit about 38 minutes from now, long before it resets.</p>
       </div>
     </div>
   </div>
 </section>
 
-<section class="section" id="features">
+<!-- ================= USAGE ================= -->
+<section class="section" id="usage">
   <div class="wrap">
-    <h2>Built for people who use more than one</h2>
+    <div class="split flip">
+      <div>
+        <p class="eyebrow">Dashboard &middot; Usage tab</p>
+        <h2>See what you spent, and what's about to cost more.</h2>
+        <p class="section-lede" style="margin-bottom:32px">
+          The Usage tab adds up spend from your local session logs. You don't need an admin API
+          key and nothing is uploaded.
+        </p>
+        <ul class="feature-list">
+          <li><span class="fi">&#9680;</span><div><h3>Total Spend</h3><p>A donut in each provider's brand color. Show it as <i>Cost</i>, <i>Cost per MTok</i>, or <i>Tokens</i> for Today, Yesterday, or 30 Days. Hover the center for the exact figure, or hover a provider to see what each model cost.</p></div></li>
+          <li><span class="fi">&#8801;</span><div><h3>Spend by model</h3><p>Each provider card shows today's and yesterday's spend. Expand it to see each model's cost and share.</p></div></li>
+          <li><span class="fi"><svg class="h-ic"><use href="#i-flame"/></svg></span><div><h3>Every active session's cache</h3><p>One row for each Claude Code or Codex session you used in the last 5 hours. Each row shows the project, a flame or snowflake, and the cache hit rate.</p></div></li>
+          <li><span class="fi">&#9601;</span><div><h3>7-day history</h3><p>Daily cost or tokens for the last week, priced at API list rates. The rates refresh against a public price list and also work offline.</p></div></li>
+        </ul>
+      </div>
+      <div class="panel" style="padding:0;overflow:hidden;background:none;border:none;display:flex;justify-content:center">
+        <div class="popover" style="width:340px">
+          <div class="pop-body" style="height:auto;padding:12px 10px">
+            <div class="pcard">
+              <div class="ts-head"><b>Total Spend <span style="color:#a0a0a6;font-weight:400">&#8964;</span></b><span class="ts-icons"><span>&#9432;</span><span>&#8679;</span></span></div>
+              <div class="seg small"><button aria-selected="false">Today</button><button aria-selected="false">Yesterday</button><button aria-selected="true">30 Days</button></div>
+              <div class="ts-body">
+                <div class="donut"><svg viewBox="0 0 42 42"><circle cx="21" cy="21" r="16" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="6"/><circle cx="21" cy="21" r="16" fill="none" stroke="#d97757" stroke-width="6"/></svg>
+                  <div class="center"><b>6.1</b><small>billion</small></div></div>
+                <div class="legend"><div><span class="sw" style="background:#d97757"></span>Claude<span class="v">6.1B tok</span></div><div style="color:#8c8c92;font-size:10.5px">Tokens &middot; last 30 days</div></div>
+              </div>
+            </div>
+            <div class="pcard">
+              <div class="pcard-head"><img src="icons/claude.svg" alt=""><b>Claude</b><span class="plan">max</span></div>
+              <div class="spend-line open" style="cursor:default"><span class="chev">&#9654;</span><b>Today $133</b><span class="y">&middot; Yesterday $254</span></div>
+              <div class="models">
+                <div><span>claude-opus-4-5</span><span>71%</span><span>$94.51</span></div>
+                <div><span>claude-sonnet-4-5</span><span>28%</span><span>$37.28</span></div>
+                <div><span>Other</span><span>1%</span><span>$1.33</span></div>
+              </div>
+              <div class="sess warm"><svg class="ic"><use href="#i-flame"/></svg><b>api-gateway</b><span class="d">100% hit &middot; expires 14:06</span></div>
+              <div class="sess warm"><svg class="ic"><use href="#i-flame"/></svg><b>web-app</b><span class="d">87% hit &middot; expires 14:04</span></div>
+              <div class="sess cold"><svg class="ic"><use href="#i-snow"/></svg><b>mobile-app</b><span class="d">cold &middot; re-reads ~412.8K tok</span></div>
+              <div class="sess cold"><svg class="ic"><use href="#i-snow"/></svg><b>design-system</b><span class="d">cold &middot; re-reads ~96.4K tok</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cache-grid">
+      <div class="cache-card warm">
+        <h3><svg class="h-ic" style="color:var(--mac-green)"><use href="#i-flame"/></svg> Warm cache: cheap</h3>
+        <p>Claude caches your conversation for 5 minutes after each message. Send your next message in that time and the context is read from cache at a fraction of the price.</p>
+        <div class="sample"><div class="sess warm"><svg class="ic"><use href="#i-flame"/></svg><b>api-gateway</b><span class="d">100% hit &middot; expires 14:06</span></div></div>
+      </div>
+      <div class="cache-card cold">
+        <h3><svg class="h-ic" style="color:var(--mac-blue)"><use href="#i-snow"/></svg> Cold cache: full price</h3>
+        <p>After 5 minutes the cache expires, and your next message pays full price to re-read the whole context. TokenWatch shows how many tokens that will be before you send.</p>
+        <div class="sample"><div class="sess cold"><svg class="ic"><use href="#i-snow"/></svg><b>mobile-app</b><span class="d">cold &middot; re-reads ~412.8K tok</span></div></div>
+      </div>
+      <div class="cache-card">
+        <h3><span style="color:var(--muted)">&#9432;</span> Codex</h3>
+        <p>Codex gets the same warm/cold indicator from its local logs. It shows whether the last turn hit the cache but no expiry time, because OpenAI keeps cache timing on its servers and doesn't expose it.</p>
+        <div class="sample"><div class="sess warm"><svg class="ic"><use href="#i-flame"/></svg><b>infra-scripts</b><span class="d">98% hit last turn</span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= CUSTOMIZE / SETTINGS ================= -->
+<section class="section" id="customize">
+  <div class="wrap">
+    <p class="eyebrow">Customize &amp; settings</p>
+    <h2>Set it up once and leave it running.</h2>
     <p class="section-lede">
-      Every provider's own dashboard is a different tab, a different login, a different layout.
-      TokenWatch normalizes all of it into one glance &mdash; and adds two things none of them show
-      you on their own.
+      Dashboard, Customize, and Settings are three screens in the same popover. It resizes to fit
+      what's on screen, and you can do everything from the keyboard.
     </p>
     <div class="grid">
       <div class="card">
-        <h3><span class="icon">🔥</span> Cache temperature</h3>
-        <p>Claude's prompt cache goes cold 5 minutes after your last message &mdash; the next one
-        re-reads your whole context at full price. TokenWatch reads your local session logs and
-        shows warm (cheap) or cold (full price) before you hit send, with the hit ratio and exact
-        expiry time, scoped to whichever session you were just in. Codex gets the same warm/cold
-        badge from its own local rollout logs &mdash; without a fabricated expiry time, since
-        OpenAI's cache retention is server-side and not something a local file can tell you.</p>
+        <span class="ci">&#9776;</span>
+        <h3>Customize</h3>
+        <p>Turn providers on or off and drag to reorder them. For each provider, drag metrics between <b>Always Visible</b> and <b>On Demand</b>, or star up to two for the menu bar. <kbd>&#8984;Z</kbd> undoes any change.</p>
       </div>
       <div class="card">
-        <h3><span class="icon">🕓</span> Last tool used</h3>
-        <p>The menu bar leads with whichever tool you were just in &mdash; name, usage percent, and
-        its cache state &mdash; instead of making you guess which of thirteen possible providers
-        the number belongs to. Run several Claude Code or Codex sessions at once? Hover the icon
-        to see which project the cache state is describing.</p>
+        <svg class="ci h-ic"><use href="#i-bell"/></svg>
+        <h3>Alerts before you hit a limit</h3>
+        <p>Three native notifications, each off by default:</p>
+        <ul><li><b>Almost Out</b>: under 10% left</li><li><b>Cutting It Close</b>: on pace to land near the limit</li><li><b>Will Run Out</b>: on pace to run out before reset</li></ul>
+        <p style="margin-top:8px">Each alert fires once when a limit crosses into that state, not on every refresh.</p>
       </div>
       <div class="card">
-        <h3><span class="icon">◐</span> Closest to the wall</h3>
-        <p>No recent activity to show instead? The icon falls back to whichever enabled provider is
-        closest to its limit, colored green, amber, or red, so a rate limit never surprises you
-        mid-task.</p>
+        <span class="ci">&#9681;</span>
+        <h3>Appearance</h3>
+        <ul><li>Theme: System, Light, or Dark</li><li>Density: Default or Compact</li><li>Icon style: Text or Bars</li><li>12- or 24-hour reset times</li><li>Reduce Animations and Increase Transparency</li></ul>
       </div>
       <div class="card">
-        <h3><span class="icon">▤</span> One dashboard, pick your provider</h3>
-        <p>Click the icon for a provider picker with each service's real logo, not a wall of
-        cards &mdash; pick Claude and see every locally active session's cache state, not just
-        the newest; pick anyone else and see session/weekly percent, credit balances, reset
-        times, and spend, every bar colored green/amber/red by how close it is to the limit,
-        from the same renderer for all thirteen.</p>
+        <svg class="ci h-ic"><use href="#i-eye"/></svg>
+        <h3>Hide from screen share</h3>
+        <p>Keeps the popover out of screen recordings and screen shares, so your spend doesn't show up in a demo or on a call.</p>
       </div>
       <div class="card">
-        <h3><span class="icon">🔒</span> Local only</h3>
-        <p>API keys live in the macOS Keychain. Every credential goes straight to that provider's
-        own API over HTTPS and nowhere else &mdash; no telemetry, no relay server, no account. See
-        <a href="https://github.com/MetaPouch/tokenwatch/blob/main/SECURITY.md">SECURITY.md</a> for the
-        full accounting.</p>
+        <span class="ci">&#8984;</span>
+        <h3>Global shortcut</h3>
+        <p>Record any key combination to open TokenWatch from any app. It doesn't need Input Monitoring permission.</p>
       </div>
       <div class="card">
-        <h3><span class="icon">◇</span> Open source</h3>
-        <p>MIT licensed, clean-room Swift implementation, zero external dependencies. Read the
-        source, audit the network calls, build it yourself.</p>
+        <span class="ci">&#8635;</span>
+        <h3>Refresh when you want</h3>
+        <p>Refreshes every 5 minutes by default, and you can set it anywhere from 1 to 30 minutes. The footer counts down to the next refresh; click it or press <kbd>&#8984;R</kbd> to refresh now. You can also turn on <b>Launch at Login</b>.</p>
       </div>
+    </div>
+
+    <div class="panel" style="margin-top:14px">
+      <p class="panel-title">Keyboard shortcuts</p>
+      <table class="kbd-table">
+        <tr><td><kbd>&#8617;</kbd></td><td>Open Customize from the dashboard. In a provider's details, go back to the list.</td></tr>
+        <tr><td><kbd>esc</kbd></td><td>Go back one screen. Closes the popover if you're already on the dashboard.</td></tr>
+        <tr><td><kbd>&#8984;</kbd><kbd>,</kbd></td><td>Open or close Settings.</td></tr>
+        <tr><td><kbd>&#8984;</kbd><kbd>R</kbd></td><td>Refresh now.</td></tr>
+        <tr><td><kbd>&#8984;</kbd><kbd>Z</kbd></td><td>Undo the last customization: hide/show, reorder, star, or moving a metric.</td></tr>
+      </table>
     </div>
   </div>
 </section>
 
+<!-- ================= PROVIDERS ================= -->
 <section class="section" id="providers">
   <div class="wrap">
-    <h2>Thirteen providers, one menu bar</h2>
+    <p class="eyebrow">Providers</p>
+    <h2>13 providers, one menu bar.</h2>
     <p class="section-lede">
-      One account per provider, polled on your own schedule. TokenWatch reads each provider's own
-      local credentials &mdash; CLI Keychain items, OAuth token files, API keys you paste in
-      &mdash; and talks to each provider's usage API directly.
+      TokenWatch uses the sign-ins your tools already have on this Mac and queries each
+      provider's own usage API directly.
     </p>
-    <div class="providers">
-      <span class="chip"><img class="provider-icon" src="icons/claude.svg" alt=""> Claude <span class="auth">OAuth</span></span>
-      <span class="chip"><img class="provider-icon" src="icons/codex.svg" alt=""> Codex / ChatGPT <span class="auth">auth.json</span></span>
-      <span class="chip"><img class="provider-icon" src="icons/openai.svg" alt=""> OpenAI API <span class="auth">API key</span></span>
-      <span class="chip"><img class="provider-icon" src="icons/cursor.svg" alt=""> Cursor <span class="auth">local session</span></span>
-      <span class="chip"><img class="provider-icon" src="icons/copilot.svg" alt=""> GitHub Copilot <span class="auth">reused sign-in</span></span>
-      <span class="chip"><img class="provider-icon" src="icons/gemini.png" alt=""> Gemini <span class="auth">OAuth</span></span>
-      <span class="chip"><img class="provider-icon" src="icons/antigravity.svg" alt=""> Antigravity <span class="auth">local token</span></span>
-      <span class="chip"><img class="provider-icon" src="icons/openrouter.svg" alt=""> OpenRouter <span class="auth">API key</span></span>
-      <span class="chip"><img class="provider-icon" src="icons/zai.svg" alt=""> z.ai <span class="auth">API key</span></span>
-      <span class="chip"><img class="provider-icon" src="icons/kimi.svg" alt=""> Kimi <span class="auth">API key</span></span>
-      <span class="chip"><img class="provider-icon" src="icons/amp.svg" alt=""> Amp <span class="auth">CLI / API key</span></span>
-      <span class="chip"><img class="provider-icon" src="icons/grok.svg" alt=""> Grok <span class="auth">auth.json</span></span>
-      <span class="chip"><img class="provider-icon" src="icons/opencode.svg" alt=""> OpenCode Go <span class="auth">API key</span></span>
+
+    <div class="prov-group">
+      <h3>Already signed in? Just turn it on.</h3>
+      <p>TokenWatch uses the sign-in these tools already saved on your Mac.</p>
+      <div class="prov-grid">
+        <div class="prov"><img src="icons/claude.svg" alt=""><b>Claude</b><span>Session &amp; weekly limits, extra usage, spend, cache</span><span class="auth">Claude Code sign-in</span></div>
+        <div class="prov"><img src="icons/codex.svg" alt=""><b>Codex / ChatGPT</b><span>Session &amp; weekly limits, cache</span><span class="auth">~/.codex/auth.json</span></div>
+        <div class="prov"><img src="icons/cursor.svg" alt=""><b>Cursor</b><span>Plan usage, on-demand spend</span><span class="auth">Cursor app session</span></div>
+        <div class="prov"><img src="icons/copilot.svg" alt=""><b>GitHub Copilot</b><span>Premium interaction quota</span><span class="auth">Existing Copilot sign-in</span></div>
+        <div class="prov"><img src="icons/gemini.png" alt=""><b>Gemini</b><span>Pro &amp; Flash quota remaining</span><span class="auth">Gemini CLI sign-in</span></div>
+        <div class="prov"><img src="icons/antigravity.svg" alt=""><b>Antigravity</b><span>Model quota remaining</span><span class="auth">Antigravity sign-in</span></div>
+        <div class="prov"><img src="icons/grok.svg" alt=""><b>Grok</b><span>Credit usage</span><span class="auth">~/.grok/auth.json</span></div>
+        <div class="prov"><img src="icons/amp.svg" alt=""><b>Amp</b><span>Free tier usage, credit balance</span><span class="auth">Amp CLI or API key</span></div>
+      </div>
+    </div>
+
+    <div class="prov-group">
+      <h3>Paste an API key</h3>
+      <p>Paste a key in Settings. It's stored in the macOS Keychain and only sent to that provider.</p>
+      <div class="prov-grid">
+        <div class="prov"><img src="icons/openrouter.svg" alt=""><b>OpenRouter</b><span>Credit balance, key limit</span><span class="auth">API key</span></div>
+        <div class="prov"><img src="icons/openai.svg" alt=""><b>OpenAI API</b><span>Spend today &amp; last 7 days</span><span class="auth">API key</span></div>
+        <div class="prov"><img src="icons/zai.svg" alt=""><b>z.ai</b><span>Token &amp; credit quota</span><span class="auth">API key</span></div>
+        <div class="prov"><img src="icons/kimi.svg" alt=""><b>Kimi</b><span>Session &amp; weekly quota</span><span class="auth">API key</span></div>
+        <div class="prov"><img src="icons/opencode.svg" alt=""><b>OpenCode Go</b><span>Rolling &amp; weekly usage</span><span class="auth">API key</span></div>
+      </div>
     </div>
   </div>
 </section>
 
+<!-- ================= GET STARTED ================= -->
 <section class="section" id="start">
   <div class="wrap">
-    <h2>Get started</h2>
-    <p class="section-lede">
-      No account, no sign-up. Install, enable the providers you actually use, and TokenWatch reads
-      whatever's already on your Mac.
-    </p>
+    <p class="eyebrow">Get started</p>
+    <h2>Set up in about a minute.</h2>
+    <p class="section-lede">No account and no sign-up. Install it, turn on the providers you use, and it starts working with the sign-ins already on your Mac.</p>
     <div class="steps">
       <div class="step">
-        <span class="num"></span>
-        <div>
-          <h3>Install</h3>
-          <p>Via Homebrew, or download the signed &amp; notarized DMG directly.</p>
-          <span class="snippet">brew install --cask MetaPouch/tokenwatch/tokenwatch</span>
-        </div>
+        <h3>Install</h3>
+        <p>Install with Homebrew, or download the signed and notarized <a href="https://github.com/MetaPouch/tokenwatch/releases/latest">DMG</a> and drag it into Applications.</p>
+        <span class="snippet">brew install --cask MetaPouch/tokenwatch/tokenwatch</span>
       </div>
       <div class="step">
-        <span class="num"></span>
-        <div>
-          <h3>Launch it</h3>
-          <p>TokenWatch is a menu-bar-only app &mdash; no Dock icon, no window. Look for the icon
-          in your menu bar; it opens System Settings' privacy prompts only if a provider needs
-          Keychain or file access you haven't granted that tool yet.</p>
-        </div>
+        <h3>Launch</h3>
+        <p>TokenWatch runs only in the menu bar, with no Dock icon. The first time, it opens the dashboard for you so you can find it.</p>
       </div>
       <div class="step">
-        <span class="num"></span>
-        <div>
-          <h3>Open Settings</h3>
-          <p>Click the menu bar icon, then the gear. You'll see all thirteen supported providers
-          with a toggle each.</p>
-        </div>
+        <h3>Turn on your providers</h3>
+        <p>Open <b>Settings</b> from the <b>&#8943;</b> menu or with <kbd>&#8984;</kbd><kbd>,</kbd>. Turn on the tools you're already signed in to. For providers that use an API key, paste it in the field next to the toggle.</p>
       </div>
       <div class="step">
-        <span class="num"></span>
-        <div>
-          <h3>Enable what you use</h3>
-          <p>Already signed into Claude Code, Codex, Cursor, Gemini, Copilot, Grok, or Antigravity
-          via their own CLI or app? Just flip the toggle &mdash; TokenWatch reads the credential
-          that's already there. For OpenRouter, z.ai, Kimi, OpenCode Go, Amp, or a raw OpenAI key,
-          paste the key into the field that appears next to the toggle.</p>
-        </div>
+        <h3>Make it yours</h3>
+        <p>Press <kbd>&#8617;</kbd> to open Customize. Reorder providers, hide metrics you don't need, and star the ones you want in the menu bar. Turn on alerts in Settings.</p>
       </div>
-      <div class="step">
-        <span class="num"></span>
-        <div>
-          <h3>Read the menu bar</h3>
-          <p>It leads with whichever tool you were most recently in and its cache state (today:
-          Claude). No recent activity anywhere? It falls back to whichever enabled provider is
-          closest to its limit.</p>
-        </div>
+    </div>
+    <div class="callout">
+      <div>
+        <h3>Updating</h3>
+        <p>TokenWatch doesn't check for updates in the background, so nothing phones home. With Homebrew, run the upgrade command. If you installed the DMG, download the <a href="https://github.com/MetaPouch/tokenwatch/releases/latest">latest release</a> and drag it over the old copy.</p>
       </div>
-      <div class="step">
-        <span class="num"></span>
-        <div>
-          <h3>Click for the full dashboard</h3>
-          <p>One card per enabled provider: usage percent, resets, credit balances, spend. Refresh
-          on demand with the toolbar button, or let it poll on its own schedule (default 5
-          minutes, adjustable in Settings).</p>
-        </div>
-      </div>
-      <div class="step">
-        <span class="num"></span>
-        <div>
-          <h3>Updating</h3>
-          <p>No in-app auto-update yet &mdash; Homebrew won't upgrade it for you either
-          (<code>auto_updates false</code> on the cask, deliberately, until update checks are
-          signed and verified end to end). Homebrew installs: run the upgrade command below.
-          Manual DMG installs: grab the <a href="https://github.com/MetaPouch/tokenwatch/releases/latest">latest release</a>
-          and drag it over the old one in Applications.</p>
-          <span class="snippet">brew update && brew upgrade --cask tokenwatch</span>
-        </div>
+      <span class="snippet">brew update &amp;&amp; brew upgrade --cask tokenwatch</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= PRIVACY ================= -->
+<section class="section" id="privacy">
+  <div class="wrap split">
+    <div>
+      <p class="eyebrow">Privacy</p>
+      <h2>Your usage data stays on your Mac.</h2>
+      <p class="section-lede" style="margin-bottom:24px">
+        No TokenWatch server, no telemetry, no analytics SDK, and no account. It makes two kinds
+        of network requests, and nothing else.
+      </p>
+      <ul class="feature-list">
+        <li><span class="fi"><svg class="h-ic"><use href="#i-key"/></svg></span><div><h3>Keys in the Keychain</h3><p>API keys you paste are stored in the macOS Keychain, not in a config file.</p></div></li>
+        <li><span class="fi">&#9737;</span><div><h3>Local notifications</h3><p>Alerts are delivered by macOS on your Mac. Nothing about them is sent anywhere.</p></div></li>
+        <li><span class="fi">&#9671;</span><div><h3>Open source</h3><p>The code is written from scratch in Swift and MIT licensed. You can read it, check every network call, and build it yourself. <a href="https://github.com/MetaPouch/tokenwatch/blob/main/SECURITY.md">SECURITY.md</a> lists everything it reads and why.</p></div></li>
+      </ul>
+    </div>
+    <div class="panel">
+      <p class="panel-title">Every network request TokenWatch makes</p>
+      <div class="flow">
+        <div class="flow-row"><div class="node">Your credential<small>per provider</small></div><div class="arrow">&rarr;</div><div class="node">That provider's own API<small>HTTPS, e.g. api.anthropic.com</small></div></div>
+        <div class="flow-row"><div class="node">Price-list request<small>~hourly, optional</small></div><div class="arrow">&rarr;</div><div class="node">Public GitHub-hosted price list<small>no credentials, no usage data</small></div></div>
+        <div class="flow-row never"><div class="node">Your usage, keys, or projects</div><div class="arrow">&times;</div><div class="node">Anyone else</div></div>
       </div>
     </div>
   </div>
 </section>
 
-<section class="section" id="roadmap">
+<!-- ================= FAQ ================= -->
+<section class="section" id="faq">
   <div class="wrap">
-    <h2>Roadmap</h2>
-    <p class="section-lede">
-      Everything below stays true to the one rule this app doesn't bend on: local only, nothing
-      leaves your device. No feature here needs a server we operate.
-    </p>
-    <div class="roadmap">
-      <div class="rm-row">
-        <span class="rm-status shipped">SHIPPED</span>
-        <div>
-          <h3>Cache temperature (Claude &amp; Codex)</h3>
-          <p>Warm/cold badge with hit ratio, read from local session transcripts &mdash; no extra
-          network call. Claude's badge shows an exact expiry (Anthropic's TTL is fixed and
-          client-visible); Codex's reports last-turn hit/miss only, since OpenAI's cache
-          retention is server-side and not locally knowable.</p>
-        </div>
-      </div>
-      <div class="rm-row">
-        <span class="rm-status shipped">SHIPPED</span>
-        <div>
-          <h3>Last-tool-used menu bar indicator</h3>
-          <p>The status item leads with whichever provider you were most recently active in,
-          instead of an unlabeled percentage.</p>
-        </div>
-      </div>
-      <div class="rm-row">
-        <span class="rm-status shipped">SHIPPED</span>
-        <div>
-          <h3>Usage tab: multi-account visibility (Claude &amp; Codex)</h3>
-          <p>A second dashboard tab lists every locally discovered login for Claude and Codex,
-          not just the default one &mdash; each with its own quota meters, fetched fresh, no
-          switching required to check a second profile.</p>
-        </div>
-      </div>
-      <div class="rm-row">
-        <span class="rm-status shipped">SHIPPED</span>
-        <div>
-          <h3>Local cost estimation &amp; 7-day history (Claude)</h3>
-          <p>A daily Cost/Tokens bar chart built by summing every turn's local session tokens
-          &mdash; not just the newest &mdash; and pricing them at API list rates, no Admin API key
-          required. Labeled as an estimate: subscription usage isn't billed per token.</p>
-        </div>
-      </div>
-      <div class="rm-row">
-        <span class="rm-status planned">PLANNED</span>
-        <div>
-          <h3>Cache temperature for OpenRouter</h3>
-          <p>Same local-session-log approach, extended to OpenRouter's 10-minute sticky-routing
-          window.</p>
-        </div>
-      </div>
-      <div class="rm-row">
-        <span class="rm-status planned">PLANNED</span>
-        <div>
-          <h3>Per-model usage breakdown</h3>
-          <p>Sum local session tokens per model over the last 7 days &mdash; which model actually
-          burned your weekly limit.</p>
-        </div>
-      </div>
-      <div class="rm-row">
-        <span class="rm-status planned">PLANNED</span>
-        <div>
-          <h3>Threshold notifications</h3>
-          <p>A native notification when an enabled provider crosses 90% used, so you find out
-          before the rate limit does it for you.</p>
-        </div>
-      </div>
-      <div class="rm-row">
-        <span class="rm-status planned">PLANNED</span>
-        <div>
-          <h3>In-app auto-update</h3>
-          <p>Sparkle-based update checks against signed release artifacts &mdash; still no
-          telemetry, just "is there a newer signed build."</p>
-        </div>
-      </div>
+    <p class="eyebrow">FAQ</p>
+    <h2>Questions</h2>
+    <div class="faq" style="margin-top:32px">
+      <details><summary>Is it really free?</summary><p>Yes. It's MIT licensed with no paid tier, no account, and no ads. The full source is on <a href="https://github.com/MetaPouch/tokenwatch">GitHub</a>.</p></details>
+      <details><summary>Are the spend figures what I'll actually be billed?</summary><p>They're estimates. TokenWatch prices your local session tokens at each model's API list rate. If you're on a subscription like Claude Max, you aren't billed per token, so treat the numbers as "what this would cost on the API." It's still a good way to see which models and projects use the most.</p></details>
+      <details><summary>Why does it need macOS 26 Tahoe?</summary><p>The popover is built on Liquid Glass, which requires the macOS 26 SDK.</p></details>
+      <details><summary>Can I see more than one Claude or Codex account?</summary><p>Yes. If you have a second profile on this Mac (a separate <code>CLAUDE_CONFIG_DIR</code> or <code>CODEX_HOME</code>), it shows up on the Limits tab as its own card. TokenWatch only reads these accounts. It never changes which account your CLI uses.</p></details>
+      <details><summary>Why doesn't it update itself?</summary><p>An auto-updater would contact a server in the background, and TokenWatch doesn't do that. The Homebrew cask also sets <code>auto_updates false</code>. To update, run <code>brew upgrade --cask tokenwatch</code> or download the latest DMG.</p></details>
+      <details><summary>Does it read my prompts or code?</summary><p>It reads your local session log files, but only uses token counts, timestamps, model names, and project folder names from them. Nothing from those logs is ever sent anywhere.</p></details>
+      <details><summary>How do I uninstall it completely?</summary><p>Run <code>brew uninstall --zap --cask tokenwatch</code>. This also removes its settings, caches, and preferences. For a DMG install, drag the app to the Trash and delete <code>~/Library/Application Support/TokenWatch</code>.</p></details>
+      <details><summary>My provider isn't listed. Can I add it?</summary><p>Yes. Each provider is one self-contained Swift file plus a test fixture. <a href="https://github.com/MetaPouch/tokenwatch/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> explains how to add one, or you can <a href="https://github.com/MetaPouch/tokenwatch/issues">open an issue</a> to request it.</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="final-cta">
+  <div class="wrap">
+    <h2>Stop getting surprised by rate limits.</h2>
+    <p>Install TokenWatch and see your limits, spend, and cache status for every provider in your menu bar.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/MetaPouch/tokenwatch/releases/latest"><svg><use href="#i-apple"/></svg> Download for macOS</a>
+      <a class="btn btn-ghost" href="https://github.com/MetaPouch/tokenwatch/releases">Release notes</a>
+    </div>
+    <div class="install">
+      <span class="line">brew install --cask MetaPouch/tokenwatch/tokenwatch</span>
+      <button class="copy" data-copy="brew install --cask MetaPouch/tokenwatch/tokenwatch">Copy</button>
     </div>
   </div>
 </section>
@@ -525,16 +942,97 @@
     <p>TokenWatch &middot; MIT License</p>
     <nav>
       <a href="https://github.com/MetaPouch/tokenwatch">GitHub</a>
+      <a href="https://github.com/MetaPouch/tokenwatch/releases">Releases</a>
       <a href="https://github.com/MetaPouch/tokenwatch/blob/main/README.md">Docs</a>
       <a href="https://github.com/MetaPouch/tokenwatch/blob/main/SECURITY.md">Security</a>
       <a href="https://github.com/MetaPouch/tokenwatch/blob/main/CONTRIBUTING.md">Contributing</a>
-      <a href="https://github.com/MetaPouch/tokenwatch/blob/main/LICENSE">License</a>
     </nav>
   </div>
   <div class="wrap">
-    <p style="margin-top: 10px;">Provider logos courtesy of <a href="https://github.com/lobehub/lobe-icons">Lobe Icons</a> (MIT). Brand marks belong to their respective owners; shown here to identify each service, not to imply endorsement.</p>
+    <p class="credit">Provider logos from <a href="https://github.com/lobehub/lobe-icons">Lobe Icons</a> (MIT). Brand marks belong to their owners and are shown only to identify each service, not to imply endorsement. The app replicas on this page use sample data.</p>
   </div>
 </footer>
 
+<script>
+(() => {
+  // Copy buttons
+  document.querySelectorAll(".copy").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(btn.dataset.copy); } catch { return; }
+      btn.textContent = "Copied"; btn.classList.add("done");
+      setTimeout(() => { btn.textContent = "Copy"; btn.classList.remove("done"); }, 1600);
+    });
+  });
+
+  const pop = document.getElementById("pop");
+  const select = (group, btn) => group.querySelectorAll("button").forEach(b => b.setAttribute("aria-selected", String(b === btn)));
+
+  // Limits / Usage tabs
+  const tabs = pop.querySelector(".pop-tabs .seg");
+  tabs.addEventListener("click", e => {
+    const btn = e.target.closest("button"); if (!btn) return;
+    select(tabs, btn);
+    pop.querySelectorAll(".pop-pane").forEach(p => { p.hidden = p.dataset.pane !== btn.dataset.tab; });
+    pop.querySelector(".pop-body").scrollTop = 0;
+  });
+
+  // Click-to-flip: % used <-> % left, countdown <-> exact time (app-wide, like the real thing)
+  let showLeft = false, showExact = false;
+  pop.addEventListener("click", e => {
+    const flip = e.target.closest(".flip"); if (!flip) return;
+    if (flip.classList.contains("reset")) {
+      showExact = !showExact;
+      pop.querySelectorAll(".flip.reset").forEach(el => { el.textContent = showExact ? el.dataset.abs : el.dataset.rel; });
+    } else {
+      showLeft = !showLeft;
+      pop.querySelectorAll(".flip[data-used]").forEach(el => {
+        const used = +el.dataset.used; el.textContent = showLeft ? `${100 - used}% left` : `${used}% used`;
+      });
+    }
+  });
+
+  // Total Spend range toggle
+  const ranges = [
+    { round: "$133", precise: "$133.12", unit: "today" },
+    { round: "$254", precise: "$254.07", unit: "yesterday" },
+    { round: "$2.9K", precise: "$2,918.44", unit: "30 days" },
+  ];
+  const range = document.getElementById("range");
+  range.addEventListener("click", e => {
+    const btn = e.target.closest("button"); if (!btn) return;
+    select(range, btn);
+    const r = ranges[+btn.dataset.range];
+    document.getElementById("ts-round").textContent = r.round;
+    document.getElementById("ts-precise").textContent = r.precise;
+    document.getElementById("ts-unit").textContent = r.unit;
+    document.getElementById("ts-claude").textContent = r.precise;
+  });
+
+  // Collapsible per-model spend
+  pop.querySelectorAll(".spend-line").forEach(l => l.addEventListener("click", () => l.classList.toggle("open")));
+
+  // 7-day history chart
+  const days = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"];
+  const data = {
+    cost: { v: [182, 241, 64, 38, 297, 254, 133], fmt: v => `$${v}` },
+    tokens: { v: [412, 530, 151, 88, 640, 575, 301], fmt: v => `${v}M tok` },
+  };
+  const hist = document.getElementById("hist");
+  const draw = mode => {
+    const { v, fmt } = data[mode]; const max = Math.max(...v);
+    hist.innerHTML = v.map((x, i) => `<div title="${days[i]}: ${fmt(x)}"><i style="height:${Math.round((x / max) * 56)}px"></i><small>${days[i]}</small></div>`).join("");
+  };
+  draw("cost");
+  const histmode = document.getElementById("histmode");
+  histmode.addEventListener("click", e => {
+    const btn = e.target.closest("button"); if (!btn) return;
+    select(histmode, btn); draw(btn.dataset.mode);
+  });
+
+  // Footer countdown, like the real one
+  const cd = document.getElementById("countdown"); let n = 42;
+  setInterval(() => { n = n <= 1 ? 300 : n - 1; cd.textContent = n; }, 1000);
+})();
+</script>
 </body>
 </html>
