@@ -10,6 +10,16 @@ final class DynamicPricingCache: @unchecked Sendable {
 
     private let lock = NSLock()
     private var rates: [String: ModelPricing.Rate] = [:]
+    /// Lazily-built, per-family-hint subset of `rates` (keys containing that hint), computed
+    /// once per hint and reused instead of re-filtering the full live price list on every
+    /// `bestMatch` call. `PricingRefreshService` populates `rates` from LiteLLM's public price
+    /// list -- every model from every vendor, typically 1000+ entries -- and a 30-day local
+    /// history scan calls `bestMatch` once per turn (thousands of calls). Re-running
+    /// `.contains(familyHint)` across the full unfiltered table on every one of those calls
+    /// measured as a genuine multi-minute hang (confirmed via `sample` on the running process,
+    /// not a guess); this index turns it back into one filter pass per hint, not one per turn.
+    /// Cleared whenever `rates` is replaced.
+    private var ratesByFamilyHint: [String: [String: ModelPricing.Rate]] = [:]
     private(set) var lastUpdated: Date?
 
     /// Longest-prefix match, same rule as the static table's own lookup, restricted to keys
@@ -21,9 +31,18 @@ final class DynamicPricingCache: @unchecked Sendable {
         defer { lock.unlock() }
         guard !rates.isEmpty else { return nil }
 
+        let scoped: [String: ModelPricing.Rate]
+        if let cached = ratesByFamilyHint[familyHint] {
+            scoped = cached
+        } else {
+            scoped = rates.filter { $0.key.contains(familyHint) }
+            ratesByFamilyHint[familyHint] = scoped
+        }
+        guard !scoped.isEmpty else { return nil }
+
         var best: (keyLength: Int, rate: ModelPricing.Rate)?
         for candidate in candidates {
-            for (key, rate) in rates where key.contains(familyHint) && candidate.hasPrefix(key) {
+            for (key, rate) in scoped where candidate.hasPrefix(key) {
                 if best == nil || key.count > best!.keyLength {
                     best = (key.count, rate)
                 }
@@ -36,6 +55,7 @@ final class DynamicPricingCache: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         rates = newRates
+        ratesByFamilyHint = [:]
         lastUpdated = updatedAt
     }
 }
