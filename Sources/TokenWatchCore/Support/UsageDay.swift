@@ -30,8 +30,13 @@ public struct UsageDay: Sendable, Equatable, Identifiable {
     public let hasApproximateRate: Bool
     /// Per-model spend within this day, largest first. Empty for a day with no activity.
     public let modelBreakdown: [ModelSpend]
+    /// Latest contributing usage observation, not a file's modification time.
+    public let latestUsageAt: Date?
+    /// Output and matching recorded request durations for output-bearing responses only.
+    public let timedOutputTokens: Int
+    public let timedDurationMs: Double
 
-    public init(id: String, date: Date, inputTokens: Int, cacheReadTokens: Int, cacheWriteTokens: Int, outputTokens: Int, estimatedCostUSD: Double, hasApproximateRate: Bool, modelBreakdown: [ModelSpend] = []) {
+    public init(id: String, date: Date, inputTokens: Int, cacheReadTokens: Int, cacheWriteTokens: Int, outputTokens: Int, estimatedCostUSD: Double, hasApproximateRate: Bool, modelBreakdown: [ModelSpend] = [], latestUsageAt: Date? = nil, timedOutputTokens: Int = 0, timedDurationMs: Double = 0) {
         self.id = id
         self.date = date
         self.inputTokens = inputTokens
@@ -41,6 +46,9 @@ public struct UsageDay: Sendable, Equatable, Identifiable {
         self.estimatedCostUSD = estimatedCostUSD
         self.hasApproximateRate = hasApproximateRate
         self.modelBreakdown = modelBreakdown
+        self.latestUsageAt = latestUsageAt
+        self.timedOutputTokens = timedOutputTokens
+        self.timedDurationMs = timedDurationMs
     }
 
     public var totalTokens: Int { inputTokens + cacheReadTokens + cacheWriteTokens + outputTokens }
@@ -63,7 +71,8 @@ struct UsageDayAccumulator {
     }
 
     /// Adds one priced turn; turns before `cutoff` are ignored. Token counts are disjoint buckets.
-    mutating func add(timestamp: Date, model: String, input: Int, cacheRead: Int, cacheWrite: Int, output: Int, costUSD: Double, approximate: Bool) {
+    /// `observedAt` may reflect response completion without changing the usage's billing day.
+    mutating func add(timestamp: Date, model: String, input: Int, cacheRead: Int, cacheWrite: Int, output: Int, costUSD: Double, approximate: Bool, observedAt: Date? = nil, durationMs: Double? = nil) {
         guard timestamp >= cutoff else { return }
         let dayStart = calendar.startOfDay(for: timestamp)
         let key = Self.dayKey(dayStart)
@@ -74,6 +83,16 @@ struct UsageDayAccumulator {
         bucket.output += output
         bucket.cost += costUSD
         bucket.approximate = bucket.approximate || approximate
+        if input > 0 || cacheRead > 0 || cacheWrite > 0 || output > 0 {
+            let latest = observedAt ?? timestamp
+            if latest.timeIntervalSince1970.isFinite {
+                bucket.latestUsageAt = max(bucket.latestUsageAt ?? latest, latest)
+            }
+        }
+        if output > 0, let durationMs, durationMs.isFinite, durationMs > 0 {
+            bucket.timedOutput += output
+            bucket.timedDurationMs += durationMs
+        }
         var modelBucket = bucket.byModel[model] ?? (0, 0)
         modelBucket.cost += costUSD
         modelBucket.tokens += input + cacheRead + cacheWrite + output
@@ -96,7 +115,8 @@ struct UsageDayAccumulator {
                 inputTokens: bucket?.input ?? 0, cacheReadTokens: bucket?.cacheRead ?? 0,
                 cacheWriteTokens: bucket?.cacheWrite ?? 0, outputTokens: bucket?.output ?? 0,
                 estimatedCostUSD: bucket?.cost ?? 0, hasApproximateRate: bucket?.approximate ?? false,
-                modelBreakdown: breakdown
+                modelBreakdown: breakdown, latestUsageAt: bucket?.latestUsageAt,
+                timedOutputTokens: bucket?.timedOutput ?? 0, timedDurationMs: bucket?.timedDurationMs ?? 0
             ))
             let next = calendar.date(byAdding: .day, value: 1, to: cursor) ?? cursor.addingTimeInterval(86400)
             // Defensive: guarantee forward progress even if `calendar` misbehaves, rather than
@@ -112,6 +132,9 @@ struct UsageDayAccumulator {
         var input = 0, cacheRead = 0, cacheWrite = 0, output = 0
         var cost = 0.0
         var approximate = false
+        var latestUsageAt: Date?
+        var timedOutput = 0
+        var timedDurationMs = 0.0
         var byModel: [String: (cost: Double, tokens: Int)] = [:]
     }
 

@@ -52,8 +52,8 @@ public final class AppContainer {
             .receive(on: RunLoop.main)
             .sink { snapshots in notificationService.evaluate(snapshots: snapshots) }
 
-        // Local spend history rides along with every refresh cycle (timer, ⌘R, footer click):
-        // rescan once a provider refresh finishes.
+        // Provider refreshes also reconcile local history, as a fallback to filesystem events
+        // and to pick up pricing changes even when no new turns have been written.
         let spendHistoryStore = self.spendHistoryStore
         spendRefreshCancellable = dataStore.$isRefreshing
             .removeDuplicates()
@@ -96,6 +96,7 @@ public final class AppContainer {
     }
 
     public func start() {
+        spendHistoryStore.startWatching()
         refreshScheduler.start()
         Task { await pricingRefreshService.start() }
     }

@@ -27,22 +27,22 @@ public enum CodexUsageHistoryScanner {
     public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, roots: [String]? = nil, ompRoots: [String]? = nil) -> [UsageDay] {
         var accumulator = UsageDayAccumulator(days: days, now: now, calendar: calendar)
         var seen = Set<Event>()
-        for path in rolloutPaths(roots: roots ?? Self.roots(), modifiedSince: accumulator.cutoff) {
-            guard let data = FileManager.default.contents(atPath: path) else { continue }
-            var parser = FileParser()
-            for event in parser.parse(data) where event.timestamp >= accumulator.cutoff {
-                guard seen.insert(event).inserted else { continue }
-                let (cost, approximate) = ModelPricing.codexCostUSD(
-                    model: event.pricingModel ?? event.model,
-                    inputTokens: event.input, cachedInputTokens: event.cached,
-                    outputTokens: event.output, priorityTier: event.isPriority
-                )
-                accumulator.add(
-                    timestamp: event.timestamp, model: event.model,
-                    input: event.input - event.cached, cacheRead: event.cached, cacheWrite: 0,
-                    output: event.output, costUSD: cost, approximate: approximate
-                )
-            }
+        let files = (roots ?? Self.roots()).flatMap {
+            TranscriptFiles.recursive(roots: [$0], modifiedSince: accumulator.cutoff).sorted { $0.path < $1.path }
+        }
+        // Native turn durations include tool work, so these usage events remain untimed.
+        for event in cache.items(for: files) where event.timestamp >= accumulator.cutoff {
+            guard seen.insert(event).inserted else { continue }
+            let (cost, approximate) = ModelPricing.codexCostUSD(
+                model: event.pricingModel ?? event.model,
+                inputTokens: event.input, cachedInputTokens: event.cached,
+                outputTokens: event.output, priorityTier: event.isPriority
+            )
+            accumulator.add(
+                timestamp: event.timestamp, model: event.model,
+                input: event.input - event.cached, cacheRead: event.cached, cacheWrite: 0,
+                output: event.output, costUSD: cost, approximate: approximate
+            )
         }
 
         // omp's buckets are already disjoint; its own recorded cost wins over re-pricing.
@@ -56,7 +56,8 @@ public enum CodexUsageHistoryScanner {
             accumulator.add(
                 timestamp: turn.timestamp, model: turn.model,
                 input: turn.input, cacheRead: turn.cacheRead, cacheWrite: turn.cacheWrite, output: turn.output,
-                costUSD: turn.costUSD ?? repriced.cost, approximate: turn.costUSD == nil && repriced.approximate
+                costUSD: turn.costUSD ?? repriced.cost, approximate: turn.costUSD == nil && repriced.approximate,
+                observedAt: turn.completedAt, durationMs: turn.durationMs
             )
         }
         return accumulator.build()
@@ -75,24 +76,8 @@ public enum CodexUsageHistoryScanner {
         let isPriority: Bool
     }
 
-    /// Every rollout `.jsonl` modified since the cutoff. Path-sorted so a copy in `sessions/`
-    /// (listed first) wins dedup over the same event in `archived_sessions/`.
-    private static func rolloutPaths(roots: [String], modifiedSince: Date) -> [String] {
-        let fileManager = FileManager.default
-        var paths: [String] = []
-        for root in roots {
-            guard let enumerator = fileManager.enumerator(atPath: root) else { continue }
-            var rootPaths: [String] = []
-            for case let relativePath as String in enumerator where relativePath.hasSuffix(".jsonl") {
-                let fullPath = root + "/" + relativePath
-                guard let modified = (try? fileManager.attributesOfItem(atPath: fullPath))?[.modificationDate] as? Date,
-                      modified >= modifiedSince
-                else { continue }
-                rootPaths.append(fullPath)
-            }
-            paths += rootPaths.sorted()
-        }
-        return paths
+    private static let cache = ParsedFileCache<Event, FileParser>(makeState: { FileParser() }) { parser, data in
+        parser.parse(data)
     }
 
     /// Codex's `codex-auto-review` slug runs on whichever model was current on that date, and

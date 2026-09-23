@@ -23,8 +23,8 @@ nothing relayed off your device.
 | Grok | `~/.grok/auth.json` | Credit usage percent |
 | OpenCode Go | API key | Rolling + weekly usage percent |
 
-Single account per provider on the menu bar and the Limits tab. The Limits tab additionally
-discovers and shows every local Claude/Codex login it can find, not just the default one.
+Quota summaries use a single account per provider on the menu bar and the Limits tab. The Limits
+tab additionally discovers and shows every local Claude/Codex login it can find, not just the default one.
 Everything runs locally: no telemetry, no data leaves your device.
 
 ## Menu bar behavior
@@ -53,9 +53,26 @@ unchanged from before. Otherwise it falls back to whichever enabled provider's m
 to its limit (highest used/limit ratio).
 
 Star a metric from its right-click menu (or from Customize) to pin it instead -- once anything
-is starred, the status item switches to showing exactly those pinned metrics, one segment per
+is starred, the primary status-item display switches to those pinned metrics, one segment per
 provider with real data, up to two metrics per provider. A provider whose stars have no data
 yet drops out of the strip entirely rather than showing a placeholder.
+
+Alongside that summary (including Bars style), compact **In / Out / Cache** counters show today's
+local tokens across enabled Claude and Codex providers, including their omp sessions. **In**
+excludes cache reads/writes, **Out** is output, and **Cache** combines cache reads and writes:
+the three counts are disjoint. Hover for exact counts, separate cache-read/write totals, and
+the included providers. These are daily totals, not tokens per second.
+
+Counters update from local log changes without opening the popover, follow provider enablement,
+and reset for the new local calendar day. They remain hidden until history is loaded or when no
+enabled provider has local history available.
+
+**Settings → Menu Bar** provides an independent checklist: **Session limit / pinned metrics**,
+**Input tokens**, **Output tokens**, and **Cache tokens**. Uncheck the limit entry for a
+numbers-only display; its quota text and indicator are hidden in both Text and Bars styles.
+Choose any subset of token counts, or uncheck everything for just a small clickable app icon.
+Tooltips follow the same selection. Choices persist across launches. Existing installations
+keep their prior token-count visibility when migrating from the old all-or-nothing toggle.
 
 ## Dashboard
 
@@ -169,9 +186,35 @@ reads + cache writes + output.
   counts once. Cached input bills at the cache-read rate, a request above 272K input tokens at the
   model's long-context rate, and a priority ("fast") tier session at 2x (2.5x for gpt-5.5).
 
-All of it shares one 30-day scan with the Total Spend card and each provider's inline spend row,
-rescanned when the Usage tab is opened more than a minute after the last scan -- instant after
-the first load, and still current while the app keeps running. The estimate is explicitly
+All of it shares one 30-day history with the Total Spend card and each provider's inline spend
+row. While TokenWatch is running, a local filesystem watcher updates these figures as Claude
+Code, Codex, and omp write usage records, even with the popover closed. Changes are coalesced
+for 300 ms after macOS delivers them; OS scheduling and scan time can add latency. Appended
+records are read incrementally, with partial records, replacement logs, and deduplication handled
+without counting a turn twice. This is live **logged usage**, not token-by-token streaming:
+figures cannot update before the agent writes its usage.
+Native Claude and Codex changes refresh only their own provider; shared omp logs refresh both.
+Changes arriving during a scan are unioned into a follow-up scan, without discarding the other
+provider's cached figures.
+
+The Total Spend card's **Recent local usage** rows show each provider as **Active** for 8 seconds
+after observing increased usage with a newer, recent record timestamp, then **Idle**. Startup,
+counter resets, and old imported records do not create a live sample. This is recent logged
+activity, not a claim that a model is currently streaming.
+
+When a new sample has trustworthy timing, its **output tok/s** is the newly recorded timed output
+divided by its matching response duration. Currently this uses omp's recorded request durations
+for Claude and Codex; those include first-token wait and request overhead, so the number is
+response throughput, not pure decoding speed. Native Claude Code and Codex CLI records remain
+untimed: their activity still updates, but the app does not invent a rate from refresh intervals
+or tool-inclusive turn durations. An idle timed sample is labeled **Last** and expires after
+3 minutes; a new untimed sample clears the old rate. Status transitions use scheduled expiries,
+not a continuously running animation.
+
+
+Provider quota/limit APIs still use the configured refresh interval. Provider refreshes and
+opening the popover after a minute also reconcile local history as a fallback if filesystem
+notifications are unavailable. The estimate is explicitly
 labeled as one: subscription usage isn't billed per token. Rates come from a small static table
 refreshed against LiteLLM's public, community-maintained price list roughly hourly
 (`PricingRefreshService`) -- a fetch failure or not having fetched yet falls straight through to
@@ -205,9 +248,10 @@ the Carbon Event Manager -- no external dependency and no Input Monitoring permi
 ## Settings
 
 - **General** -- Show Total Spend, Launch at Login ([`SMAppService`](https://developer.apple.com/documentation/servicemanagement/smappservice), the modern login-item API), the global shortcut recorder.
-- **Appearance** -- menu-bar Icon Style (Text, or a compact **Bars** glyph of up to four starred
-  bounded metrics' fill fractions), Theme (System/Light/Dark), Density (Default/Compact), Time
-  Format (Auto/12-hour/24-hour) for exact reset times, Reduce Animations, Increase Transparency
+- **Menu Bar** -- Icon Style (Text, or a compact **Bars** glyph of up to four starred bounded
+  metrics), plus the independent session-limit/pinned-metrics, input, output, and cache checklist.
+- **Appearance** -- Theme (System/Light/Dark), Density (Default/Compact), Time Format
+  (Auto/12-hour/24-hour) for exact reset times, Reduce Animations, Increase Transparency
   (auto-disabled while macOS's own Reduce Transparency accessibility setting is on), Hide From
   Screen Share (excludes the popover from screen recordings/screen sharing).
 - **Notifications** -- three independent, default-off pace-crossing alerts: **Almost Out**

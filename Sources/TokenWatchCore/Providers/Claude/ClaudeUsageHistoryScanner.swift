@@ -4,10 +4,9 @@ import Foundation
 /// (`ClaudeSessionScanner`) and the Anthropic turns in omp's logs (`OmpUsageLog`) -- for a bounded
 /// trailing window, summing *every* turn's token usage per calendar day and pricing it at API
 /// list rates. Unlike the session scanners (which only care about the single newest turn per
-/// file, for cache-temperature), this reads every qualifying line of every file modified within
-/// the window, so it's real disk I/O proportional to the window and the machine's session
-/// history -- callers should run it off the main actor. Every read is defensive: a
-/// missing/unreadable file, or one that doesn't parse, is skipped, never thrown.
+/// file, for cache-temperature), this retains every qualifying turn and reads only appended
+/// records after the first scan of a file -- callers should run it off the main actor.
+/// Missing/unreadable files and malformed records never throw.
 public enum ClaudeUsageHistoryScanner {
     public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, claudeRoots: [String]? = nil, ompRoots: [String]? = nil) -> [UsageDay] {
         let claudeRoots = claudeRoots ?? ClaudeSessionScanner.projectRoots()
@@ -20,12 +19,13 @@ public enum ClaudeUsageHistoryScanner {
             // re-pricing its tokens here, same as OpenUsage/ccusage "auto" cost mode.
             let approximate = turn.carriedCostUSD == nil && ModelPricing.rate(provider: .claude, model: turn.model).approximate
             let cost = turn.carriedCostUSD ?? ModelPricing.costUSD(provider: .claude, model: turn.model, inputTokens: turn.input, cacheReadTokens: turn.cacheRead, cacheWriteTokens: turn.cacheWrite, cacheWrite1hTokens: turn.cacheWrite1h, outputTokens: turn.output)
-            accumulator.add(timestamp: turn.timestamp, model: turn.model, input: turn.input, cacheRead: turn.cacheRead, cacheWrite: turn.cacheWrite, output: turn.output, costUSD: cost, approximate: approximate)
+            accumulator.add(timestamp: turn.timestamp, model: turn.model, input: turn.input, cacheRead: turn.cacheRead, cacheWrite: turn.cacheWrite, output: turn.output, costUSD: cost, approximate: approximate, observedAt: turn.completedAt, durationMs: turn.durationMs)
         }
 
         // Path-sorted so dedup's keep-first is deterministic across runs.
         let codeFiles = TranscriptFiles.recursive(roots: claudeRoots, modifiedSince: cutoff).sorted { $0.path < $1.path }
-        for turn in dedup(claudeCodeCache.items(for: codeFiles, parse: claudeCodeTurns)) where turn.timestamp >= cutoff {
+        // Native turn durations include tool work, so only omp's response timing is used.
+        for turn in dedup(claudeCodeCache.items(for: codeFiles)) where turn.timestamp >= cutoff {
             record(turn)
         }
         let ompProvider = OmpUsageLog.ompProvider(for: .claude)
@@ -33,13 +33,16 @@ public enum ClaudeUsageHistoryScanner {
             record(Turn(
                 timestamp: omp.timestamp, model: omp.model,
                 input: omp.input, cacheRead: omp.cacheRead, cacheWrite: omp.cacheWrite, output: omp.output,
-                cacheWrite1h: omp.cacheWrite1h, carriedCostUSD: omp.costUSD
+                cacheWrite1h: omp.cacheWrite1h, carriedCostUSD: omp.costUSD,
+                completedAt: omp.completedAt, durationMs: omp.durationMs
             ))
         }
         return accumulator.build()
     }
 
-    private static let claudeCodeCache = ParsedFileCache<Turn>()
+    private static let claudeCodeCache = ParsedFileCache<Turn, Void>(makeState: { () }) { _, data in
+        claudeCodeTurns(data)
+    }
 
     private struct Turn {
         let timestamp: Date
@@ -49,6 +52,8 @@ public enum ClaudeUsageHistoryScanner {
         var cacheWrite1h = 0
         /// The cost the log line itself recorded, used instead of re-pricing the tokens.
         var carriedCostUSD: Double? = nil
+        var completedAt: Date? = nil
+        var durationMs: Double? = nil
         /// Identify the API response this usage belongs to, for `dedup`. A turn with no message
         /// id is always counted, never collapsed into another.
         var messageID: String? = nil
@@ -130,11 +135,10 @@ public enum ClaudeUsageHistoryScanner {
         let message: Message?
     }
 
-    private static func claudeCodeTurns(inFileAtPath path: String) -> [Turn] {
-        guard let data = FileManager.default.contents(atPath: path), let text = String(data: data, encoding: .utf8) else { return [] }
+    private static func claudeCodeTurns(_ data: Data) -> [Turn] {
         var turns: [Turn] = []
-        for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
-            guard let lineData = line.data(using: .utf8), let entry = try? JSONDecoder().decode(ClaudeCodeLine.self, from: lineData) else { continue }
+        for line in data.split(separator: 0x0A) {
+            guard let entry = try? JSONDecoder().decode(ClaudeCodeLine.self, from: line) else { continue }
             guard entry.type == "assistant", let message = entry.message, let usage = message.usage, let timestampString = entry.timestamp,
                   let timestamp = FlexibleISO8601.parse(timestampString)
             else { continue }

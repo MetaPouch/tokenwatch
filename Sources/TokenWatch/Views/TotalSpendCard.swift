@@ -103,6 +103,7 @@ struct TotalSpendCard: View {
                 .buttonStyle(.plain)
                 .help("Copy a PNG of this card to the clipboard")
             }
+            LiveUsageStatusView(store: spendHistoryStore, providers: historyProviders)
             Picker("", selection: $periodRaw) {
                 ForEach(SpendPeriod.allCases) { Text($0.rawValue).tag($0.rawValue) }
             }

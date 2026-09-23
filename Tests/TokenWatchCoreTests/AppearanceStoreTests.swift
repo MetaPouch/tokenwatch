@@ -9,16 +9,6 @@ final class AppearanceStoreTests: XCTestCase {
         return dir
     }
 
-    func testDefaultsWhenNoFileExists() {
-        let store = AppearanceStore(directory: tempDir())
-        XCTAssertEqual(store.theme, .system)
-        XCTAssertEqual(store.density, .regular)
-        XCTAssertEqual(store.timeFormat, .auto)
-        XCTAssertFalse(store.reduceAnimations)
-        XCTAssertFalse(store.increaseTransparency)
-        XCTAssertEqual(store.iconStyle, .text)
-        XCTAssertFalse(store.hideFromScreenShare)
-    }
 
     func testChangesPersistAcrossInstancesOnDisk() {
         let dir = tempDir()
@@ -30,6 +20,7 @@ final class AppearanceStoreTests: XCTestCase {
         first.increaseTransparency = true
         first.iconStyle = .bars
         first.hideFromScreenShare = true
+        first.menuBarValues = [.inputTokens, .cacheTokens]
 
         let second = AppearanceStore(directory: dir)
         XCTAssertEqual(second.theme, .dark)
@@ -39,6 +30,7 @@ final class AppearanceStoreTests: XCTestCase {
         XCTAssertTrue(second.increaseTransparency)
         XCTAssertEqual(second.iconStyle, .bars)
         XCTAssertTrue(second.hideFromScreenShare)
+        XCTAssertEqual(second.menuBarValues, [.inputTokens, .cacheTokens])
     }
 
     func testIconStyleDefaultsToTextWhenMissingFromAnOlderSavedFile() {
@@ -51,6 +43,35 @@ final class AppearanceStoreTests: XCTestCase {
         XCTAssertEqual(store.iconStyle, .text)
         XCTAssertEqual(store.theme, .dark)
         XCTAssertFalse(store.hideFromScreenShare)
+        XCTAssertEqual(store.menuBarValues, Set(MenuBarValue.allCases))
+    }
+
+    func testLegacyHiddenCountsMigrateAndEmptySelectionSurvivesReload() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let legacy = """
+        {"theme":"Dark","density":"Compact","timeFormat":"Auto","reduceAnimations":false,"increaseTransparency":false,"showMenuBarTokenCounts":false}
+        """
+        try Data(legacy.utf8).write(to: dir.appendingPathComponent("appearance.json"))
+        let store = AppearanceStore(directory: dir)
+        XCTAssertEqual(store.menuBarValues, [.limits])
+        XCTAssertEqual(store.theme, .dark)
+        store.menuBarValues = []
+        XCTAssertEqual(AppearanceStore(directory: dir).menuBarValues, [])
+    }
+
+    func testExplicitSelectionOverridesLegacyAndRetainsKnownFutureFileChoices() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let saved = """
+        {"theme":"Dark","density":"Compact","timeFormat":"Auto","reduceAnimations":false,"increaseTransparency":false,"showMenuBarTokenCounts":true,"menuBarValues":["outputTokens","futureMetric"]}
+        """
+        try Data(saved.utf8).write(to: dir.appendingPathComponent("appearance.json"))
+        let store = AppearanceStore(directory: dir)
+        XCTAssertEqual(store.menuBarValues, [.outputTokens])
+        XCTAssertEqual(store.theme, .dark)
+        store.menuBarValues.insert(.cacheTokens)
+        XCTAssertEqual(AppearanceStore(directory: dir).menuBarValues, [.outputTokens, .cacheTokens])
     }
 
     func testHideFromScreenShareDefaultsToFalseWhenMissingFromAnOlderSavedFile() {

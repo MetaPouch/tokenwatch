@@ -50,6 +50,52 @@ final class CodexUsageHistoryScannerTests: XCTestCase {
             .first { $0.id == "2026-06-15" }
     }
 
+    func testIncrementalRolloutPreservesReplayGateTotalsModelAndTier() throws {
+        let path = "sessions/child.jsonl"
+        let created = "2026-06-15T09:00:00.000Z"
+        let createdAt = try XCTUnwrap(FlexibleISO8601.parse(created)).timeIntervalSince1970
+        writeRollout(path, lines: [
+            meta(#"{"thread_source":"subagent","forked_from_id":"parent"}"#, timestamp: created),
+            turnContext("gpt-5.6-terra"),
+            #"{"type":"event_msg","payload":{"type":"thread_settings_applied","service_tier":"priority"}}"#,
+            tokenCount(at: "2026-06-15T09:00:01.000Z", last: nil, total: (900_000, 0, 0)),
+        ])
+        XCTAssertEqual(day15()?.inputTokens, 0)
+        let handle = try FileHandle(forWritingTo: root.appendingPathComponent(path))
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        let live = tokenCount(at: "2026-06-15T09:01:00.000Z", last: nil, total: (1_000_000, 0, 0))
+        let split = live.index(live.startIndex, offsetBy: live.count / 2)
+        try handle.write(contentsOf: Data(("\n" + taskStarted(startedAt: createdAt + 5, timestamp: "2026-06-15T09:00:05.000Z") + "\n" + live[..<split]).utf8))
+        XCTAssertEqual(day15()?.inputTokens, 0)
+        try handle.write(contentsOf: Data((live[split...] + "\n").utf8))
+        XCTAssertEqual(day15()?.inputTokens, 100_000)
+        XCTAssertEqual(day15()?.estimatedCostUSD ?? -1, 0.4, accuracy: 0.0001)
+        XCTAssertEqual(day15()?.modelBreakdown.map(\.id), ["gpt-5.6-terra"])
+        try handle.write(contentsOf: Data((live + "\n" + tokenCount(at: "2026-06-15T09:02:00.000Z", last: nil, total: (1_050_000, 0, 0)) + "\n").utf8))
+        XCTAssertEqual(day15()?.inputTokens, 150_000)
+        XCTAssertEqual(day15()?.estimatedCostUSD ?? -1, 0.6, accuracy: 0.0001)
+    }
+
+    func testSharedOmpCacheRetainsBothProvidersAcrossIncrementalScans() throws {
+        let path = "omp/session.jsonl"
+        let codex = #"{"type":"message","timestamp":"2026-06-15T10:00:00.000Z","message":{"role":"assistant","provider":"openai-codex","model":"gpt-6-astra","duration":250,"usage":{"input":10,"output":1}}}"#
+        let claude = #"{"type":"message","timestamp":"2026-06-15T10:01:00.000Z","message":{"role":"assistant","provider":"anthropic","model":"claude-sonnet-5","duration":500,"usage":{"input":20,"output":2}}}"#
+        writeRollout(path, lines: [codex])
+        XCTAssertEqual(day15()?.inputTokens, 10)
+        let handle = try FileHandle(forWritingTo: root.appendingPathComponent(path))
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(("\n" + claude + "\n").utf8))
+        let claudeDays = ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: now, claudeRoots: [], ompRoots: [root.appendingPathComponent("omp").path])
+        XCTAssertEqual(claudeDays.first { $0.id == "2026-06-15" }?.inputTokens, 20)
+        XCTAssertEqual(day15()?.inputTokens, 10)
+        XCTAssertEqual(day15()?.timedOutputTokens, 1)
+        XCTAssertEqual(day15()?.timedDurationMs, 250)
+        XCTAssertEqual(claudeDays.first { $0.id == "2026-06-15" }?.timedOutputTokens, 2)
+        XCTAssertEqual(claudeDays.first { $0.id == "2026-06-15" }?.timedDurationMs, 500)
+    }
+
     /// Codex used through omp is logged only in omp's session files (omp calls the API itself), in
     /// omp's disjoint buckets with its own cost. It counts toward Codex -- and only omp's
     /// `openai-codex` turns do, not the Anthropic turns in the same session.
@@ -66,6 +112,28 @@ final class CodexUsageHistoryScannerTests: XCTestCase {
         XCTAssertEqual(day?.cacheReadTokens, 30_000)
         XCTAssertEqual(day?.estimatedCostUSD ?? -1, 0.1, accuracy: 0.0001)
         XCTAssertEqual(day?.modelBreakdown.map(\.id), ["gpt-6-astra"])
+    }
+
+    func testCodexRateUsesOnlyOmpResponseTimingNotNativeTurnDuration() throws {
+        let completed = try XCTUnwrap(FlexibleISO8601.parse("2026-06-15T10:00:22.000Z"))
+        writeRollout("sessions/native.jsonl", lines: [
+            meta(),
+            tokenCount(at: "2026-06-15T09:00:00.000Z", last: (100, 0, 10), total: (100, 0, 10)),
+            #"{"timestamp":"2026-06-15T09:00:01.000Z","type":"event_msg","payload":{"type":"turn_duration","duration":1}}"#,
+        ])
+        writeRollout("omp/timed.jsonl", lines: [
+            #"{"type":"message","timestamp":"2026-06-15T10:00:00.000Z","message":{"role":"assistant","provider":"openai-codex","model":"gpt-6-astra","duration":21810.824874999933,"completedAt":\#(completed.timeIntervalSince1970 * 1000),"usage":{"input":20,"output":500,"cost":{"total":0.1}}}}"#,
+            #"{"type":"message","timestamp":"2026-06-15T10:00:00.000Z","message":{"role":"assistant","provider":"openai-codex","model":"gpt-6-astra","duration":"bad","completedAt":[],"usage":{"input":30,"output":50,"cost":{"total":0.2}}}}"#,
+            #"{"type":"message","timestamp":"2026-06-15T10:00:00.000Z","message":{"role":"assistant","provider":"openai-codex","model":"gpt-6-astra","usage":{"input":40,"output":60,"cost":{"total":0.3}}}}"#,
+        ])
+        let day = try XCTUnwrap(day15())
+        XCTAssertEqual(day.inputTokens, 190)
+        XCTAssertEqual(day.outputTokens, 620)
+        XCTAssertEqual(day.timedOutputTokens, 500)
+        XCTAssertEqual(day.timedDurationMs, 21810.824874999933, accuracy: 0.000001)
+        XCTAssertEqual(day.latestUsageAt, completed)
+        let nativeCost = ModelPricing.codexCostUSD(model: "gpt-5", inputTokens: 100, cachedInputTokens: 0, outputTokens: 10).cost
+        XCTAssertEqual(day.estimatedCostUSD, 0.6 + nativeCost, accuracy: 0.000001)
     }
 
     /// Without a recorded cost, omp's disjoint input is re-joined with its cache reads so cached

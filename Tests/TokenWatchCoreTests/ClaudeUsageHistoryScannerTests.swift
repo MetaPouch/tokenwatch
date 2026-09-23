@@ -37,8 +37,10 @@ final class ClaudeUsageHistoryScannerTests: XCTestCase {
         return #"{"type":"assistant",\#(requestField)"timestamp":"\#(timestamp)","message":{\#(idField)"model":"\#(model)","usage":{"input_tokens":\#(input),"cache_read_input_tokens":\#(cacheRead),"cache_creation_input_tokens":\#(cacheCreate),"output_tokens":\#(output)}}}"#
     }
 
-    private func ompLine(timestamp: String, model: String, input: Int, cacheRead: Int, cacheWrite: Int, output: Int) -> String {
-        #"{"type":"message","timestamp":"\#(timestamp)","message":{"role":"assistant","provider":"anthropic","model":"\#(model)","usage":{"input":\#(input),"cacheRead":\#(cacheRead),"cacheWrite":\#(cacheWrite),"output":\#(output)}}}"#
+    private func ompLine(timestamp: String, model: String, input: Int, cacheRead: Int, cacheWrite: Int, output: Int, duration: String? = nil, completedAt: String? = nil) -> String {
+        let durationField = duration.map { #""duration":\#($0),"# } ?? ""
+        let completedField = completedAt.map { #""completedAt":\#($0),"# } ?? ""
+        return #"{"type":"message","timestamp":"\#(timestamp)","message":{\#(durationField)\#(completedField)"role":"assistant","provider":"anthropic","model":"\#(model)","usage":{"input":\#(input),"cacheRead":\#(cacheRead),"cacheWrite":\#(cacheWrite),"output":\#(output)}}}"#
     }
 
     func testSumsClaudeCodeTurnsOnSameDay() {
@@ -65,6 +67,81 @@ final class ClaudeUsageHistoryScannerTests: XCTestCase {
         XCTAssertEqual(day?.outputTokens, 70)
     }
 
+    func testOnlyRecordedOmpResponseDurationsContributeToThroughput() throws {
+        // Native transcript duration/turn_duration is not a per-response generation timer.
+        let native = #"{"type":"assistant","requestId":"r","timestamp":"2026-06-15T08:00:00.000Z","duration":50,"turn_duration":50,"message":{"id":"m","duration":50,"model":"claude-sonnet-5","usage":{"input_tokens":100,"output_tokens":50}}}"#
+        writeClaudeTranscript("native.jsonl", lines: [native, native])
+        let timestamp = "2026-06-15T10:00:00.000Z"
+        let completed = try XCTUnwrap(FlexibleISO8601.parse("2026-06-15T10:00:22.000Z"))
+        writeOmpTranscript("timed.jsonl", lines: [
+            ompLine(timestamp: timestamp, model: "claude-sonnet-5", input: 10, cacheRead: 0, cacheWrite: 0, output: 30, duration: "1000", completedAt: "\(completed.timeIntervalSince1970 * 1000)"),
+            ompLine(timestamp: timestamp, model: "claude-sonnet-5", input: 20, cacheRead: 0, cacheWrite: 0, output: 70, duration: "3000"),
+            ompLine(timestamp: timestamp, model: "claude-sonnet-5", input: 30, cacheRead: 0, cacheWrite: 0, output: 90),
+        ])
+        let day = try XCTUnwrap(dailyUsageOn15th())
+        XCTAssertEqual(day.inputTokens, 160)
+        XCTAssertEqual(day.outputTokens, 240)
+        XCTAssertEqual(day.timedOutputTokens, 100)
+        XCTAssertEqual(day.timedDurationMs, 4000)
+        XCTAssertEqual(Double(day.timedOutputTokens) / (day.timedDurationMs / 1000), 25)
+        XCTAssertEqual(day.latestUsageAt, completed)
+        // A cached rescan must not accumulate the same timed responses again.
+        XCTAssertEqual(dailyUsageOn15th()?.timedOutputTokens, 100)
+        XCTAssertEqual(dailyUsageOn15th()?.timedDurationMs, 4000)
+    }
+
+    func testMalformedTimingPreservesUsageAndFallsBackToUsageTimestamp() throws {
+        let timestamp = "2026-06-15T10:00:00.000Z"
+        let badTiming = [#""invalid""#, "{}", "true", "null", "0", "-1"]
+        writeOmpTranscript("malformed.jsonl", lines: badTiming.map {
+            ompLine(timestamp: timestamp, model: "claude-sonnet-5", input: 10, cacheRead: 2, cacheWrite: 3, output: 5, duration: $0, completedAt: $0)
+        } + [
+            // Empty assistant records, even with later completion, are not usage activity.
+            ompLine(timestamp: "2026-06-15T11:00:00.000Z", model: "claude-sonnet-5", input: 0, cacheRead: 0, cacheWrite: 0, output: 0, duration: "1000"),
+        ])
+        let day = try XCTUnwrap(dailyUsageOn15th())
+        XCTAssertEqual(day.inputTokens, 60)
+        XCTAssertEqual(day.cacheReadTokens, 12)
+        XCTAssertEqual(day.cacheWriteTokens, 18)
+        XCTAssertEqual(day.outputTokens, 30)
+        XCTAssertGreaterThan(day.estimatedCostUSD, 0)
+        XCTAssertEqual(day.timedOutputTokens, 0)
+        XCTAssertEqual(day.timedDurationMs, 0)
+        XCTAssertEqual(day.latestUsageAt, FlexibleISO8601.parse(timestamp))
+    }
+
+    func testCompletionTimestampDoesNotMoveBillingDay() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let timestamp = try XCTUnwrap(FlexibleISO8601.parse("2026-06-14T23:59:59.000Z"))
+        let completed = timestamp.addingTimeInterval(2)
+        writeOmpTranscript("midnight.jsonl", lines: [
+            ompLine(timestamp: "2026-06-14T23:59:59.000Z", model: "claude-sonnet-5", input: 10, cacheRead: 0, cacheWrite: 0, output: 20, duration: "2000", completedAt: "\(completed.timeIntervalSince1970 * 1000)"),
+        ])
+        let days = ClaudeUsageHistoryScanner.dailyUsage(days: 2, now: completed, calendar: calendar, claudeRoots: [], ompRoots: [ompRoot.path])
+        let billedDay = try XCTUnwrap(days.first { $0.date == calendar.startOfDay(for: timestamp) })
+        let nextDay = try XCTUnwrap(days.first { $0.date == calendar.startOfDay(for: completed) })
+        XCTAssertEqual(billedDay.outputTokens, 20)
+        XCTAssertEqual(billedDay.latestUsageAt, completed)
+        XCTAssertEqual(billedDay.timedDurationMs, 2000)
+        XCTAssertEqual(nextDay.totalTokens, 0)
+        XCTAssertNil(nextDay.latestUsageAt)
+    }
+
+    func testAccumulatorRejectsNonfiniteDurationsWithoutDiscardingTokens() throws {
+        let timestamp = try XCTUnwrap(FlexibleISO8601.parse("2026-06-15T10:00:00.000Z"))
+        var accumulator = UsageDayAccumulator(days: 1, now: timestamp, calendar: .current)
+        for duration in [Double.nan, .infinity, -.infinity, 0, -1, 250] {
+            accumulator.add(timestamp: timestamp, model: "claude-sonnet-5", input: 1, cacheRead: 0, cacheWrite: 0, output: 5, costUSD: 0.1, approximate: false, durationMs: duration)
+        }
+        let day = try XCTUnwrap(accumulator.build().first)
+        XCTAssertEqual(day.totalTokens, 36)
+        XCTAssertEqual(day.estimatedCostUSD, 0.6, accuracy: 0.0001)
+        XCTAssertEqual(day.timedOutputTokens, 5)
+        XCTAssertEqual(day.timedDurationMs, 250)
+        XCTAssertEqual(day.latestUsageAt, timestamp)
+    }
+
     /// Claude Code writes one line per content block of a response (thinking, then a tool call),
     /// each repeating the full usage, and a resumed session copies prior messages into a new
     /// file. Each response must count once; a different response with identical numbers must not
@@ -89,6 +166,20 @@ final class ClaudeUsageHistoryScannerTests: XCTestCase {
     private func dailyUsageOn15th() -> UsageDay? {
         ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], ompRoots: [ompRoot.path])
             .first { $0.id == "2026-06-15" }
+    }
+
+    func testAppendedResponseStillDeduplicatesAgainstCachedHistory() throws {
+        let first = claudeCodeLine(timestamp: "2026-06-15T08:00:00.000Z", model: "claude-sonnet-5", input: 100, cacheRead: 0, cacheCreate: 0, output: 10, messageID: "message", requestID: "request")
+        writeClaudeTranscript("incremental.jsonl", lines: [first])
+        XCTAssertEqual(dailyUsageOn15th()?.inputTokens, 100)
+        let file = claudeRoot.appendingPathComponent("some-project/incremental.jsonl")
+        let handle = try FileHandle(forWritingTo: file)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        let larger = claudeCodeLine(timestamp: "2026-06-15T08:00:00.000Z", model: "claude-sonnet-5", input: 150, cacheRead: 0, cacheCreate: 0, output: 15, messageID: "message", requestID: "request")
+        try handle.write(contentsOf: Data(("\n" + first + "\n" + larger + "\n").utf8))
+        XCTAssertEqual(dailyUsageOn15th()?.inputTokens, 150)
+        XCTAssertEqual(dailyUsageOn15th()?.outputTokens, 15)
     }
 
     /// A subagent (sidechain) log replays its parent's message under a new request id. It must be

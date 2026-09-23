@@ -10,9 +10,10 @@ import TokenWatchCore
 @MainActor
 public final class SpendHistoryStore: ObservableObject {
     /// Providers with a local usage-history scanner, in display order.
-    public static let providers: [ProviderID] = [.claude, .codex]
+    nonisolated public static let providers: [ProviderID] = [.claude, .codex]
 
     @Published public private(set) var daysByProvider: [ProviderID: [UsageDay]] = [:]
+    @Published public private(set) var activityByProvider: [ProviderID: LiveUsageActivity] = [:]
     /// True only until the first scan completes; later rescans keep showing the previous data.
     @Published public private(set) var isLoading = true
     /// When the latest scan finished; changes on every rescan, so layouts can re-measure.
@@ -23,8 +24,28 @@ public final class SpendHistoryStore: ObservableObject {
     private static let staleAfter: TimeInterval = 60
 
     private var loadTask: Task<Void, Never>?
+    private var pendingProviders: Set<ProviderID> = []
+    private var watcher: LocalUsageWatcher?
 
     public init() {}
+
+    /// Start before the initial scan so writes during that scan cannot be missed.
+    public func startWatching() {
+        guard watcher == nil else { return }
+        let watcher = LocalUsageWatcher { [weak self] providers in self?.reload(providers: providers) }
+        self.watcher = watcher
+        watcher.start()
+        reload()
+    }
+
+    public func stopWatching() {
+        watcher?.stop()
+        watcher = nil
+        loadTask?.cancel()
+        loadTask = nil
+        pendingProviders = []
+        activityByProvider = [:]
+    }
 
     public func days(for provider: ProviderID) -> [UsageDay] {
         daysByProvider[provider] ?? []
@@ -37,27 +58,48 @@ public final class SpendHistoryStore: ObservableObject {
     /// Scans unless a scan is already running or finished within `staleAfter`. Called when the
     /// popover opens and from each view's `.task`.
     public func loadIfNeeded() {
+        guard loadTask == nil else { return }
         if let lastLoadedAt, Date().timeIntervalSince(lastLoadedAt) < Self.staleAfter { return }
         reload()
     }
 
-    /// Scans now unless a scan is already running -- after each provider refresh cycle, so
-    /// Today's figures stay current while the app keeps running.
-    public func reload() {
-        guard loadTask == nil else { return }
+    /// Changes coalesce by provider, including writes arriving during a scan. Shared omp logs
+    /// target both providers; a native Claude or Codex log leaves the other provider untouched.
+    public func reload(providers: Set<ProviderID> = Set(SpendHistoryStore.providers)) {
+        pendingProviders.formUnion(providers.intersection(Self.providers))
+        guard loadTask == nil, !pendingProviders.isEmpty else { return }
+        let requested = Self.providers.filter { pendingProviders.contains($0) }
+        pendingProviders = []
         loadTask = Task { [weak self] in
             let result = await withBackgroundActivity(reason: "Scanning local spend history") {
                 await Task.detached(priority: .userInitiated) {
-                    async let claude = ClaudeUsageHistoryScanner.dailyUsage(days: 30)
-                    async let codex = CodexUsageHistoryScanner.dailyUsage(days: 30)
-                    return [ProviderID.claude: await claude, .codex: await codex]
+                    var result: [ProviderID: [UsageDay]] = [:]
+                    for provider in requested {
+                        switch provider {
+                        case .claude: result[provider] = ClaudeUsageHistoryScanner.dailyUsage(days: 30)
+                        case .codex: result[provider] = CodexUsageHistoryScanner.dailyUsage(days: 30)
+                        default: break
+                        }
+                    }
+                    return result
                 }.value
             }
-            guard let self else { return }
-            daysByProvider = result
+            guard let self, !Task.isCancelled else { return }
+            let now = Date()
+            var activities = activityByProvider
+            var updatedDays = daysByProvider
+            for (provider, days) in result {
+                updatedDays[provider] = days
+                var activity = activities[provider] ?? LiveUsageActivity()
+                activity.observe(days.last, now: now)
+                activities[provider] = activity
+            }
+            daysByProvider = updatedDays
+            activityByProvider = activities
             isLoading = false
-            lastLoadedAt = Date()
+            lastLoadedAt = now
             loadTask = nil
+            if !pendingProviders.isEmpty { reload(providers: []) }
         }
     }
 }

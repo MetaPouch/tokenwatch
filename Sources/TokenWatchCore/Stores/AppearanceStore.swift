@@ -39,6 +39,34 @@ public enum MenuBarIconStyle: String, Sendable, Codable, CaseIterable, Identifia
     public var id: String { rawValue }
 }
 
+/// Independent menu-bar values, ordered as they appear in Settings and the token strip.
+public enum MenuBarValue: String, Sendable, Codable, CaseIterable, Identifiable {
+    case limits
+    case inputTokens
+    case outputTokens
+    case cacheTokens
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .limits: return "Session limit / pinned metrics"
+        case .inputTokens: return "Input tokens"
+        case .outputTokens: return "Output tokens"
+        case .cacheTokens: return "Cache tokens"
+        }
+    }
+
+    public var help: String {
+        switch self {
+        case .limits: return "Show the usual session-limit summary or your starred metrics, including the Bars style. Turn off for token counts only."
+        case .inputTokens: return "Today's input tokens excluding cache, across enabled Claude and Codex providers."
+        case .outputTokens: return "Today's output tokens across enabled Claude and Codex providers."
+        case .cacheTokens: return "Today's cache reads plus writes. Hover the menu bar for the exact breakdown."
+        }
+    }
+}
+
 /// `iconStyle` was added after `appearance.json` already shipped -- a custom decode so an
 /// existing file missing that key defaults it to `.text` instead of failing the whole decode.
 private struct AppearanceFile: Codable {
@@ -49,12 +77,17 @@ private struct AppearanceFile: Codable {
     var increaseTransparency: Bool
     var iconStyle: MenuBarIconStyle
     var hideFromScreenShare: Bool
+    var menuBarValues: Set<MenuBarValue>
 
     private enum CodingKeys: String, CodingKey {
-        case theme, density, timeFormat, reduceAnimations, increaseTransparency, iconStyle, hideFromScreenShare
+        case theme, density, timeFormat, reduceAnimations, increaseTransparency, iconStyle, hideFromScreenShare, menuBarValues
     }
 
-    init(theme: AppTheme, density: AppDensity, timeFormat: TimeFormatPreference, reduceAnimations: Bool, increaseTransparency: Bool, iconStyle: MenuBarIconStyle, hideFromScreenShare: Bool) {
+    private enum LegacyCodingKeys: String, CodingKey {
+        case showMenuBarTokenCounts
+    }
+
+    init(theme: AppTheme, density: AppDensity, timeFormat: TimeFormatPreference, reduceAnimations: Bool, increaseTransparency: Bool, iconStyle: MenuBarIconStyle, hideFromScreenShare: Bool, menuBarValues: Set<MenuBarValue>) {
         self.theme = theme
         self.density = density
         self.timeFormat = timeFormat
@@ -62,6 +95,7 @@ private struct AppearanceFile: Codable {
         self.increaseTransparency = increaseTransparency
         self.iconStyle = iconStyle
         self.hideFromScreenShare = hideFromScreenShare
+        self.menuBarValues = menuBarValues
     }
 
     init(from decoder: Decoder) throws {
@@ -73,11 +107,18 @@ private struct AppearanceFile: Codable {
         increaseTransparency = try container.decode(Bool.self, forKey: .increaseTransparency)
         iconStyle = try container.decodeIfPresent(MenuBarIconStyle.self, forKey: .iconStyle) ?? .text
         hideFromScreenShare = try container.decodeIfPresent(Bool.self, forKey: .hideFromScreenShare) ?? false
+        if let values = try container.decodeIfPresent([String].self, forKey: .menuBarValues) {
+            menuBarValues = Set(values.compactMap(MenuBarValue.init(rawValue:)))
+        } else {
+            let legacy = try decoder.container(keyedBy: LegacyCodingKeys.self)
+            let showTokens = try legacy.decodeIfPresent(Bool.self, forKey: .showMenuBarTokenCounts) ?? true
+            menuBarValues = showTokens ? Set(MenuBarValue.allCases) : [.limits]
+        }
     }
 }
 
 /// Persists the popover's Appearance settings (Theme, Density, Time Format, Reduce Animations,
-/// Increase Transparency, menu-bar Icon Style, Hide From Screen Share) to their own
+/// Increase Transparency, menu-bar Icon Style and selected values, Hide From Screen Share) to their own
 /// `appearance.json`, independent of the other stores so a decode failure here can't take any of
 /// them down.
 @MainActor
@@ -92,6 +133,7 @@ public final class AppearanceStore: ObservableObject {
     /// (`NSWindow.sharingType = .none`) -- useful when presenting/streaming with usage figures
     /// visible in the menu bar dropdown that shouldn't be broadcast.
     @Published public var hideFromScreenShare: Bool { didSet { persist() } }
+    @Published public var menuBarValues: Set<MenuBarValue> { didSet { persist() } }
 
     private let fileURL: URL
 
@@ -106,6 +148,7 @@ public final class AppearanceStore: ObservableObject {
             self.increaseTransparency = file.increaseTransparency
             self.iconStyle = file.iconStyle
             self.hideFromScreenShare = file.hideFromScreenShare
+            self.menuBarValues = file.menuBarValues
         } else {
             self.theme = .system
             self.density = .regular
@@ -114,11 +157,12 @@ public final class AppearanceStore: ObservableObject {
             self.increaseTransparency = false
             self.iconStyle = .text
             self.hideFromScreenShare = false
+            self.menuBarValues = Set(MenuBarValue.allCases)
         }
     }
 
     private func persist() {
-        let file = AppearanceFile(theme: theme, density: density, timeFormat: timeFormat, reduceAnimations: reduceAnimations, increaseTransparency: increaseTransparency, iconStyle: iconStyle, hideFromScreenShare: hideFromScreenShare)
+        let file = AppearanceFile(theme: theme, density: density, timeFormat: timeFormat, reduceAnimations: reduceAnimations, increaseTransparency: increaseTransparency, iconStyle: iconStyle, hideFromScreenShare: hideFromScreenShare, menuBarValues: menuBarValues)
         guard let data = try? JSONEncoder().encode(file) else { return }
         try? data.write(to: fileURL, options: .atomic)
     }

@@ -46,10 +46,27 @@ struct SettingsView: View {
                     .help("A global shortcut that toggles the popover from anywhere.")
                 }
 
-                settingsSection("Appearance") {
+                settingsSection("Menu Bar") {
                     Picker("Icon Style", selection: $appearanceStore.iconStyle) {
                         ForEach(MenuBarIconStyle.allCases) { Text($0.rawValue).tag($0) }
                     }
+                    ForEach(MenuBarValue.allCases) { value in
+                        Toggle(value.title, isOn: Binding(
+                            get: { appearanceStore.menuBarValues.contains(value) },
+                            set: { selected in
+                                if selected { appearanceStore.menuBarValues.insert(value) }
+                                else { appearanceStore.menuBarValues.remove(value) }
+                            }
+                        ))
+                        .toggleStyle(.checkbox)
+                        .help(value.help)
+                    }
+                    Text("Choose any combination. With nothing selected, only the app icon is shown.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                settingsSection("Appearance") {
                     Picker("Theme", selection: $appearanceStore.theme) {
                         ForEach(AppTheme.allCases) { Text($0.rawValue).tag($0) }
                     }

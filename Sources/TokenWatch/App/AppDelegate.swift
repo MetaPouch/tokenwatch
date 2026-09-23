@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         container.refreshScheduler.stop()
+        container.spendHistoryStore.stopWatching()
     }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }

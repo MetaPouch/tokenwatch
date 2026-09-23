@@ -50,6 +50,18 @@ final class StatusItemController {
             .sink { [weak self] _, _ in self?.render() }
             .store(in: &cancellables)
 
+        spendHistoryStore.$daysByProvider
+            .combineLatest(spendHistoryStore.$isLoading, appearanceStore.$menuBarValues)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.render() }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .NSCalendarDayChanged)
+            .merge(with: NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange))
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.render() }
+            .store(in: &cancellables)
+
         appearanceStore.$hideFromScreenShare
             .receive(on: RunLoop.main)
             .sink { [weak self] hidden in self?.panel.setHiddenFromScreenShare(hidden) }
@@ -130,6 +142,13 @@ final class StatusItemController {
 
     private func render() {
         guard let button = statusItem.button else { return }
+        defer { appendTokenCounts(to: button) }
+        guard appearanceStore.menuBarValues.contains(.limits) else {
+            button.attributedTitle = NSAttributedString(string: "")
+            button.image = Self.ringImage(ratio: 0, tone: .secondaryLabelColor, filled: false)
+            button.toolTip = nil
+            return
+        }
 
         if appearanceStore.iconStyle == .bars {
             let fractions = barsFractions()
@@ -178,6 +197,27 @@ final class StatusItemController {
         button.image = Self.ringImage(ratio: ratio, tone: tone, filled: true)
         button.title = " \(Int((ratio * 100).rounded()))%"
         button.toolTip = nil
+    }
+
+    private func appendTokenCounts(to button: NSStatusBarButton) {
+        let values = appearanceStore.menuBarValues
+        guard values.contains(where: { $0 != .limits }), !spendHistoryStore.isLoading,
+              let counts = MenuBarTokenCounts.today(
+                daysByProvider: spendHistoryStore.daysByProvider,
+                enabledProviders: enablementStore.enabledProviders
+              ) else { return }
+        let title = NSMutableAttributedString(attributedString: button.attributedTitle)
+        let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.menuBarFont(ofSize: 0).pointSize, weight: .regular)
+        if title.length > 0 {
+            title.append(NSAttributedString(string: "  ·  ", attributes: [
+                .font: font, .foregroundColor: NSColor.tertiaryLabelColor
+            ]))
+        }
+        title.append(NSAttributedString(string: counts.compactText(showing: values), attributes: [
+            .font: font, .foregroundColor: NSColor.labelColor
+        ]))
+        button.attributedTitle = title
+        button.toolTip = [button.toolTip, counts.tooltip(showing: values)].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n\n")
     }
 
     private struct PinnedSegment {
