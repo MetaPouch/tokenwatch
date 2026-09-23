@@ -21,8 +21,10 @@ public enum ModelPricing {
     /// Cache-read price as a share of the input rate, for models without their own explicit
     /// cache-read rate.
     private static let cacheReadMultiplier = 0.1
-    /// Cache-write (ephemeral 5-minute breakpoint) price as a multiple of the input rate.
+    /// Cache-write price as a multiple of the input rate: 1.25x for a 5-minute cache entry, 2x
+    /// for a 1-hour one (which current Claude Code writes almost exclusively).
     private static let cacheWriteMultiplier = 1.25
+    private static let cacheWrite1hMultiplier = 2.0
 
     private static let claudeRates: [String: Rate] = [
         "claude-opus-5": Rate(inputPerMillion: 5, outputPerMillion: 25, cacheReadPerMillion: nil),
@@ -106,13 +108,17 @@ public enum ModelPricing {
         return (cheapest, true)
     }
 
-    /// Estimated USD cost for one turn's token counts at API list rates.
-    static func costUSD(provider: ProviderID, model: String, inputTokens: Int, cacheReadTokens: Int, cacheWriteTokens: Int, outputTokens: Int) -> Double {
+    /// Estimated USD cost for one turn's token counts at API list rates. `cacheWriteTokens` is the
+    /// total written; `cacheWrite1hTokens` is the part of it written with a 1-hour TTL (0 when a
+    /// log doesn't split writes by TTL, which then prices them all as 5-minute writes).
+    static func costUSD(provider: ProviderID, model: String, inputTokens: Int, cacheReadTokens: Int, cacheWriteTokens: Int, cacheWrite1hTokens: Int = 0, outputTokens: Int) -> Double {
         let (rate, _) = rate(provider: provider, model: model)
         let cacheReadRate = rate.cacheReadPerMillion ?? rate.inputPerMillion * cacheReadMultiplier
+        let write1h = min(max(cacheWrite1hTokens, 0), cacheWriteTokens)
         return (Double(inputTokens) / 1_000_000) * rate.inputPerMillion
             + (Double(outputTokens) / 1_000_000) * rate.outputPerMillion
             + (Double(cacheReadTokens) / 1_000_000) * cacheReadRate
-            + (Double(cacheWriteTokens) / 1_000_000) * rate.inputPerMillion * cacheWriteMultiplier
+            + (Double(cacheWriteTokens - write1h) / 1_000_000) * rate.inputPerMillion * cacheWriteMultiplier
+            + (Double(write1h) / 1_000_000) * rate.inputPerMillion * cacheWrite1hMultiplier
     }
 }

@@ -61,12 +61,13 @@ public enum ClaudeUsageHistoryScanner {
         let cutoff = calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) ?? todayStart
 
         var buckets: [String: Bucket] = [:]
-        func record(timestamp: Date, model: String, input: Int, cacheRead: Int, cacheWrite: Int, output: Int) {
+        func record(_ turn: Turn) {
+            let (timestamp, model, input, cacheRead, cacheWrite, output) = (turn.timestamp, turn.model, turn.input, turn.cacheRead, turn.cacheWrite, turn.output)
             guard timestamp >= cutoff else { return }
             let dayStart = calendar.startOfDay(for: timestamp)
             let key = dayKey(dayStart)
             let (_, approximate) = ModelPricing.rate(provider: .claude, model: model)
-            let cost = ModelPricing.costUSD(provider: .claude, model: model, inputTokens: input, cacheReadTokens: cacheRead, cacheWriteTokens: cacheWrite, outputTokens: output)
+            let cost = ModelPricing.costUSD(provider: .claude, model: model, inputTokens: input, cacheReadTokens: cacheRead, cacheWriteTokens: cacheWrite, cacheWrite1hTokens: turn.cacheWrite1h, outputTokens: output)
             var bucket = buckets[key] ?? Bucket(date: dayStart)
             bucket.input += input
             bucket.cacheRead += cacheRead
@@ -81,14 +82,20 @@ public enum ClaudeUsageHistoryScanner {
             buckets[key] = bucket
         }
 
+        // Claude Code writes one transcript line per content block of a response (thinking,
+        // text, each tool call), and every one repeats that response's full `usage` -- summing
+        // them all counted real usage ~1.8x over. A resumed session also copies earlier messages
+        // into its new file. So count each (message id, request id) once, across all files.
+        var seenResponses = Set<String>()
         for path in transcriptPaths(roots: claudeRoots, modifiedSince: cutoff) {
             for turn in claudeCodeTurns(inFileAtPath: path) where turn.timestamp >= cutoff {
-                record(timestamp: turn.timestamp, model: turn.model, input: turn.input, cacheRead: turn.cacheRead, cacheWrite: turn.cacheWrite, output: turn.output)
+                if let key = turn.responseKey, !seenResponses.insert(key).inserted { continue }
+                record(turn)
             }
         }
         for path in transcriptPaths(roots: ompRoots, modifiedSince: cutoff) {
             for turn in ompTurns(inFileAtPath: path) where turn.timestamp >= cutoff {
-                record(timestamp: turn.timestamp, model: turn.model, input: turn.input, cacheRead: turn.cacheRead, cacheWrite: turn.cacheWrite, output: turn.output)
+                record(turn)
             }
         }
 
@@ -135,6 +142,11 @@ public enum ClaudeUsageHistoryScanner {
         let timestamp: Date
         let model: String
         let input: Int, cacheRead: Int, cacheWrite: Int, output: Int
+        /// The part of `cacheWrite` written with a 1-hour TTL (priced at 2x input, not 1.25x).
+        var cacheWrite1h = 0
+        /// Identifies the API response this turn's usage belongs to, for de-duplication; `nil`
+        /// when the line carries no message id (counted as-is, never collapsed together).
+        var responseKey: String? = nil
     }
 
 
@@ -170,22 +182,35 @@ public enum ClaudeUsageHistoryScanner {
     private struct ClaudeCodeLine: Decodable {
         struct Message: Decodable {
             struct Usage: Decodable {
+                struct CacheCreation: Decodable {
+                    let ephemeral5m: Int?
+                    let ephemeral1h: Int?
+                    enum CodingKeys: String, CodingKey {
+                        case ephemeral5m = "ephemeral_5m_input_tokens"
+                        case ephemeral1h = "ephemeral_1h_input_tokens"
+                    }
+                }
                 let inputTokens: Int?
                 let cacheReadInputTokens: Int?
                 let cacheCreationInputTokens: Int?
+                /// Per-TTL split of the cache writes, in current Claude Code logs.
+                let cacheCreation: CacheCreation?
                 let outputTokens: Int?
                 enum CodingKeys: String, CodingKey {
                     case inputTokens = "input_tokens"
                     case cacheReadInputTokens = "cache_read_input_tokens"
                     case cacheCreationInputTokens = "cache_creation_input_tokens"
+                    case cacheCreation = "cache_creation"
                     case outputTokens = "output_tokens"
                 }
             }
+            let id: String?
             let usage: Usage?
             let model: String?
         }
         let type: String?
         let timestamp: String?
+        let requestId: String?
         let message: Message?
     }
 
@@ -197,10 +222,14 @@ public enum ClaudeUsageHistoryScanner {
             guard entry.type == "assistant", let usage = entry.message?.usage, let timestampString = entry.timestamp,
                   let timestamp = FlexibleISO8601.parse(timestampString)
             else { continue }
+            let write1h = usage.cacheCreation?.ephemeral1h ?? 0
+            let splitTotal = (usage.cacheCreation?.ephemeral5m ?? 0) + write1h
             turns.append(Turn(
                 timestamp: timestamp, model: entry.message?.model ?? "",
                 input: usage.inputTokens ?? 0, cacheRead: usage.cacheReadInputTokens ?? 0,
-                cacheWrite: usage.cacheCreationInputTokens ?? 0, output: usage.outputTokens ?? 0
+                cacheWrite: usage.cacheCreationInputTokens ?? splitTotal, output: usage.outputTokens ?? 0,
+                cacheWrite1h: write1h,
+                responseKey: entry.message?.id.map { "\($0)|\(entry.requestId ?? "")" }
             ))
         }
         return turns

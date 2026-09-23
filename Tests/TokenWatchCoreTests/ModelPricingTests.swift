@@ -49,6 +49,12 @@ final class ModelPricingTests: XCTestCase {
         XCTAssertEqual(cost, 2 + 10 + 0.2 + 2.5, accuracy: 0.0001)
     }
 
+    func testOneHourCacheWritesCostTwiceInputRate() {
+        // 3M written, 2M of it with a 1-hour TTL: 1M x $2.5/M (5-minute) + 2M x $4/M (1-hour).
+        let cost = ModelPricing.costUSD(provider: .claude, model: "claude-sonnet-5", inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 3_000_000, cacheWrite1hTokens: 2_000_000, outputTokens: 0)
+        XCTAssertEqual(cost, 2.5 + 8, accuracy: 0.0001)
+    }
+
     func testCostUSDIsZeroForZeroTokens() {
         let cost = ModelPricing.costUSD(provider: .claude, model: "claude-sonnet-5", inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0)
         XCTAssertEqual(cost, 0)
