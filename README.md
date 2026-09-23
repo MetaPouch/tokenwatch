@@ -118,7 +118,8 @@ A cross-provider **Total Spend** card sits at the top when Settings' **Show Tota
 and anything on this Mac has local activity in the last 7 days, via a 30-day scan shared with the
 per-provider spend rows below it (one scan, cached). It totals every source with history --
 Claude and Codex from their CLIs, every other coding agent's local logs (below), Cursor's account
-usage, and **Other** for providers TokenWatch has no card for -- whether or not that provider's
+usage, a named slice each for Devin, fx and Muse Code (which bill through their own services), and
+**Other** for model providers TokenWatch has no card for -- whether or not that provider's
 card is enabled: it's what was spent, not just what's tracked. The title is a
 pull-down for **Cost** / **Cost per MTok** / **Tokens**; a **Today** / **Yesterday** / **30 Days**
 segmented toggle sits alongside it. The donut's segments use each provider's real brand color
@@ -163,9 +164,9 @@ it's billed through:
 | GitHub Copilot CLI | `~/.copilot/session-store.db` | Copilot |
 | Grok CLI | `~/.grok/logs/unified.jsonl` (and `$GROK_HOME`) | Grok |
 | Antigravity CLI | `~/.gemini/antigravity-cli/brain/*/…/transcript_full.jsonl` | Antigravity |
-| Devin CLI | `~/.local/share/devin/cli/sessions.db` | Other |
-| fx | `~/.fx/sessions/*/events.jsonl` | Other |
-| Muse Code | `~/.local/share/muse/sessions/**/session.jsonl` | Other |
+| Devin CLI | `~/.local/share/devin/cli/sessions.db` | Devin (its own slice) |
+| fx | `~/.fx/sessions/*/events.jsonl` | fx (its own slice) |
+| Muse Code | `~/.local/share/muse/sessions/**/session.jsonl` | Muse Code (its own slice) |
 
 (`~/.local/share` follows `XDG_DATA_HOME`.) Databases are opened read-only while the agent may be
 using them. None of these formats is a public contract the way Claude Code's and Codex's are, so

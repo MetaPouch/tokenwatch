@@ -322,10 +322,13 @@ enum BrandColor {
         }
     }
 
-    /// A provider's color, or a neutral gray for "Other".
+    /// A provider's color, a distinct hue per billing service, or a neutral gray for "Other".
     static func forSource(_ source: SpendSource) -> Color {
         switch source {
         case let .provider(provider): return forProvider(provider)
+        case .service(.devin): return Color(red: 0.157, green: 0.741, blue: 0.804) // cyan
+        case .service(.fx): return Color(red: 0.925, green: 0.314, blue: 0.557) // pink
+        case .service(.muse): return Color(red: 0.949, green: 0.749, blue: 0.192) // amber
         case .other: return Color(white: 0.55)
         }
     }

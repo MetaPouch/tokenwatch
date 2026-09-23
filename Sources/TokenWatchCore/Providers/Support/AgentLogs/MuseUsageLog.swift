@@ -7,7 +7,7 @@ import Foundation
 /// `payload_type`, the `payload` -- and a run's `model_completed` event carries the call's usage;
 /// `input_tokens` includes cached tokens, as with Codex. A child run is mirrored into both its own
 /// and its parent's log, so a call counts once per run record id. Billed by Meta, which TokenWatch
-/// has no card for: Other.
+/// has no card for: its own `BillingService` slice.
 enum MuseUsageLog {
     static func turns(sessionsDirectory: String, modifiedSince cutoff: Date) -> [LocalUsageTurn] {
         guard !sessionsDirectory.isEmpty else { return [] }
@@ -58,7 +58,7 @@ enum MuseUsageLog {
             guard input + cacheWrite + output > 0 else { return nil }
             let costMicros = LooseJSON.int(usage["cost_micros"])
             return Record(id: entry.id, turn: LocalUsageTurn(
-                timestamp: entry.timestamp, source: .other, model: entry.model ?? sessionModel ?? "unknown",
+                timestamp: entry.timestamp, source: .service(.muse), model: entry.model ?? sessionModel ?? "unknown",
                 input: input - cached, cacheRead: cached, cacheWrite: cacheWrite, output: output,
                 costUSD: costMicros > 0 ? Double(costMicros) / 1_000_000 : nil
             ))

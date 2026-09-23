@@ -3,7 +3,7 @@ import Foundation
 /// fx's sessions: `~/.fx/sessions/<id>/events.jsonl`, whose `usage_checkpointed` events carry
 /// *cumulative* per-model totals and cost for the session -- consecutive checkpoints are diffed
 /// into per-call deltas. fx fronts OpenAI-style APIs: `input_tokens` includes cache reads. Billed by
-/// fx, which TokenWatch has no card for: Other.
+/// fx, which TokenWatch has no card for: its own `BillingService` slice.
 enum FxUsageLog {
     static func turns(sessionsDirectory: String, modifiedSince cutoff: Date) -> [LocalUsageTurn] {
         guard !sessionsDirectory.isEmpty else { return [] }
@@ -41,7 +41,7 @@ enum FxUsageLog {
                 let cost = max(0, current.cost - before.cost)
                 guard let timestamp, input + cacheRead + cacheWrite + output > 0 else { continue }
                 turns.append(LocalUsageTurn(
-                    timestamp: timestamp, source: .other, model: model,
+                    timestamp: timestamp, source: .service(.fx), model: model,
                     input: max(0, input - cacheRead), cacheRead: min(cacheRead, input), cacheWrite: cacheWrite, output: output,
                     costUSD: cost > 0 ? cost : nil
                 ))

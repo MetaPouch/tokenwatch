@@ -5,7 +5,7 @@ import Foundation
 /// messages carry the request's `metadata.metrics`. `input_tokens` excludes cache reads, which
 /// have their own field. Devin writes each assistant message twice -- the streamed node and its
 /// committed copy share a `request_id` -- so each request counts once. Billed by Cognition, which
-/// TokenWatch has no card for: Other.
+/// TokenWatch has no card for: its own `BillingService` slice.
 enum DevinUsageLog {
     static func turns(databasePath: String, modifiedSince cutoff: Date) -> [LocalUsageTurn] {
         guard let database = TranscriptFiles.database(atPath: databasePath) else { return [] }
@@ -27,7 +27,7 @@ enum DevinUsageLog {
                 guard let timestamp else { return nil }
                 let model = LooseJSON.string(metadata["generation_model"]) ?? SQLiteReader.text(statement, 2) ?? "unknown"
                 let turn = LocalUsageTurn(
-                    timestamp: timestamp, source: .other, model: model,
+                    timestamp: timestamp, source: .service(.devin), model: model,
                     input: input, cacheRead: cacheRead, cacheWrite: cacheWrite, output: output, costUSD: nil
                 )
                 return (LooseJSON.string(metadata["request_id"]) ?? LooseJSON.string(message["message_id"]), turn)

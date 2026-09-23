@@ -73,7 +73,8 @@ public struct LocalUsageLocations: Sendable {
 /// - omp/pi and OpenCode by the provider each turn was served by (`HarnessUsageLog.source`) --
 ///   one session can switch providers;
 /// - the Copilot CLI to Copilot, the Grok CLI to Grok, the Antigravity CLI to Antigravity;
-/// - Devin, fx, and Muse Code, which bill through services TokenWatch has no card for, to Other.
+/// - Devin, fx, and Muse Code, which bill through services TokenWatch has no card for, to their own
+///   `BillingService`.
 ///
 /// Every source is read defensively: a missing directory or database, or a record that doesn't
 /// parse, contributes nothing. Parsed files and databases are cached by size and modification date.

@@ -128,7 +128,7 @@ final class AgentUsageLogsTests: XCTestCase {
             "INSERT INTO message_nodes VALUES (1, 's', \(sqlString(String(format: message, "a"))), \(Int(june15.timeIntervalSince1970)))",
             "INSERT INTO message_nodes VALUES (2, 's', \(sqlString(String(format: message, "b"))), \(Int(june15.timeIntervalSince1970)))",
         ])
-        let day = others(LocalUsageLocations(devinDatabase: path("devin/sessions.db")))[.other]
+        let day = others(LocalUsageLocations(devinDatabase: path("devin/sessions.db")))[.service(.devin)]
         XCTAssertEqual(day?.inputTokens, 100)
         XCTAssertEqual(day?.cacheReadTokens, 1000)
     }
@@ -168,7 +168,7 @@ final class AgentUsageLogsTests: XCTestCase {
             #"{"timestamp_ms":\#(ms(june15)),"kind":"usage_checkpointed","payload":{"usage":{"models":[{"model":"gpt-6-sol","input_tokens":\#(input),"cache_read_tokens":\#(cached),"output_tokens":0,"total_cost":\#(cost)}]}}}"#
         }
         write("fx/s1/events.jsonl", [checkpoint(100, 40, 0.1), checkpoint(250, 100, 0.25)])
-        let day = others(LocalUsageLocations(fxSessions: path("fx")))[.other]
+        let day = others(LocalUsageLocations(fxSessions: path("fx")))[.service(.fx)]
         XCTAssertEqual(day?.inputTokens, 150) // 250 total, 100 of it cached
         XCTAssertEqual(day?.cacheReadTokens, 100)
         XCTAssertEqual(day?.estimatedCostUSD ?? -1, 0.25, accuracy: 1e-9)
@@ -181,7 +181,7 @@ final class AgentUsageLogsTests: XCTestCase {
         write("muse/2026/06/15/parent/session.jsonl", [call])
         write("muse/2026/06/15/parent/child/session.jsonl", [call])
         write("muse/.msp-view-v1/2026/06/15/x/session.jsonl", [call.replacingOccurrences(of: "run-7", with: "run-8")])
-        let day = others(LocalUsageLocations(museSessions: path("muse")))[.other]
+        let day = others(LocalUsageLocations(museSessions: path("muse")))[.service(.muse)]
         XCTAssertEqual(day?.inputTokens, 200)
         XCTAssertEqual(day?.cacheReadTokens, 300)
         XCTAssertEqual(day?.estimatedCostUSD ?? -1, 0.0025, accuracy: 1e-12)
