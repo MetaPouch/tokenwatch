@@ -3,14 +3,17 @@ import TokenWatchCore
 
 /// Estimated daily token/cost history from local Claude session logs (both the real `claude` CLI
 /// and a coding-agent harness's own transcripts -- see `ClaudeUsageHistoryScanner`), priced at
-/// API list rates (`ModelPricing`). Scoped to Claude only and a 7-day window: a meaningful
-/// trailing-week view without the full-file-scan cost of a longer one -- a machine with a long
-/// session history can take several real seconds to scan (confirmed during development), so this
-/// always runs off the main actor and shows a loading state rather than blocking the tab.
+/// API list rates (`ModelPricing`). Scoped to Claude only and a 7-day window sliced from the
+/// shared 30-day `ClaudeSpendHistoryStore` -- reusing that cache instead of running its own scan
+/// means switching to the Usage tab is instant after the first load, not a fresh multi-second
+/// disk scan (and a loading spinner) every single time.
 struct UsageHistoryView: View {
-    @State private var days: [ClaudeUsageDay] = []
-    @State private var isLoading = true
+    @ObservedObject var store: ClaudeSpendHistoryStore
     @State private var showCost = true
+
+    private var days: [ClaudeUsageDay] {
+        Array(store.days.suffix(7))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -27,7 +30,7 @@ struct UsageHistoryView: View {
                 .frame(width: 120)
             }
 
-            if isLoading {
+            if store.isLoading {
                 HStack {
                     Spacer()
                     ProgressView().controlSize(.small)
@@ -48,18 +51,7 @@ struct UsageHistoryView: View {
         }
         .padding(10)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
-        .task {
-            // App Nap can throttle this app's background work far more than a QoS bump alone
-            // fixes (see TotalSpendCard) -- explicitly opt out since this gates visible UI
-            // content the user is actively waiting on.
-            let result = await withBackgroundActivity(reason: "Scanning local Claude usage history") {
-                await Task.detached(priority: .userInitiated) {
-                    ClaudeUsageHistoryScanner.dailyUsage(days: 7)
-                }.value
-            }
-            days = result
-            isLoading = false
-        }
+        .task { store.loadIfNeeded() }
     }
 
     private var chart: some View {

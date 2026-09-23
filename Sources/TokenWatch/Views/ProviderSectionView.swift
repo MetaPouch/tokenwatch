@@ -14,8 +14,16 @@ struct ProviderSectionView: View {
     @ObservedObject var displayStore: MeterDisplayStore
     let refreshIntervalSeconds: Int
     var timeFormat: TimeFormatPreference = .auto
-    /// Non-nil only for providers with a local spend-history scanner (today: Claude only). The
-    /// inline Today/Yesterday spend row is simply absent for every other provider.
+    /// Which tab this card is rendering for -- filters `snapshot.lines` to just that category
+    /// (see `MetricLine.category`) so quota bars only show under Limits and spend/cache-activity
+    /// info only shows under Usage, instead of every provider mixing both on one card.
+    let category: MetricCategory
+    /// Whether to show the drag handle and accept reordering -- Limits owns provider order;
+    /// Usage renders the same card type read-only, so its handle would do nothing if shown.
+    var isDraggable: Bool = true
+    /// Non-nil only for providers with a local spend-history scanner (today: Claude only), and
+    /// only rendered when `category == .usage`. The inline Today/Yesterday spend row is simply
+    /// absent for every other provider or on the Limits card.
     var spendHistoryStore: ClaudeSpendHistoryStore?
     var onRefresh: () -> Void
     var onHideProvider: () -> Void
@@ -25,13 +33,15 @@ struct ProviderSectionView: View {
     @State private var isExpanded: Bool
     @State private var isSpendRowExpanded: Bool
 
-    init(provider: ProviderID, snapshot: ProviderSnapshot?, layoutStore: LayoutStore, displayStore: MeterDisplayStore, refreshIntervalSeconds: Int, timeFormat: TimeFormatPreference = .auto, spendHistoryStore: ClaudeSpendHistoryStore? = nil, onRefresh: @escaping () -> Void, onHideProvider: @escaping () -> Void, onCustomizeProvider: @escaping () -> Void) {
+    init(provider: ProviderID, snapshot: ProviderSnapshot?, layoutStore: LayoutStore, displayStore: MeterDisplayStore, refreshIntervalSeconds: Int, timeFormat: TimeFormatPreference = .auto, category: MetricCategory, isDraggable: Bool = true, spendHistoryStore: ClaudeSpendHistoryStore? = nil, onRefresh: @escaping () -> Void, onHideProvider: @escaping () -> Void, onCustomizeProvider: @escaping () -> Void) {
         self.provider = provider
         self.snapshot = snapshot
         self.layoutStore = layoutStore
         self.displayStore = displayStore
         self.refreshIntervalSeconds = refreshIntervalSeconds
         self.timeFormat = timeFormat
+        self.category = category
+        self.isDraggable = isDraggable
         self.spendHistoryStore = spendHistoryStore
         self.onRefresh = onRefresh
         self.onHideProvider = onHideProvider
@@ -40,10 +50,24 @@ struct ProviderSectionView: View {
         _isSpendRowExpanded = State(initialValue: UserDefaults.standard.object(forKey: "spendRowExpanded.\(provider.rawValue)") as? Bool ?? true)
     }
 
+    /// Whether this provider has anything at all to show for `category` -- lets a caller skip
+    /// rendering an empty (header-only) card, e.g. most providers have no `.usage` lines today.
+    static func hasContent(snapshot: ProviderSnapshot?, category: MetricCategory, layoutStore: LayoutStore, provider: ProviderID, spendHistoryStore: ClaudeSpendHistoryStore? = nil) -> Bool {
+        if category == .usage, let spendHistoryStore, !spendHistoryStore.isLoading {
+            let hasSpend = SpendAggregator.amount(for: .today, days: spendHistoryStore.days) > 0
+                || SpendAggregator.amount(for: .yesterday, days: spendHistoryStore.days) > 0
+            if hasSpend { return true }
+        }
+        guard let snapshot else { return false }
+        return snapshot.lines.contains { line in
+            line.category == category && !layoutStore.layout(for: provider, metricID: line.id).hidden
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Density.sectionSpacing(density)) {
             header
-            if let spendHistoryStore, !spendHistoryStore.isLoading {
+            if category == .usage, let spendHistoryStore, !spendHistoryStore.isLoading {
                 inlineSpendRow(store: spendHistoryStore)
             }
             if let snapshot {
@@ -82,9 +106,11 @@ struct ProviderSectionView: View {
 
     private var header: some View {
         HStack(spacing: 6) {
-            Image(systemName: "line.3.horizontal")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+            if isDraggable {
+                Image(systemName: "line.3.horizontal")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
             ProviderIcon(provider: provider, size: 16)
             Text(provider.displayName).font(.subheadline.weight(.semibold))
             if let plan = snapshot?.plan, !plan.isEmpty {
@@ -119,6 +145,7 @@ struct ProviderSectionView: View {
             }
         }
     }
+
 
     private func toggleExpanded() {
         isExpanded.toggle()
@@ -193,6 +220,7 @@ struct ProviderSectionView: View {
 
     private func filteredLines(snapshot: ProviderSnapshot, tier: MetricVisibilityTier) -> [MetricLine] {
         snapshot.lines.filter { line in
+            guard line.category == category else { return false }
             let layout = layoutStore.layout(for: provider, metricID: line.id)
             return !layout.hidden && layout.tier == tier
         }

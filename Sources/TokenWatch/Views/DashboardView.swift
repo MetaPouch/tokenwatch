@@ -29,12 +29,12 @@ struct DashboardView: View {
 
     @State private var currentScreen: DashboardScreen = .dashboard
     @State private var customizeDetailProvider: ProviderID?
-    @State private var selectedTab: DashboardTab = .provider
+    @State private var selectedTab: DashboardTab = .limits
     @State private var screenHeights: [DashboardScreen: CGFloat] = [:]
     @State private var draggingProvider: ProviderID?
 
     private enum DashboardTab: Hashable {
-        case provider, usage
+        case limits, usage
     }
 
     private let topBarHeight: CGFloat = 44
@@ -129,10 +129,10 @@ struct DashboardView: View {
                     tabSwitcher
                     Divider()
                     switch selectedTab {
-                    case .provider:
-                        providerList
+                    case .limits:
+                        limitsList
                     case .usage:
-                        UsageTabView(usageService: usageService, displayStore: displayStore, maxContentHeight: maxContentHeight)
+                        usageList
                     }
                 }
             }
@@ -320,7 +320,7 @@ struct DashboardView: View {
 
     private var tabSwitcher: some View {
         Picker("", selection: $selectedTab) {
-            Text("Provider").tag(DashboardTab.provider)
+            Text("Limits").tag(DashboardTab.limits)
             Text("Usage").tag(DashboardTab.usage)
         }
         .pickerStyle(.segmented)
@@ -334,10 +334,13 @@ struct DashboardView: View {
         layoutStore.orderedProviders(enabled: enablementStore.enabledProviders)
     }
 
-    private var providerList: some View {
-        MeasuredScrollView(maxHeight: maxContentHeight, refreshID: "\(orderedEnabledProviders.count)-\(dataStore.snapshots.count)") {
+    /// Every enabled provider's quota bars (session, weekly, credit balance/remaining) -- "how
+    /// close am I to a wall" -- plus any additional locally discovered account (Claude, Codex)
+    /// for the same question about a second login. Spend, cache temperature, and cost history
+    /// live on the Usage tab instead; see `MetricLine.category`.
+    private var limitsList: some View {
+        MeasuredScrollView(maxHeight: maxContentHeight, refreshID: "\(orderedEnabledProviders.count)-\(dataStore.snapshots.count)-\(usageService.accounts.count)") {
             VStack(alignment: .leading, spacing: 10) {
-                TotalSpendCard(dataStore: dataStore, enablementStore: enablementStore, displayStore: displayStore, spendHistoryStore: claudeSpendHistoryStore)
                 ForEach(orderedEnabledProviders) { provider in
                     ProviderSectionView(
                         provider: provider,
@@ -346,7 +349,7 @@ struct DashboardView: View {
                         displayStore: displayStore,
                         refreshIntervalSeconds: enablementStore.refreshIntervalSeconds,
                         timeFormat: appearanceStore.timeFormat,
-                        spendHistoryStore: provider == .claude ? claudeSpendHistoryStore : nil,
+                        category: .limits,
                         onRefresh: { refreshScheduler.refreshProvider(provider) },
                         onHideProvider: { enablementStore.setEnabled(provider, false) },
                         onCustomizeProvider: { customizeDetailProvider = provider; currentScreen = .customize }
@@ -363,9 +366,95 @@ struct DashboardView: View {
                         layoutStore: layoutStore
                     ))
                 }
+                ForEach(additionalAccounts) { account in
+                    additionalAccountCard(account)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
+        }
+        .task {
+            // Cheap cache read first (no network wait), then look for additional local accounts
+            // -- the only part of this tab that makes a fresh call.
+            usageService.refreshDefaultAccountsFromCache()
+            await usageService.refreshAdditionalAccounts()
+        }
+    }
+
+    /// Every locally discovered login beyond each provider's default one (currently Claude and
+    /// Codex, via a second `CLAUDE_CONFIG_DIR`/`CODEX_HOME` profile) -- `ProviderAccount.lines`
+    /// is quota-meter-only by construction, so no category filtering is needed here.
+    private var additionalAccounts: [ProviderAccount] {
+        usageService.accounts.filter { !$0.isDefault }
+    }
+
+    private func additionalAccountCard(_ account: ProviderAccount) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                ProviderIcon(provider: account.providerID, size: 16)
+                Text(account.providerID.displayName).font(.subheadline.weight(.semibold))
+                if !account.label.isEmpty {
+                    Text(account.label)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: 0)
+            }
+            ProviderCardView(snapshot: ProviderSnapshot(
+                provider: account.providerID,
+                plan: nil,
+                lines: account.lines,
+                fetchedAt: account.fetchedAt,
+                error: account.error
+            ), displayStore: displayStore)
+        }
+        .padding(Density.cardPadding(appearanceStore.density))
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// Spend, cache activity, and 7-day cost history -- "what have I actually spent or done,"
+    /// never a quota bar (those live on Limits; see `MetricLine.category`). Only a provider with
+    /// something to show here gets a card -- most providers have no usage-category data today.
+    private var usageList: some View {
+        MeasuredScrollView(maxHeight: maxContentHeight, refreshID: "\(usageProviders)-\(claudeSpendHistoryStore.days.count)") {
+            VStack(alignment: .leading, spacing: 10) {
+                TotalSpendCard(dataStore: dataStore, enablementStore: enablementStore, displayStore: displayStore, spendHistoryStore: claudeSpendHistoryStore)
+                ForEach(usageProviders) { provider in
+                    ProviderSectionView(
+                        provider: provider,
+                        snapshot: dataStore.snapshot(for: provider),
+                        layoutStore: layoutStore,
+                        displayStore: displayStore,
+                        refreshIntervalSeconds: enablementStore.refreshIntervalSeconds,
+                        timeFormat: appearanceStore.timeFormat,
+                        category: .usage,
+                        isDraggable: false,
+                        spendHistoryStore: provider == .claude ? claudeSpendHistoryStore : nil,
+                        onRefresh: { refreshScheduler.refreshProvider(provider) },
+                        onHideProvider: { enablementStore.setEnabled(provider, false) },
+                        onCustomizeProvider: { customizeDetailProvider = provider; currentScreen = .customize }
+                    )
+                }
+                UsageHistoryView(store: claudeSpendHistoryStore)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+        }
+    }
+
+    /// Enabled providers with at least one `.usage`-category line to show (cache temperature,
+    /// spend values, or local spend history) -- skips a header-only card for the rest.
+    private var usageProviders: [ProviderID] {
+        orderedEnabledProviders.filter { provider in
+            ProviderSectionView.hasContent(
+                snapshot: dataStore.snapshot(for: provider),
+                category: .usage,
+                layoutStore: layoutStore,
+                provider: provider,
+                spendHistoryStore: provider == .claude ? claudeSpendHistoryStore : nil
+            )
         }
     }
 

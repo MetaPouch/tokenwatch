@@ -16,6 +16,25 @@ final class MetricLineTests: XCTestCase {
         XCTAssertNil(badge.progressRatio)
     }
 
+    func testCategoryClassifiesEachCaseByRealWorldUsage() {
+        // .progress is always a limit -- it's a used-vs-limit ratio by construction.
+        XCTAssertEqual(MetricLine.progress(id: "session", label: "S", used: 1, limit: 100, format: .percent, resetsAt: nil, periodDurationMs: nil).category, .limits)
+
+        // .badge (cache temperature, today's only real user) is activity info, not a quota.
+        XCTAssertEqual(MetricLine.badge(id: "cacheTemperature", text: "warm", tone: .neutral).category, .usage)
+
+        // .chart and .text default to usage (history/informational, never a hard quota).
+        XCTAssertEqual(MetricLine.chart(id: "trend", label: "Trend", points: []).category, .usage)
+        XCTAssertEqual(MetricLine.text(id: "note", value: "hi").category, .usage)
+
+        // .values splits on id: remaining-capacity ids read as limits, everything else (money
+        // already spent) as usage -- covers every real provider mapper's id today.
+        XCTAssertEqual(MetricLine.values(id: "credits", label: "Credit balance", values: []).category, .limits)
+        XCTAssertEqual(MetricLine.values(id: "balance", label: "Balance", values: []).category, .limits)
+        XCTAssertEqual(MetricLine.values(id: "spend", label: "Spend", values: []).category, .usage)
+        XCTAssertEqual(MetricLine.values(id: "onDemand", label: "On-demand usage", values: []).category, .usage)
+    }
+
     func testMetricLineRoundTripsThroughJSON() throws {
         let lines: [MetricLine] = [
             .progress(id: "session", label: "Session", used: 42, limit: 100, format: .percent, resetsAt: Date(timeIntervalSince1970: 1_700_000_000), periodDurationMs: 18_000_000),

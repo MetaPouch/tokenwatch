@@ -23,9 +23,9 @@ nothing relayed off your device.
 | Grok | `~/.grok/auth.json` | Credit usage percent |
 | OpenCode Go | API key | Rolling + weekly usage percent |
 
-Single account per provider on the menu bar and per-provider dashboard tab. The Usage tab (below)
-additionally discovers and shows every local Claude/Codex login it can find, not just the
-default one. Everything runs locally: no telemetry, no data leaves your device.
+Single account per provider on the menu bar and the Limits tab. The Limits tab additionally
+discovers and shows every local Claude/Codex login it can find, not just the default one.
+Everything runs locally: no telemetry, no data leaves your device.
 
 ## Menu bar behavior
 
@@ -51,10 +51,24 @@ yet drops out of the strip entirely rather than showing a placeholder.
 One popover, three screens that slide horizontally instead of stacking as separate windows: the
 dashboard (default), Customize, and Settings all share one fixed top bar and footer, and the
 popover grows or shrinks to fit whichever screen is showing instead of staying one fixed size
-with an internal scrollbar for short content. Click the status item to open it: every enabled
-provider stacked in one scrollable list (in whatever order Customize has them in, drag any
-provider's header to reorder right there), instead of a one-at-a-time picker. Provider logos are
-real, from [Lobe Icons](https://github.com/lobehub/lobe-icons) -- see
+with an internal scrollbar for short content. Click the status item to open it. The dashboard
+screen itself has two tabs, switched via the segmented control at the top: **Limits** (default)
+answers "how close am I to a wall," **Usage** answers "what have I actually spent or done" --
+every metric belongs under exactly one of the two (see `MetricLine.category`), so nothing shows
+up mixed together on the same card the way it used to.
+
+A dismissible banner the first time providers are found ("Found N providers on this Mac") points
+at Customize; it's gone for good once dismissed, on this Mac or any other install sharing the
+same config. The footer shows the installed version and a live "Next update in Xs" countdown to
+the next background refresh (click it to refresh immediately); the ⋯ menu on the right opens
+Customize or Settings, shares a screenshot of any visible provider, opens the standard About
+panel, or quits.
+
+## Limits tab
+
+Every enabled provider's quota bars stacked in one scrollable list (in whatever order Customize
+has them in, drag any provider's header to reorder right there), instead of a one-at-a-time
+picker. Provider logos are real, from [Lobe Icons](https://github.com/lobehub/lobe-icons) -- see
 [Sources/TokenWatch/Icons/NOTICE.md](Sources/TokenWatch/Icons/NOTICE.md) for license and
 per-icon sourcing.
 
@@ -71,18 +85,36 @@ that card to a PNG and copies it to the clipboard) and hiding the whole provider
 whose last successful fetch is more than two refresh cycles old gets a quiet "Outdated" tag next
 to its name.
 
-A cross-provider **Total Spend** card sits above the list when Settings' **Show Total Spend** is
-on and at least one enabled provider has local spend data (today: Claude, via the 30-day scan
-below). The title is a pull-down for **Cost** / **Cost per MTok** / **Tokens**; a
+Any additional locally discovered account (Claude, Codex only, via a second
+`CLAUDE_CONFIG_DIR`/`CODEX_HOME` profile -- see `ClaudeAccountDiscovery`/`CodexAccountDiscovery`)
+shows as its own card below the main list -- quota bars only, the same read-only visibility the
+old separate Usage-tab account list used to provide, just filed under Limits now since that's
+what it's showing. Discovery is file-based only: it finds a profile whose login wrote its own
+`.credentials.json`/`auth.json`, not one that only ever reached the macOS Keychain under a
+profile-specific service name. A found-but-lapsed credential shows why (self-heals on next CLI
+run, or needs a real re-login) rather than a raw HTTP error. This is read-only visibility, not
+account switching -- TokenWatch doesn't change which login your `claude`/`codex` CLI actually
+uses.
+
+## Usage tab
+
+Spend, cache activity, and cost history -- never a quota bar, those are all on Limits. Only a
+provider with something to actually show here gets a card; most providers have none today (see
+`MetricLine.category`).
+
+A cross-provider **Total Spend** card sits at the top when Settings' **Show Total Spend** is on
+and at least one enabled provider has local spend data (today: Claude, via a 30-day scan shared
+with the per-provider spend row below it and the cost history chart at the bottom -- one scan,
+cached, not three). The title is a pull-down for **Cost** / **Cost per MTok** / **Tokens**; a
 **Today** / **Yesterday** / **30 Days** segmented toggle sits alongside it. The donut's segments
 use each provider's real brand color (Anthropic's terracotta, OpenAI's teal-green, and so on);
 hover the center for the exact figure instead of the rounded one; hover a provider's legend row
 for a ranked per-model spend breakdown (name, cost, share, tokens); the share icon copies a PNG
-of the card to your clipboard, and the ⓘ names which providers feed the total. Any provider with
-its own local spend history (today: Claude) also shows a **Today/Yesterday** line directly on
-its own card, chevron-collapsible to that provider's own per-model breakdown -- the same
-figures as the Total Spend card's hover popover, without needing to open it.
+of the card to your clipboard, and the ⓘ names which providers feed the total.
 
+Any provider with its own local spend history (today: Claude) shows a **Today/Yesterday** line
+directly on its own card, chevron-collapsible to that provider's own per-model breakdown -- the
+same figures as the Total Spend card's hover popover, without needing to open it.
 
 Claude's and Codex's cards also list a compact row per locally active session (touched within
 the last 5 hours) -- a flame or snowflake, the project name, and a hit-ratio detail -- not just
@@ -99,13 +131,16 @@ on that harness's own undocumented local session-log format, not a stable public
 way Claude Code's and Codex's are, so it's read defensively and fails soft if the format ever
 changes.
 
-A dismissible banner the first time providers are found ("Found N providers on this Mac") points
-at Customize; it's gone for good once dismissed, on this Mac or any other install sharing the
-same config.
-
-The footer shows the installed version and a live "Next update in Xs" countdown to the next
-background refresh (click it to refresh immediately); the ⋯ menu on the right opens Customize or
-Settings, shares a screenshot of any visible provider, opens the standard About panel, or quits.
+A daily Cost/Tokens bar chart for the last 7 days sits at the bottom, built by summing *every*
+turn's local session tokens (not just the newest, the way cache-temperature works) across local
+Claude session logs and pricing them at API list rates -- no Admin API key required. It shares
+its 30-day scan with the Total Spend card and each provider's inline spend row above, so it's
+instant after the first load instead of a fresh multi-second disk scan (and a loading spinner)
+every time you switch to this tab. The estimate is explicitly labeled as one: subscription usage
+isn't billed per token. Rates come from a small static table refreshed against LiteLLM's public,
+community-maintained price list roughly hourly (`PricingRefreshService`) -- a fetch failure or
+not having fetched yet falls straight through to the static table, so cost estimates work
+offline and on first launch too.
 
 ## Customize
 
@@ -148,34 +183,6 @@ the Carbon Event Manager -- no external dependency and no Input Monitoring permi
   notification permission the first time you turn one on; if you decline, Settings shows a
   warning with a link to System Settings.
 - **Refresh interval**, **Providers** -- unchanged.
-
-## Usage tab
-
-A second tab in the dashboard (next to the per-provider one), switched via the segmented control
-at the top: a consolidated list of quota meters across every locally discovered account for
-every enabled provider, instead of one provider at a time.
-
-- **Default accounts.** Whatever each provider's own dashboard tab already tracks, shown as a
-  card per provider -- no extra network call, it reuses the same poll.
-- **Additional accounts (Claude, Codex only).** A second (or third...) local login under a
-  different `CLAUDE_CONFIG_DIR`/`CODEX_HOME` profile directory shows as its own card, fetched
-  fresh when the tab appears. Discovery is file-based only: it finds a profile whose login wrote
-  its own `.credentials.json`/`auth.json`, not one that only ever reached the macOS Keychain
-  under a profile-specific service name. A found-but-lapsed credential shows why (self-heals on
-  next CLI run, or needs a real re-login) rather than a raw HTTP error. This is read-only
-  visibility, not account switching -- TokenWatch doesn't change which login your `claude`/`codex`
-  CLI actually uses.
-- **Cost history (Claude only, last 7 days).** A daily bar chart -- toggle Cost/Tokens -- built
-  by summing *every* turn's token usage (not just the newest, the way cache-temperature works)
-  across local Claude session logs, both the real `claude` CLI's transcripts and a coding-agent
-  harness's own (see above), and pricing them at API list rates. This can take several real
-  seconds on a machine with a long session history, so it always runs off the main thread and
-  shows its own loading state rather than blocking the tab. The estimate is explicitly labeled as
-  one: subscription usage isn't billed per token, this is "what the same work would cost on the
-  API." Rates come from a small static table refreshed against LiteLLM's public,
-  community-maintained price list roughly hourly (`PricingRefreshService`) -- a fetch failure or
-  not having fetched yet falls straight through to the static table, so cost estimates work
-  offline and on first launch too.
 
 ## Build & run
 

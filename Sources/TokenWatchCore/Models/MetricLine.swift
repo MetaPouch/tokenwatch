@@ -14,6 +14,12 @@ public enum BadgeTone: String, Sendable, Codable {
     case critical
 }
 
+/// Which dashboard tab a `MetricLine` belongs under -- see `MetricLine.category`.
+public enum MetricCategory: Sendable, Equatable {
+    case limits
+    case usage
+}
+
 /// One labeled numeric value inside a `.values` metric line.
 public struct MetricValue: Sendable, Equatable, Codable {
     public let number: Double
@@ -65,6 +71,24 @@ public enum MetricLine: Sendable, Identifiable, Equatable, Codable {
     public var progressRatio: Double? {
         guard case let .progress(_, _, used, limit, _, _, _) = self, limit > 0 else { return nil }
         return max(0, min(used / limit, 1))
+    }
+
+    /// Which dashboard tab a line belongs under: **Limits** answers "how close am I to a wall"
+    /// (quota bars, remaining credit/balance); **Usage** answers "what have I actually spent or
+    /// done" (cache temperature, spend figures, cost/token history). `.progress` is always a
+    /// limit by construction (it's a used-vs-limit ratio); `.badge` (cache temperature today) is
+    /// always usage/activity info, never a hard quota. `.values` is the one ambiguous case --
+    /// "credits"/"balance" read as remaining capacity (a limit), while every other id (e.g.
+    /// "spend", "onDemand") is money already spent (usage).
+    public var category: MetricCategory {
+        switch self {
+        case .progress: return .limits
+        case .badge: return .usage
+        case .chart: return .usage
+        case .text: return .usage
+        case .values(let id, _, _):
+            return ["credits", "balance"].contains(id) ? .limits : .usage
+        }
     }
 
 
