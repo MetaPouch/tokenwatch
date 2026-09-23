@@ -58,11 +58,11 @@ public struct ClaudeAuthStore: Sendable {
     public init() {}
 
     /// The freshest locally available credential across all three stores, or `nil` if none has
-    /// one.
-    public func resolvedCredential(homeDirectory: String = NSHomeDirectory()) -> ClaudeCredential? {
-        let candidates: [ClaudeCredential?] = [
-            Self.parse(ExternalKeychainReader.readString(service: Self.keychainService)),
-        ] + Self.credentialFiles(homeDirectory: homeDirectory).map { Self.parse(contentsOfFile: $0) }
+    /// one. The Keychain item is read without a prompt whenever its access list allows
+    /// (`ExternalKeychainReader.readStringSilently`).
+    public func resolvedCredential(homeDirectory: String = NSHomeDirectory()) async -> ClaudeCredential? {
+        let keychain = await ExternalKeychainReader.readStringSilently(service: Self.keychainService)
+        let candidates = [Self.parse(keychain)] + Self.credentialFiles(homeDirectory: homeDirectory).map { Self.parse(contentsOfFile: $0) }
         return Self.freshest(candidates.compactMap { $0 })
     }
 
@@ -71,19 +71,15 @@ public struct ClaudeAuthStore: Sendable {
     }
 
     /// Whether Claude Code has saved a sign-in, without reading it: a credentials file, or the
-    /// CLI's Keychain item checked for existence only (`KeychainPresence`). `refresh()` reads that
-    /// item's secret, which is where macOS may ask for approval the first time.
+    /// CLI's Keychain item checked for existence only (`KeychainPresence`). Approval is needed only
+    /// when the item can't be read silently through the `security` tool, which Claude Code's own
+    /// writes normally allow.
     public func detect(homeDirectory: String = NSHomeDirectory()) -> ProviderDetection? {
         let inKeychain = KeychainPresence.exists(service: Self.keychainService)
         let hasFile = Self.credentialFiles(homeDirectory: homeDirectory).contains { FileManager.default.fileExists(atPath: $0) }
         guard inKeychain || hasFile else { return nil }
-        return ProviderDetection(source: "Signed in with Claude Code", needsKeychainApproval: inKeychain)
-    }
-
-    /// Convenience for callers that only need the token string, not the full lapse-aware
-    /// credential (e.g. providers that share this OAuth client, like OpenCode's Anthropic login).
-    public func accessToken() -> String? {
-        resolvedCredential()?.accessToken
+        let needsApproval = inKeychain && !ExternalKeychainReader.trustsSecurityTool(service: Self.keychainService)
+        return ProviderDetection(source: "Signed in with Claude Code", needsKeychainApproval: needsApproval)
     }
 
     public static func classifyLapse(_ credential: ClaudeCredential, nowMs: Double = Date().timeIntervalSince1970 * 1000) -> ClaudeCredentialLapse {

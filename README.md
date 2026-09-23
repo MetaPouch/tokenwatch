@@ -41,9 +41,16 @@ immediately rather than on the next refresh cycle. Detection is silent by constr
 directory checks, a lookup of CLIs on `PATH` plus the usual install directories (Homebrew, npm,
 `~/.local/bin`, ...) that an app launched from Finder doesn't inherit, and Keychain *existence*
 probes that ask for attributes only with authentication UI disallowed -- never a secret read, so
-no macOS access prompt, no network, no subprocess. When tracking a provider will read another
-app's Keychain item (Claude Code's sign-in), onboarding says so up front, since that's where
-macOS asks once. Settings marks each provider found on this Mac the same way.
+no macOS access prompt, no network, no subprocess. Settings marks each provider found on this Mac
+the same way.
+
+Reading Claude Code's sign-in doesn't raise macOS's "wants to use your confidential information"
+prompt either. Claude Code writes its Keychain item with Apple's `security` tool, which puts that
+tool on the item's access list; TokenWatch checks the access list (never the secret, so the check
+itself can't prompt) and, when it trusts `/usr/bin/security` and admits Apple's command-line
+tools, reads the item through `security find-generic-password` instead of from its own process.
+Only when the item doesn't allow that -- written some other way -- does TokenWatch read it
+directly, where macOS asks once; onboarding then says so up front.
 
 By default (nothing starred yet) the status item shows a smart summary: whichever enabled
 provider has a recent local-activity signal (currently: Claude and Codex, from local session
