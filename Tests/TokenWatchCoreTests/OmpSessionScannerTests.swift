@@ -54,6 +54,36 @@ final class OmpSessionScannerTests: XCTestCase {
         XCTAssertEqual(activity?.timestamp, FlexibleISO8601.parse("2026-01-01T00:10:05.039Z"))
     }
 
+    func testCacheTTLComesFromCttlOfNewestTurnThatWroteCache() {
+        let turn = { (ts: String, cttl: String) in
+            #"{"type":"message","timestamp":"\#(ts)","message":{"role":"assistant","provider":"anthropic","model":"claude-sonnet-5","usage":{"input":1,"cacheRead":1000,"cacheWrite":800\#(cttl)}}}"#
+        }
+        writeSession("s.jsonl", lines: [
+            sessionLine(cwd: "/Users/alice/widget"),
+            turn("2026-01-01T00:00:00.000Z", #","cttl":{"ephemeral1h":800}"#),
+            turn("2026-01-01T00:05:00.000Z", ""),
+        ])
+        XCTAssertEqual(OmpSessionScanner.mostRecentActivity(roots: [tempRoot.path])?.cacheTTLSeconds, 3600)
+    }
+
+    /// A session larger than the scanner's tail window, with multi-byte text placed so the window
+    /// starts mid-character. The partial first line must be dropped as bytes, not fail decoding.
+    func testTailWindowStartingMidCharacterStillFindsActivity() {
+        let tailBytes = 2_000_000 // OmpSessionScanner's tail window
+        let last = messageLine(timestamp: "2026-01-01T00:10:05.039Z", provider: "anthropic", input: 7, cacheRead: 70, cacheWrite: 0)
+        let dashes = String(repeating: "—", count: tailBytes / 2) // 3 bytes each, spans the window start
+        // One of three ASCII paddings shifts the window start onto a UTF-8 continuation byte.
+        let startsMidCharacter = (0..<3).contains { padding in
+            let filler = #"{"type":"note","text":""# + String(repeating: "x", count: padding) + dashes + #""}"#
+            let data = Data(([sessionLine(cwd: "/Users/alice/widget"), filler, last].joined(separator: "\n")).utf8)
+            guard data[data.count - tailBytes] & 0b1100_0000 == 0b1000_0000 else { return false }
+            writeSession("big.jsonl", lines: [sessionLine(cwd: "/Users/alice/widget"), filler, last])
+            return true
+        }
+        XCTAssertTrue(startsMidCharacter)
+        XCTAssertEqual(OmpSessionScanner.mostRecentActivity(roots: [tempRoot.path])?.inputTokens, 7)
+    }
+
     func testSkipsTrailingNonAnthropicMessagesAndFindsLastAnthropicOne() {
         writeSession("mixed.jsonl", lines: [
             sessionLine(cwd: "/Users/alice/.superset/projects/widget"),

@@ -56,7 +56,7 @@ public struct ClaudeProvider: ProviderRuntime {
         do {
             let response = try await usageClient.fetchUsage(accessToken: credential.accessToken)
             var lines = ClaudeMapper.map(response)
-            let ttlSeconds = ClaudeCacheTemperature.resolveTTLSeconds()
+            let ttlSeconds = ClaudeCacheTemperature.resolveTTLSeconds() // nil: each session's own logged TTL
             let activity = Self.mostRecentActivity()
             if let cacheLine = ClaudeCacheTemperature.evaluate(activity: activity, ttlSeconds: ttlSeconds) {
                 lines.append(cacheLine)

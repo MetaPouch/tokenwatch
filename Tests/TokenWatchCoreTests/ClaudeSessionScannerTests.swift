@@ -50,6 +50,35 @@ final class ClaudeSessionScannerTests: XCTestCase {
         XCTAssertEqual(activity?.sessionLabel, "some-project")
     }
 
+    private func assistantLine(timestamp: String, write5m: Int, write1h: Int) -> String {
+        #"{"type":"assistant","timestamp":"\#(timestamp)","message":{"usage":{"input_tokens":1,"cache_read_input_tokens":1000,"cache_creation_input_tokens":\#(write5m + write1h),"cache_creation":{"ephemeral_5m_input_tokens":\#(write5m),"ephemeral_1h_input_tokens":\#(write1h)}}}}"#
+    }
+
+    /// The newest turn was a pure cache hit (no writes), so the TTL comes from the newest turn
+    /// that wrote cache entries; a turn with any 5-minute writes reads as 5 minutes.
+    func testCacheTTLComesFromNewestTurnThatWroteCache() {
+        _ = writeTranscript("hour.jsonl", lines: [
+            assistantLine(timestamp: "2026-09-19T08:00:00.000Z", write5m: 500, write1h: 0),
+            assistantLine(timestamp: "2026-09-19T08:10:00.000Z", write5m: 0, write1h: 800),
+            assistantLine(timestamp: "2026-09-19T08:20:00.000Z", write5m: 0, write1h: 0),
+        ])
+        let hour = ClaudeSessionScanner.mostRecentActivity(roots: [tempRoot.path])
+        XCTAssertEqual(hour?.timestamp, FlexibleISO8601.parse("2026-09-19T08:20:00.000Z"))
+        XCTAssertEqual(hour?.cacheTTLSeconds, 3600)
+
+        _ = writeTranscript("mixed.jsonl", projectDir: "other", lines: [
+            assistantLine(timestamp: "2026-09-19T09:00:00.000Z", write5m: 10, write1h: 800),
+        ])
+        XCTAssertEqual(ClaudeSessionScanner.allRecentActivity(roots: [tempRoot.path]).first { $0.sessionLabel == "other" }?.cacheTTLSeconds, 300)
+    }
+
+    func testCacheTTLIsNilWhenLogDoesNotSplitWritesByTTL() {
+        _ = writeTranscript("old.jsonl", lines: [
+            assistantLine(timestamp: "2026-09-19T08:25:34.039Z", input: 2, cacheRead: 100, cacheCreate: 50),
+        ])
+        XCTAssertNil(ClaudeSessionScanner.mostRecentActivity(roots: [tempRoot.path])?.cacheTTLSeconds)
+    }
+
     func testPrefersRealCwdLeafOverEncodedDirectoryName() {
         // The on-disk project directory encodes the whole nested path since home (a worktree
         // manager placing this under ~/.tool/worktrees/<id>/<repo>), which would otherwise leak

@@ -70,12 +70,31 @@ final class ClaudeCacheTemperatureTests: XCTestCase {
         XCTAssertEqual(detail, "cold · re-reads ~5.0K tok") // 500 + 4500 = 5000 -> "5.0K"
     }
 
-    func testResolveTTLSecondsDefaultsAndClampsAndRejectsInvalid() {
-        XCTAssertEqual(ClaudeCacheTemperature.resolveTTLSeconds(environment: [:]), 300)
-        XCTAssertEqual(ClaudeCacheTemperature.resolveTTLSeconds(environment: ["TOKENWATCH_CLAUDE_CACHE_TTL_SECONDS": "not-a-number"]), 300)
+    func testResolveTTLSecondsIsNilUnlessOverriddenAndClamps() {
+        XCTAssertNil(ClaudeCacheTemperature.resolveTTLSeconds(environment: [:]))
+        XCTAssertNil(ClaudeCacheTemperature.resolveTTLSeconds(environment: ["TOKENWATCH_CLAUDE_CACHE_TTL_SECONDS": "not-a-number"]))
         XCTAssertEqual(ClaudeCacheTemperature.resolveTTLSeconds(environment: ["TOKENWATCH_CLAUDE_CACHE_TTL_SECONDS": "3600"]), 3600)
         XCTAssertEqual(ClaudeCacheTemperature.resolveTTLSeconds(environment: ["TOKENWATCH_CLAUDE_CACHE_TTL_SECONDS": "0"]), 5)
         XCTAssertEqual(ClaudeCacheTemperature.resolveTTLSeconds(environment: ["TOKENWATCH_CLAUDE_CACHE_TTL_SECONDS": "-50"]), 5)
+    }
+
+    /// Ten minutes after the last turn: a session logged with 1-hour cache writes is still warm,
+    /// one with no logged TTL falls back to 5 minutes (cold), and an explicit override beats both.
+    func testSessionTTLDecidesWarmOrColdAndOverrideWins() {
+        let tenMinutesAgo = now.addingTimeInterval(-600)
+        var hourSession = ClaudeSessionActivity(filePath: "/tmp/a.jsonl", timestamp: tenMinutesAgo, inputTokens: 1, cacheReadTokens: 900, cacheCreationTokens: 100, sessionLabel: "a")
+        hourSession.cacheTTLSeconds = 3600
+        let unknownSession = ClaudeSessionActivity(filePath: "/tmp/b.jsonl", timestamp: tenMinutesAgo, inputTokens: 1, cacheReadTokens: 900, cacheCreationTokens: 100, sessionLabel: "b")
+
+        guard case let .badge(_, _, _, hourIcon, hourDetail) = ClaudeCacheTemperature.evaluate(activity: hourSession, now: now) else { return XCTFail("expected a badge line") }
+        XCTAssertEqual(hourIcon, "flame.fill")
+        XCTAssertEqual(hourDetail, "90% hit · expires \(expectedClock(tenMinutesAgo.addingTimeInterval(3600)))")
+
+        guard case let .badge(_, _, _, unknownIcon, _) = ClaudeCacheTemperature.evaluate(activity: unknownSession, now: now) else { return XCTFail("expected a badge line") }
+        XCTAssertEqual(unknownIcon, "snowflake")
+
+        guard case let .badge(_, _, _, overrideIcon, _) = ClaudeCacheTemperature.evaluate(activity: hourSession, now: now, ttlSeconds: 300) else { return XCTFail("expected a badge line") }
+        XCTAssertEqual(overrideIcon, "snowflake")
     }
 
     func testCustomBadgeIDDistinguishesMultipleSessions() {

@@ -118,8 +118,10 @@ same figures as the Total Spend card's hover popover, without needing to open it
 
 Claude's and Codex's cards also list a compact row per locally active session (touched within
 the last 5 hours) -- a flame or snowflake, the project name, and a hit-ratio detail -- not just
-the newest session. Claude's detail includes a precise expiry (`expires HH:mm`), since
-Anthropic's cache TTL is fixed and client-visible; Codex's does not, since OpenAI's cache
+the newest session. Claude's detail includes a precise expiry (`expires HH:mm`): Anthropic's cache
+TTL is client-visible, and both Claude Code and `omp` log which TTL (5 minutes or 1 hour) each
+turn's cache writes used, so the expiry follows each session's own TTL -- falling back to 5
+minutes only for a log that doesn't record it. Codex's detail does not, since OpenAI's cache
 retention is server-side, org-dependent, and machine-local, so it only reports whether the last
 turn itself was a cache hit.
 
@@ -133,7 +135,13 @@ changes.
 
 A daily Cost/Tokens bar chart for the last 7 days sits at the bottom, built by summing *every*
 turn's local session tokens (not just the newest, the way cache-temperature works) across local
-Claude session logs and pricing them at API list rates -- no Admin API key required. It shares
+Claude session logs and pricing them at API list rates -- no Admin API key required. A day's
+token total is input + cache reads + cache writes + output. Each Claude Code API response counts
+once, deduplicated the way OpenUsage and ccusage do it: Claude Code writes one line per content
+block of a response, each repeating the full usage, and subagent (sidechain) and resumed-session
+logs replay earlier messages. A cost the log itself records (Claude Code's `costUSD`, `omp`'s
+per-turn cost) is used as-is; otherwise tokens are priced at list rates, with 1-hour cache writes
+at 2x input and 5-minute ones at 1.25x. It shares
 its 30-day scan with the Total Spend card and each provider's inline spend row above, so it's
 instant after the first load instead of a fresh multi-second disk scan (and a loading spinner)
 every time you switch to this tab. The estimate is explicitly labeled as one: subscription usage

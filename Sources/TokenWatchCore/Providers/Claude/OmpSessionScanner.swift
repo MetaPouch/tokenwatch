@@ -85,19 +85,19 @@ enum OmpSessionScanner {
         let sessionLabel = ompSessionCwd(atPath: path).map { ($0 as NSString).lastPathComponent }
             ?? ((path as NSString).deletingLastPathComponent as NSString).lastPathComponent
 
-        for line in text.split(separator: "\n", omittingEmptySubsequences: true).reversed() {
-            guard let lineData = line.data(using: .utf8) else { continue }
-            guard let entry = try? JSONDecoder().decode(OmpMessageLine.self, from: lineData) else { continue }
-            guard entry.type == "message",
+        return ClaudeSessionScanner.newestActivity(in: text.split(separator: "\n", omittingEmptySubsequences: true)) { line in
+            guard let lineData = line.data(using: .utf8),
+                  let entry = try? JSONDecoder().decode(OmpMessageLine.self, from: lineData),
+                  entry.type == "message",
                   let message = entry.message,
                   message.role == "assistant",
                   message.provider == "anthropic",
                   let usage = message.usage,
                   let timestampString = entry.timestamp,
                   let timestamp = FlexibleISO8601.parse(timestampString)
-            else { continue }
+            else { return nil }
 
-            return ClaudeSessionActivity(
+            let activity = ClaudeSessionActivity(
                 filePath: path,
                 timestamp: timestamp,
                 inputTokens: usage.input ?? 0,
@@ -105,8 +105,12 @@ enum OmpSessionScanner {
                 cacheCreationTokens: usage.cacheWrite ?? 0,
                 sessionLabel: sessionLabel
             )
+            let ttl = ClaudeCacheTemperature.ttlSeconds(
+                fiveMinuteWrites: usage.cttl?.ephemeral5m ?? 0,
+                oneHourWrites: usage.cttl?.ephemeral1h ?? 0
+            )
+            return (activity, ttl)
         }
-        return nil
     }
 
     /// The session's real working directory, read from its own `type: "session"` line -- always
@@ -124,6 +128,9 @@ enum OmpSessionScanner {
         return nil
     }
 
+    /// The last `maxBytes` of the file, starting at the first full line inside that window. The
+    /// cut is dropped as raw bytes before decoding: it can land mid-way through a multi-byte UTF-8
+    /// character, and decoding a fixed byte window as-is would then fail for the whole session.
     private static func tailText(ofFileAtPath path: String, maxBytes: Int = 2_000_000) -> String? {
         guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
         defer { try? handle.close() }
@@ -134,7 +141,11 @@ enum OmpSessionScanner {
         } catch {
             return nil
         }
-        guard let data = try? handle.read(upToCount: readSize) else { return nil }
+        guard var data = try? handle.read(upToCount: readSize) else { return nil }
+        if readSize < Int(fileSize) {
+            guard let newline = data.firstIndex(of: UInt8(ascii: "\n")) else { return nil }
+            data = data[data.index(after: newline)...]
+        }
         return String(data: data, encoding: .utf8)
     }
 
@@ -146,9 +157,15 @@ enum OmpSessionScanner {
     private struct OmpMessageLine: Decodable {
         struct Message: Decodable {
             struct Usage: Decodable {
+                /// omp's per-TTL split of this turn's cache writes.
+                struct CacheTTL: Decodable {
+                    let ephemeral5m: Int?
+                    let ephemeral1h: Int?
+                }
                 let input: Int?
                 let cacheRead: Int?
                 let cacheWrite: Int?
+                let cttl: CacheTTL?
             }
             let role: String?
             let provider: String?

@@ -86,6 +86,52 @@ final class ClaudeUsageHistoryScannerTests: XCTestCase {
         XCTAssertEqual(day?.totalTokens, 2 * 1_160)
     }
 
+    private func dailyUsageOn15th() -> ClaudeUsageDay? {
+        ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], ompRoots: [ompRoot.path])
+            .first { $0.id == "2026-06-15" }
+    }
+
+    /// A subagent (sidechain) log replays its parent's message under a new request id. It must be
+    /// counted once, and the main-chain copy kept even when the sidechain copy was seen first.
+    func testSidechainReplayUnderNewRequestIDCountsOnceAndKeepsMainChain() {
+        let sidechain = #"{"type":"assistant","isSidechain":true,"requestId":"req_side","timestamp":"2026-06-15T08:00:00.000Z","message":{"id":"msg_A","model":"claude-sonnet-5","usage":{"input_tokens":999,"output_tokens":1}}}"#
+        writeClaudeTranscript("a-subagent.jsonl", lines: [sidechain])
+        writeClaudeTranscript("b-main.jsonl", lines: [
+            claudeCodeLine(timestamp: "2026-06-15T08:00:00.000Z", model: "claude-sonnet-5", input: 100, cacheRead: 0, cacheCreate: 0, output: 50, messageID: "msg_A", requestID: "req_main"),
+        ])
+        XCTAssertEqual(dailyUsageOn15th()?.inputTokens, 100)
+    }
+
+    /// An advisor model consulted inside a response is a separate, separately-priced entry under
+    /// its own model; ordinary iterations are already inside the parent's totals.
+    func testAdvisorIterationsCountUnderTheirOwnModel() {
+        let line = #"{"type":"assistant","requestId":"r","timestamp":"2026-06-15T08:00:00.000Z","message":{"id":"m","model":"claude-sonnet-5","usage":{"input_tokens":100,"output_tokens":10,"iterations":[{"type":"message","input_tokens":100,"output_tokens":10},{"type":"advisor_message","model":"claude-opus-5","input_tokens":40,"output_tokens":4}]}}}"#
+        writeClaudeTranscript("s.jsonl", lines: [line, line])
+        let day = dailyUsageOn15th()
+        XCTAssertEqual(day?.inputTokens, 140)
+        XCTAssertEqual(Set(day?.modelBreakdown.map(\.id) ?? []), ["claude-sonnet-5", "claude-opus-5"])
+    }
+
+    /// A cost recorded in the log (Claude Code's `costUSD`, omp's `usage.cost.total`) is used as-is
+    /// instead of re-pricing the tokens.
+    func testCarriedCostsWinOverRepricing() {
+        writeClaudeTranscript("s.jsonl", lines: [
+            #"{"type":"assistant","costUSD":1.5,"timestamp":"2026-06-15T08:00:00.000Z","message":{"id":"m","model":"claude-sonnet-5","usage":{"input_tokens":1000000,"output_tokens":0}}}"#,
+        ])
+        writeOmpTranscript("s.jsonl", lines: [
+            #"{"type":"message","timestamp":"2026-06-15T09:00:00.000Z","message":{"role":"assistant","provider":"anthropic","model":"claude-sonnet-5","usage":{"input":1000000,"output":0,"cost":{"total":0.25}}}}"#,
+        ])
+        XCTAssertEqual(dailyUsageOn15th()?.estimatedCostUSD ?? -1, 1.75, accuracy: 0.0001)
+    }
+
+    /// omp records 1-hour cache writes in `cttl`; without a carried cost they price at 2x input.
+    func testOmpOneHourCacheWritesPriceAtTwiceInput() {
+        writeOmpTranscript("s.jsonl", lines: [
+            #"{"type":"message","timestamp":"2026-06-15T09:00:00.000Z","message":{"role":"assistant","provider":"anthropic","model":"claude-sonnet-5","usage":{"input":0,"output":0,"cacheWrite":1000000,"cttl":{"ephemeral1h":1000000}}}}"#,
+        ])
+        XCTAssertEqual(dailyUsageOn15th()?.estimatedCostUSD ?? -1, 4, accuracy: 0.0001) // $2/M input x 2
+    }
+
     func testBucketsIntoSeparateDays() {
         writeClaudeTranscript("session.jsonl", lines: [
             claudeCodeLine(timestamp: "2026-06-14T23:00:00.000Z", model: "claude-sonnet-5", input: 10, cacheRead: 0, cacheCreate: 0, output: 1),

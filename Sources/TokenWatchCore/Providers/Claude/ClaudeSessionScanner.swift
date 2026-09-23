@@ -19,6 +19,10 @@ struct ClaudeSessionActivity: Equatable {
     /// `sessionLabel(forTranscriptPath:)` only when that field is absent. Never `nil` in
     /// practice, but not a guaranteed exact project name.
     let sessionLabel: String
+    /// The prompt-cache TTL this session's cache entries were written with, from the newest turn
+    /// that wrote any (see `ClaudeCacheTemperature.ttlSeconds`); `nil` when the log doesn't record
+    /// it, in which case the conservative 5-minute default applies.
+    var cacheTTLSeconds: Int? = nil
 }
 
 /// Finds the single most recently written line across every local Claude Code session
@@ -124,6 +128,32 @@ enum ClaudeSessionScanner {
         transcriptFiles(roots: roots, modifiedSince: .distantPast).max { $0.modified < $1.modified }?.path
     }
 
+    /// How many older usage turns `newestActivity` looks back through for a TTL signal when the
+    /// newest turn wrote no cache (a pure cache hit). Bounded so a log that never records TTLs
+    /// (older Claude Code) doesn't decode its entire history on every refresh.
+    static let ttlLookbackTurns = 50
+
+    /// The newest parseable activity among `lines` (oldest first), carrying the cache TTL of the
+    /// newest turn at or before it that wrote cache entries -- a pure cache hit keeps whatever TTL
+    /// those entries were written with. `parse` returns a usage turn's activity and the TTL its
+    /// own writes imply, or `nil` for any line that isn't a usage turn. Shared by the Claude Code
+    /// and omp scanners, whose line formats differ but whose TTL semantics are the same.
+    static func newestActivity<Lines: BidirectionalCollection>(in lines: Lines, parse: (Lines.Element) -> (activity: ClaudeSessionActivity, ttlSeconds: Int?)?) -> ClaudeSessionActivity? {
+        var newest: ClaudeSessionActivity?
+        var turnsChecked = 0
+        for line in lines.reversed() {
+            guard let (activity, ttl) = parse(line) else { continue }
+            if newest == nil { newest = activity }
+            if let ttl {
+                newest?.cacheTTLSeconds = ttl
+                break
+            }
+            turnsChecked += 1
+            if turnsChecked > ttlLookbackTurns { break }
+        }
+        return newest
+    }
+
     /// Scans `path` from the end for the last `type: "assistant"` line carrying a
     /// `message.usage` object, matching the shape CodexBar's local cost-usage scanner documents
     /// for these transcripts (verified against a live session file during implementation).
@@ -136,16 +166,17 @@ enum ClaudeSessionScanner {
         guard let data = FileManager.default.contents(atPath: path) else { return nil }
         guard let text = String(data: data, encoding: .utf8) else { return nil }
 
-        for line in text.split(separator: "\n", omittingEmptySubsequences: true).reversed() {
-            guard let lineData = line.data(using: .utf8) else { continue }
-            guard let entry = try? JSONDecoder().decode(TranscriptLine.self, from: lineData) else { continue }
-            guard entry.type == "assistant", let usage = entry.message?.usage, let timestampString = entry.timestamp else { continue }
-            guard let timestamp = FlexibleISO8601.parse(timestampString) else { continue }
+        return newestActivity(in: text.split(separator: "\n", omittingEmptySubsequences: true)) { line in
+            guard let lineData = line.data(using: .utf8),
+                  let entry = try? JSONDecoder().decode(TranscriptLine.self, from: lineData),
+                  entry.type == "assistant", let usage = entry.message?.usage,
+                  let timestampString = entry.timestamp, let timestamp = FlexibleISO8601.parse(timestampString)
+            else { return nil }
             let cwdLeaf = entry.cwd.flatMap { cwd -> String? in
                 let leaf = (cwd as NSString).lastPathComponent
                 return leaf.isEmpty ? nil : leaf
             }
-            return ClaudeSessionActivity(
+            let activity = ClaudeSessionActivity(
                 filePath: path,
                 timestamp: timestamp,
                 inputTokens: usage.inputTokens ?? 0,
@@ -153,8 +184,12 @@ enum ClaudeSessionScanner {
                 cacheCreationTokens: usage.cacheCreationInputTokens ?? 0,
                 sessionLabel: cwdLeaf.map(truncated) ?? fallbackSessionLabel
             )
+            let ttl = ClaudeCacheTemperature.ttlSeconds(
+                fiveMinuteWrites: usage.cacheCreation?.ephemeral5m ?? 0,
+                oneHourWrites: usage.cacheCreation?.ephemeral1h ?? 0
+            )
+            return (activity, ttl)
         }
-        return nil
     }
 
     private struct TranscriptLine: Decodable {
@@ -163,11 +198,13 @@ enum ClaudeSessionScanner {
                 let inputTokens: Int?
                 let cacheReadInputTokens: Int?
                 let cacheCreationInputTokens: Int?
+                let cacheCreation: ClaudeCacheCreation?
 
                 enum CodingKeys: String, CodingKey {
                     case inputTokens = "input_tokens"
                     case cacheReadInputTokens = "cache_read_input_tokens"
                     case cacheCreationInputTokens = "cache_creation_input_tokens"
+                    case cacheCreation = "cache_creation"
                 }
             }
             let usage: Usage?
@@ -176,5 +213,16 @@ enum ClaudeSessionScanner {
         let timestamp: String?
         let message: Message?
         let cwd: String?
+    }
+}
+
+/// Claude Code's per-TTL split of one turn's cache writes (`usage.cache_creation`), shared by
+/// the session scanner (for cache TTL) and the usage-history scanner (for pricing).
+struct ClaudeCacheCreation: Decodable {
+    let ephemeral5m: Int?
+    let ephemeral1h: Int?
+    enum CodingKeys: String, CodingKey {
+        case ephemeral5m = "ephemeral_5m_input_tokens"
+        case ephemeral1h = "ephemeral_1h_input_tokens"
     }
 }

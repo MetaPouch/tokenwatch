@@ -729,12 +729,12 @@
     <div class="cache-grid">
       <div class="cache-card warm">
         <h3><svg class="h-ic" style="color:var(--mac-green)"><use href="#i-flame"/></svg> Warm cache: cheap</h3>
-        <p>Claude caches your conversation for 5 minutes after each message. Send your next message in that time and the context is read from cache at a fraction of the price.</p>
+        <p>Claude keeps your conversation cached after each message, for either 1 hour or 5 minutes depending on the session. TokenWatch reads which one each session uses from its log. Send your next message in that time and the context is read from cache at a fraction of the price.</p>
         <div class="sample"><div class="sess warm"><svg class="ic"><use href="#i-flame"/></svg><b>api-gateway</b><span class="d">100% hit &middot; expires 14:06</span></div></div>
       </div>
       <div class="cache-card cold">
         <h3><svg class="h-ic" style="color:var(--mac-blue)"><use href="#i-snow"/></svg> Cold cache: full price</h3>
-        <p>After 5 minutes the cache expires, and your next message pays full price to re-read the whole context. TokenWatch shows how many tokens that will be before you send.</p>
+        <p>Once that time passes, the cache expires and your next message pays full price to re-read the whole context. TokenWatch shows how many tokens that will be before you send.</p>
         <div class="sample"><div class="sess cold"><svg class="ic"><use href="#i-snow"/></svg><b>mobile-app</b><span class="d">cold &middot; re-reads ~412.8K tok</span></div></div>
       </div>
       <div class="cache-card">
