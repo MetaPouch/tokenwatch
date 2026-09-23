@@ -17,6 +17,7 @@ public final class AppContainer {
     let notificationService: QuotaNotificationService
     public let pricingRefreshService: PricingRefreshService
     public let spendHistoryStore = SpendHistoryStore()
+    public let detectionStore: ProviderDetectionStore
     public let hintStore = HintStore()
     /// Providers backed by a plain API key, keyed by id, for Settings' secure text fields.
     public let apiKeyManagers: [ProviderID: any APIKeyManaging]
@@ -32,6 +33,7 @@ public final class AppContainer {
         let runtimes: [any ProviderRuntime] = Self.buildRuntimes()
         let enablementStore = ProviderEnablementStore()
         let dataStore = WidgetDataStore(runtimes: runtimes)
+        self.detectionStore = ProviderDetectionStore(runtimes: runtimes)
         self.enablementStore = enablementStore
         self.dataStore = dataStore
         self.refreshScheduler = RefreshScheduler(dataStore: dataStore, enablementStore: enablementStore)

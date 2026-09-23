@@ -18,6 +18,7 @@ struct DashboardView: View {
     @ObservedObject var appearanceStore: AppearanceStore
     @ObservedObject var notificationSettingsStore: NotificationSettingsStore
     @ObservedObject var spendHistoryStore: SpendHistoryStore
+    @ObservedObject var detectionStore: ProviderDetectionStore
     @ObservedObject var hintStore: HintStore
     let notificationService: QuotaNotificationService
     let toggleDashboardPanel: () -> Void
@@ -76,6 +77,8 @@ struct DashboardView: View {
             return .handled
         }
         .onKeyPress(.return) {
+            // While onboarding shows, Return belongs to its "Track" button.
+            if currentScreen == .dashboard, orderedEnabledProviders.isEmpty { return .ignored }
             handleReturn()
             return .handled
         }
@@ -120,7 +123,7 @@ struct DashboardView: View {
     private var dashboardScreenContent: some View {
         Group {
             if orderedEnabledProviders.isEmpty {
-                emptyState
+                OnboardingView(detectionStore: detectionStore, enablementStore: enablementStore, openSettings: { currentScreen = .settings })
             } else {
                 VStack(spacing: 0) {
                     if !hintStore.providerDetectionDismissed {
@@ -171,7 +174,7 @@ struct DashboardView: View {
     }
 
     private var settingsScreenContent: some View {
-        SettingsView(enablementStore: enablementStore, apiKeyManagers: apiKeyManagers, displayStore: displayStore, appearanceStore: appearanceStore, notificationSettingsStore: notificationSettingsStore, notificationService: notificationService, toggleDashboardPanel: toggleDashboardPanel)
+        SettingsView(enablementStore: enablementStore, detectionStore: detectionStore, apiKeyManagers: apiKeyManagers, displayStore: displayStore, appearanceStore: appearanceStore, notificationSettingsStore: notificationSettingsStore, notificationService: notificationService, toggleDashboardPanel: toggleDashboardPanel)
     }
 
     private func reportTotalHeight(for screen: DashboardScreen) {
@@ -456,21 +459,5 @@ struct DashboardView: View {
                 spendHistoryStore: SpendHistoryStore.hasHistory(provider) ? spendHistoryStore : nil
             )
         }
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 8) {
-            Spacer()
-            Image(systemName: "tray")
-                .font(.largeTitle)
-                .foregroundStyle(.secondary)
-            Text("No providers enabled")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            Button("Open Settings") { currentScreen = .settings }
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, minHeight: 260)
-        .reportPanelHeight(for: .dashboard)
     }
 }

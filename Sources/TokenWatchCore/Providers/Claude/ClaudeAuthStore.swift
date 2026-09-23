@@ -62,10 +62,22 @@ public struct ClaudeAuthStore: Sendable {
     public func resolvedCredential(homeDirectory: String = NSHomeDirectory()) -> ClaudeCredential? {
         let candidates: [ClaudeCredential?] = [
             Self.parse(ExternalKeychainReader.readString(service: Self.keychainService)),
-            Self.parse(contentsOfFile: homeDirectory + "/.claude/.credentials.json"),
-            Self.parse(contentsOfFile: homeDirectory + "/.config/claude/credentials.json"),
-        ]
+        ] + Self.credentialFiles(homeDirectory: homeDirectory).map { Self.parse(contentsOfFile: $0) }
         return Self.freshest(candidates.compactMap { $0 })
+    }
+
+    private static func credentialFiles(homeDirectory: String) -> [String] {
+        [homeDirectory + "/.claude/.credentials.json", homeDirectory + "/.config/claude/credentials.json"]
+    }
+
+    /// Whether Claude Code has saved a sign-in, without reading it: a credentials file, or the
+    /// CLI's Keychain item checked for existence only (`KeychainPresence`). `refresh()` reads that
+    /// item's secret, which is where macOS may ask for approval the first time.
+    public func detect(homeDirectory: String = NSHomeDirectory()) -> ProviderDetection? {
+        let inKeychain = KeychainPresence.exists(service: Self.keychainService)
+        let hasFile = Self.credentialFiles(homeDirectory: homeDirectory).contains { FileManager.default.fileExists(atPath: $0) }
+        guard inKeychain || hasFile else { return nil }
+        return ProviderDetection(source: "Signed in with Claude Code", needsKeychainApproval: inKeychain)
     }
 
     /// Convenience for callers that only need the token string, not the full lapse-aware

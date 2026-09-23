@@ -36,6 +36,17 @@ public final class APIKeyAuthStore: APIKeyManaging, @unchecked Sendable {
         try keychain.delete(account: account)
     }
 
+    /// A saved key (existence only, never its value) or a set environment variable.
+    public func detect() -> ProviderDetection? {
+        if keychain.contains(account: account) {
+            return ProviderDetection(source: "API key saved in TokenWatch")
+        }
+        if let name = envVars.first(where: { !(ProcessInfo.processInfo.environment[$0] ?? "").isEmpty }) {
+            return ProviderDetection(source: "\(name) is set")
+        }
+        return nil
+    }
+
     private func environmentValue() -> String? {
         for name in envVars {
             if let value = ProcessInfo.processInfo.environment[name], !value.isEmpty {

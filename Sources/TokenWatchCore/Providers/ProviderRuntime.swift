@@ -7,12 +7,28 @@ public protocol ProviderRuntime: Sendable {
     static var id: ProviderID { get }
     static var displayName: String { get }
 
-    /// Cheap, synchronous-ish check for whether local credentials/config exist at all
-    /// (does not guarantee they are still valid -- that's what `refresh()` finds out).
-    func hasLocalCredentials() async -> Bool
+    /// Whether this provider looks set up on this Mac -- the basis for onboarding's "found on
+    /// this Mac" list. Must be cheap and silent: file/directory existence, a PATH lookup, or a
+    /// Keychain *existence* probe (`KeychainPresence`), never a Keychain secret read (which can
+    /// raise macOS's access prompt), a network call, a subprocess, or a write. Doesn't guarantee
+    /// the credential still works -- that's what `refresh()` finds out.
+    func detect() -> ProviderDetection?
 
     /// Fetch and map current usage. Must never throw; failures become `.error(...)` snapshots.
     func refresh() async -> ProviderSnapshot
+}
+
+/// Evidence that a provider is set up on this Mac, found by `ProviderRuntime.detect()`.
+public struct ProviderDetection: Sendable, Equatable {
+    /// Where it was found, phrased for a person: "Signed in with Claude Code", "OPENAI_API_KEY is set".
+    public let source: String
+    /// Tracking it reads another app's Keychain item, so macOS may ask to allow that the first time.
+    public let needsKeychainApproval: Bool
+
+    public init(source: String, needsKeychainApproval: Bool = false) {
+        self.source = source
+        self.needsKeychainApproval = needsKeychainApproval
+    }
 }
 
 /// Status of an API key backing an `APIKeyManaging` provider.

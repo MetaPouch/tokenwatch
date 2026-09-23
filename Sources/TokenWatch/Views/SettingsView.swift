@@ -7,6 +7,7 @@ import TokenWatchCore
 /// interval.
 struct SettingsView: View {
     @ObservedObject var enablementStore: ProviderEnablementStore
+    @ObservedObject var detectionStore: ProviderDetectionStore
     let apiKeyManagers: [ProviderID: any APIKeyManaging]
     @ObservedObject var displayStore: MeterDisplayStore
     @ObservedObject var appearanceStore: AppearanceStore
@@ -19,7 +20,7 @@ struct SettingsView: View {
     @State private var shortcutCombo = KeyCombo.loadPersisted()
 
     var body: some View {
-        MeasuredScrollView(maxHeight: 640) {
+        MeasuredScrollView(maxHeight: 640, refreshID: detectionStore.detections.count) {
             VStack(alignment: .leading, spacing: 14) {
                 settingsSection("General") {
                     Toggle("Show Total Spend", isOn: $displayStore.showTotalSpend)
@@ -152,9 +153,15 @@ struct SettingsView: View {
                     set: { enablementStore.setEnabled(provider, $0) }
                 )
             )
-            Text(provider.credentialSourceHint)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            if let detection = detectionStore.detections[provider] {
+                Label("Found on this Mac · \(detection.source)", systemImage: "checkmark.circle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.green)
+            } else {
+                Text(provider.credentialSourceHint)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
 
             if let manager = apiKeyManagers[provider] {
                 apiKeyField(provider: provider, manager: manager)

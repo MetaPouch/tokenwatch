@@ -17,9 +17,9 @@ public struct AmpProvider: ProviderRuntime {
         self.usageClient = AmpUsageClient()
     }
 
-    public func hasLocalCredentials() async -> Bool {
-        if BoundedSubprocess.resolveOnPath(["amp"]) != nil { return true }
-        return authStore.currentAPIKey() != nil
+    public func detect() -> ProviderDetection? {
+        if BoundedSubprocess.resolveOnPath(["amp"]) != nil { return ProviderDetection(source: "Amp CLI installed") }
+        return authStore.detect()
     }
 
     public func refresh() async -> ProviderSnapshot {

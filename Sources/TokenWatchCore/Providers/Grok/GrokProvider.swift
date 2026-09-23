@@ -16,8 +16,8 @@ public struct GrokProvider: ProviderRuntime {
         self.usageClient = GrokUsageClient()
     }
 
-    public func hasLocalCredentials() async -> Bool {
-        authStore.validAccessToken() != nil
+    public func detect() -> ProviderDetection? {
+        authStore.hasAuthFile() ? ProviderDetection(source: "Signed in with the Grok CLI") : nil
     }
 
     public func refresh() async -> ProviderSnapshot {

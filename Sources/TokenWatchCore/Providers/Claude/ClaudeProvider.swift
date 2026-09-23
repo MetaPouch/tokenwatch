@@ -29,8 +29,8 @@ public struct ClaudeProvider: ProviderRuntime {
         self.usageClient = ClaudeUsageClient()
     }
 
-    public func hasLocalCredentials() async -> Bool {
-        authStore.resolvedCredential() != nil
+    public func detect() -> ProviderDetection? {
+        authStore.detect()
     }
 
     public func refresh() async -> ProviderSnapshot {

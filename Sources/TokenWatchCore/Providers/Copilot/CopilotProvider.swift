@@ -14,8 +14,8 @@ public struct CopilotProvider: ProviderRuntime {
         self.usageClient = CopilotUsageClient()
     }
 
-    public func hasLocalCredentials() async -> Bool {
-        authStore.oauthToken() != nil
+    public func detect() -> ProviderDetection? {
+        authStore.hasTokenFile() ? ProviderDetection(source: "Signed in via a GitHub Copilot editor extension") : nil
     }
 
     public func refresh() async -> ProviderSnapshot {

@@ -17,8 +17,8 @@ public struct GeminiProvider: ProviderRuntime {
         self.usageClient = GeminiUsageClient()
     }
 
-    public func hasLocalCredentials() async -> Bool {
-        authStore.hasCredentialsFile()
+    public func detect() -> ProviderDetection? {
+        authStore.hasUsableSignIn() ? ProviderDetection(source: "Signed in with the Gemini CLI") : nil
     }
 
     public func refresh() async -> ProviderSnapshot {

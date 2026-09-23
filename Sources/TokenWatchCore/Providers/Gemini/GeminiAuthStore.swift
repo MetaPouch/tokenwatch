@@ -66,4 +66,11 @@ public struct GeminiAuthStore: Sendable {
     public func hasCredentialsFile() -> Bool {
         FileManager.default.fileExists(atPath: homeDirectory + "/.gemini/oauth_creds.json")
     }
+
+    /// A Gemini CLI Google sign-in TokenWatch can use -- not an API-key or Vertex AI setup, which
+    /// `refresh()` reports as not configured.
+    public func hasUsableSignIn() -> Bool {
+        let authType = currentAuthType()
+        return hasCredentialsFile() && authType != .apiKey && authType != .vertexAI
+    }
 }

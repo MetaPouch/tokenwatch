@@ -68,8 +68,8 @@ public enum ProviderID: String, CaseIterable, Codable, Sendable, Identifiable {
         case .gemini: return "Reads the Gemini CLI's local session — run `gemini` and sign in with a personal Google account first."
         case .antigravity: return "Reads the Antigravity CLI's local session — sign in via that CLI first."
         case .grok: return "Reads ~/.grok/auth.json — sign in via the Grok CLI first."
-        case .amp: return "Uses the amp CLI when installed and signed in, or the API key below."
-        case .openai, .openrouter, .zai, .kimi, .opencode: return "Needs an API key — add it below."
+        case .amp: return "Uses the amp CLI when installed and signed in, or an API key."
+        case .openai, .openrouter, .zai, .kimi, .opencode: return "Needs an API key, added in Settings."
         }
     }
 

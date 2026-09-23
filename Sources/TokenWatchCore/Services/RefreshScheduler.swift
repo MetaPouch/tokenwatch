@@ -15,6 +15,7 @@ public final class RefreshScheduler: ObservableObject {
     private let enablementStore: ProviderEnablementStore
     private var timer: Timer?
     private var cancellable: AnyCancellable?
+    private var enablementCancellable: AnyCancellable?
 
     public init(dataStore: WidgetDataStore, enablementStore: ProviderEnablementStore) {
         self.dataStore = dataStore
@@ -30,12 +31,24 @@ public final class RefreshScheduler: ObservableObject {
             .sink { [weak self] interval in
                 self?.scheduleTimer(interval: interval)
             }
+        // A provider that was just turned on (onboarding, Settings, Customize) is fetched right
+        // away instead of showing an empty card until the next scheduled cycle.
+        enablementCancellable = enablementStore.$enabledProviders
+            .scan((previous: enablementStore.enabledProviders, added: Set<ProviderID>())) { state, current in
+                (current, current.subtracting(state.previous))
+            }
+            .map(\.added)
+            .filter { !$0.isEmpty }
+            .sink { [dataStore] added in
+                Task { await dataStore.refreshAll(enabled: added) }
+            }
     }
 
     public func stop() {
         timer?.invalidate()
         timer = nil
         cancellable = nil
+        enablementCancellable = nil
         nextRefreshAt = nil
     }
 

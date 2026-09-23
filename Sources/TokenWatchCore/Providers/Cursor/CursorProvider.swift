@@ -15,8 +15,8 @@ public struct CursorProvider: ProviderRuntime {
         self.usageClient = CursorUsageClient()
     }
 
-    public func hasLocalCredentials() async -> Bool {
-        authStore.hasAnyUsableSession()
+    public func detect() -> ProviderDetection? {
+        authStore.hasSavedSignIn() ? ProviderDetection(source: "Signed in to the Cursor app") : nil
     }
 
     public func refresh() async -> ProviderSnapshot {

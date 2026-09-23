@@ -2,6 +2,9 @@ import Foundation
 #if canImport(Security)
 import Security
 #endif
+#if canImport(LocalAuthentication)
+import LocalAuthentication
+#endif
 
 /// Thin wrapper over the `Security` framework keychain APIs. Every credential TokenWatch itself
 /// originates (API keys, cached cookies) lives under one service name with an
@@ -43,6 +46,11 @@ public struct KeychainStore: Sendable {
         return String(data: data, encoding: .utf8)
     }
 
+    /// Whether an item exists, without reading its value -- see `KeychainPresence`.
+    public func contains(account: String) -> Bool {
+        KeychainPresence.exists(service: service, account: account)
+    }
+
     @discardableResult
     public func delete(account: String) throws -> Bool {
         let query = baseQuery(account: account)
@@ -65,4 +73,27 @@ public struct KeychainStore: Sendable {
 public enum KeychainError: Error, Sendable {
     case encoding
     case osStatus(OSStatus)
+}
+
+/// Keychain *existence* checks that never raise macOS's "allow access" prompt, even for another
+/// app's item: the query asks only for attributes (the prompt guards the secret, not the item's
+/// existence) and forbids any authentication UI outright. Verified from an unsigned binary not on
+/// the Claude CLI item's access list: it answers found / not-found in milliseconds, no dialog.
+public enum KeychainPresence {
+    public static func exists(service: String, account: String? = nil) -> Bool {
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        if let account { query[kSecAttrAccount as String] = account }
+        let context = LAContext()
+        context.interactionNotAllowed = true
+        query[kSecUseAuthenticationContext as String] = context
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        // Present but locked/needing authentication still means it exists.
+        return status == errSecSuccess || status == errSecInteractionNotAllowed
+    }
 }

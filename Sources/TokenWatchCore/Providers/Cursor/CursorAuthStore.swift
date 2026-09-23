@@ -23,8 +23,10 @@ public struct CursorAuthStore: Sendable {
         self.cookieCache = KeychainStore(service: KeychainStore.cookieCacheServiceName)
     }
 
-    public func isCursorInstalled() -> Bool {
-        FileManager.default.fileExists(atPath: databasePath)
+    /// Whether Cursor.app has saved a sign-in (a read-only file read; expiry isn't checked, since
+    /// Cursor renews its own token whenever it runs).
+    public func hasSavedSignIn() -> Bool {
+        SQLiteReader.readItemTableValue(databasePath: databasePath, key: "cursorAuth/accessToken").map { !$0.isEmpty } ?? false
     }
 
     /// Returns a non-expired session token, or `nil` if Cursor isn't installed, has no saved
@@ -43,12 +45,6 @@ public struct CursorAuthStore: Sendable {
     /// what `CursorProvider.refresh()` actually sends.
     public func resolvedSessionToken() -> String? {
         validAccessToken() ?? safariCookieToken()
-    }
-
-    /// Whether *any* source (local app or a cached/importable Safari cookie) currently has a
-    /// usable session -- without re-parsing Safari's cookie jar if the local path already works.
-    public func hasAnyUsableSession() -> Bool {
-        resolvedSessionToken() != nil
     }
 
     private func safariCookieToken() -> String? {

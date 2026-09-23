@@ -29,6 +29,7 @@ struct CodexAppServerClient {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = ["app-server"]
+        process.environment = BoundedSubprocess.childEnvironment()
         let stdin = Pipe()
         let stdout = Pipe()
         process.standardInput = stdin
@@ -76,17 +77,7 @@ struct CodexAppServerClient {
     }
 
     private func resolveExecutable() -> String? {
-        let fileManager = FileManager.default
-        let pathVar = ProcessInfo.processInfo.environment["PATH"] ?? ""
-        for directory in pathVar.split(separator: ":") {
-            for candidate in executableCandidates {
-                let full = String(directory) + "/" + candidate
-                if fileManager.isExecutableFile(atPath: full) {
-                    return full
-                }
-            }
-        }
-        return nil
+        BoundedSubprocess.resolveOnPath(executableCandidates)
     }
 
     private func jsonRPCLine(id: Int, method: String, params: [String: Any]) -> String {

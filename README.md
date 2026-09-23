@@ -31,8 +31,19 @@ Everything runs locally: no telemetry, no data leaves your device.
 
 On the very first launch, before anything is configured, TokenWatch opens the dashboard once on
 its own -- the status item alone (a plain ring, nothing to show yet) is easy to miss the very
-first time. It goes straight to "No providers enabled -- Open Settings." Every later launch
-leaves discovery to the status item.
+first time. Every later launch leaves discovery to the status item.
+
+While no provider is enabled, the dashboard is an onboarding screen listing every provider found
+on this Mac (`ProviderRuntime.detect()`, run by `ProviderDetectionStore` each time the popover
+opens), all pre-selected with where each was found ("Signed in with Claude Code", "API key saved
+in TokenWatch", "OPENAI_API_KEY is set"); one click (or Return) tracks them, and they're fetched
+immediately rather than on the next refresh cycle. Detection is silent by construction: file and
+directory checks, a lookup of CLIs on `PATH` plus the usual install directories (Homebrew, npm,
+`~/.local/bin`, ...) that an app launched from Finder doesn't inherit, and Keychain *existence*
+probes that ask for attributes only with authentication UI disallowed -- never a secret read, so
+no macOS access prompt, no network, no subprocess. When tracking a provider will read another
+app's Keychain item (Claude Code's sign-in), onboarding says so up front, since that's where
+macOS asks once. Settings marks each provider found on this Mac the same way.
 
 By default (nothing starred yet) the status item shows a smart summary: whichever enabled
 provider has a recent local-activity signal (currently: Claude and Codex, from local session

@@ -32,8 +32,8 @@ struct AntigravityTokenFile: Decodable {
 /// Reads Antigravity CLI's own OAuth token file directly rather than shelling out to `agy -p
 /// /usage`, whose JSON output shape is documented but not independently confirmed. This file
 /// path and shape are confirmed via a real third-party reader (agy-usage). TokenWatch never
-/// refreshes an expired token (same scope cut as the Gemini provider) -- `hasLocalCredentials()`
-/// only checks the file exists; `validAccessToken()` checks expiry.
+/// refreshes an expired token (same scope cut as the Gemini provider) -- `hasTokenFile()` only
+/// checks the file exists; `validAccessToken()` checks expiry.
 public struct AntigravityAuthStore: Sendable {
     private let path: String
 

@@ -13,8 +13,8 @@ public struct KimiProvider: ProviderRuntime {
         self.usageClient = KimiUsageClient()
     }
 
-    public func hasLocalCredentials() async -> Bool {
-        authStore.currentAPIKey() != nil
+    public func detect() -> ProviderDetection? {
+        authStore.detect()
     }
 
     public func refresh() async -> ProviderSnapshot {

@@ -22,8 +22,8 @@ public struct CodexProvider: ProviderRuntime {
         self.appServerClient = CodexAppServerClient()
     }
 
-    public func hasLocalCredentials() async -> Bool {
-        authStore.hasAuthFile()
+    public func detect() -> ProviderDetection? {
+        authStore.hasAuthFile() ? ProviderDetection(source: "Signed in with the Codex CLI") : nil
     }
 
     public func refresh() async -> ProviderSnapshot {

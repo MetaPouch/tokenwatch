@@ -29,6 +29,12 @@ public final class ProviderEnablementStore: ObservableObject {
         persist()
     }
 
+    /// Enables several providers at once with a single config write (onboarding's "Track").
+    public func enable(_ providers: some Sequence<ProviderID>) {
+        enabledProviders.formUnion(providers)
+        persist()
+    }
+
     public func setRefreshIntervalSeconds(_ seconds: Int) {
         refreshIntervalSeconds = min(max(seconds, 60), 1800)
         persist()

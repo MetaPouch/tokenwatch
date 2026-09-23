@@ -16,8 +16,8 @@ public struct OpenAIProvider: ProviderRuntime {
         self.usageClient = OpenAIUsageClient()
     }
 
-    public func hasLocalCredentials() async -> Bool {
-        authStore.currentAPIKey() != nil
+    public func detect() -> ProviderDetection? {
+        authStore.detect()
     }
 
     public func refresh() async -> ProviderSnapshot {

@@ -37,7 +37,10 @@ Each provider lives in `Sources/TokenWatchCore/Providers/<Name>/` with four file
    tested.
 4. `<Name>Provider.swift` — implements `ProviderRuntime`, wiring the three above together with
    `do`/`catch` around every network/parse call. **Never force-unwrap a response** — a
-   provider's `refresh()` must return `.error(...)` on any failure, never throw or crash.
+   provider's `refresh()` must return `.error(...)` on any failure, never throw or crash. Its
+   `detect()` feeds onboarding's "found on this Mac" list and must stay silent: file checks, a
+   `BoundedSubprocess.resolveOnPath` lookup, or a `KeychainPresence` probe -- never a Keychain
+   secret read (that can raise macOS's access prompt), a network call, or a subprocess.
 
 Add a case to `ProviderID` (`Sources/TokenWatchCore/Models/ProviderID.swift`) with its
 `displayName`, `iconResourceName`, and `hasMonochromeIcon`, and drop a real logo at

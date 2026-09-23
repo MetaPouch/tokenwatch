@@ -18,8 +18,8 @@ public struct AntigravityProvider: ProviderRuntime {
         self.usageClient = AntigravityUsageClient()
     }
 
-    public func hasLocalCredentials() async -> Bool {
-        authStore.hasTokenFile()
+    public func detect() -> ProviderDetection? {
+        authStore.hasTokenFile() ? ProviderDetection(source: "Signed in with Antigravity") : nil
     }
 
     public func refresh() async -> ProviderSnapshot {

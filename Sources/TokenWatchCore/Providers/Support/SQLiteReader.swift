@@ -8,11 +8,25 @@ import SQLite3
 enum SQLiteReader {
     /// Returns the raw `value` BLOB for the first row matching `key` in `ItemTable`, or `nil` if
     /// the database can't be opened or no matching row exists.
+    ///
+    /// These databases use WAL mode. A plain read-only open of a WAL database fails whenever its
+    /// `-shm` file is absent -- which is whenever the owning app isn't running, since it deletes
+    /// `-wal`/`-shm` on quit -- because a read-only connection can't create it. So when the plain
+    /// open can't read, this retries with `immutable=1`, which skips WAL/locking entirely; that's
+    /// only safe because the plain open succeeds whenever the app is running and writing.
     static func readItemTableValue(databasePath: String, key: String) -> Data? {
+        if let value = query(databasePath, flags: SQLITE_OPEN_READONLY, key: key) {
+            return value
+        }
+        let immutableURI = URL(fileURLWithPath: databasePath).absoluteString + "?immutable=1"
+        return query(immutableURI, flags: SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, key: key)
+    }
+
+    private static func query(_ filename: String, flags: Int32, key: String) -> Data? {
         var db: OpaquePointer?
         defer { if db != nil { sqlite3_close(db) } }
 
-        guard sqlite3_open_v2(databasePath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+        guard sqlite3_open_v2(filename, &db, flags, nil) == SQLITE_OK else {
             return nil
         }
 
