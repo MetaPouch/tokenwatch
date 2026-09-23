@@ -1,6 +1,6 @@
 cask "tokenwatch" do
-  version "1.7.1"
-  sha256 "45837641a5e6ffbf2ee786bd535fd54772fcd5a3af2d6becc9151934465c6b8e"
+  version "1.7.2"
+  sha256 "3ebe27056d4f9aee2454c9b40426ab61409b92c3de85f985014e2e7c4f4ad815"
 
   url "https://github.com/MetaPouch/tokenwatch/releases/download/v#{version}/TokenWatch-#{version}.dmg"
   name "TokenWatch"
