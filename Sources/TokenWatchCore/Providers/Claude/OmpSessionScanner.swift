@@ -2,7 +2,8 @@ import Foundation
 
 /// Reads a coding-agent harness's own local session transcripts (currently: `omp`, the CLI behind
 /// Superset, at `~/.omp/agent/sessions/<encoded-cwd>/<timestamp>_<ulid>.jsonl`) as a supplementary
-/// local-activity source for Claude's cache-temperature/session list.
+/// local-activity source for Claude's and Codex's cache-temperature/session lists -- each taking
+/// the turns omp served through its own model provider (`OmpUsageLog.ompProvider(for:)`).
 ///
 /// Why this exists: a harness like `omp` calls the Anthropic API directly -- confirmed on a live
 /// machine via `ps aux` (the process is `omp --model anthropic/...`, never `claude`) -- so it never
@@ -18,26 +19,41 @@ import Foundation
 /// the JSON shape was read directly off disk), and it could change without notice in a future `omp`
 /// release. Every read here is defensive: a missing file, unexpected shape, or parse failure yields
 /// `nil`/empty, never a crash or a stuck refresh -- the same failure posture as every other scanner
-/// in this app. Produces the same `ClaudeSessionActivity` type `ClaudeSessionScanner` does, so
-/// `ClaudeProvider` merges both sources into one list with no special-casing downstream.
+/// in this app. Produces the same `ClaudeSessionActivity` type `ClaudeSessionScanner` does (omp's
+/// disjoint input/cache buckets have the same shape for every provider), so `ClaudeProvider`
+/// merges both sources into one list with no special-casing downstream; `CodexProvider` converts.
 enum OmpSessionScanner {
     static func projectRoots(homeDirectory: String = NSHomeDirectory()) -> [String] {
-        [homeDirectory + "/.omp/agent/sessions"]
+        OmpUsageLog.roots(homeDirectory: homeDirectory)
     }
 
     /// Matches `ClaudeSessionScanner`'s window so a merged "active sessions" list has one
     /// consistent recency cutoff regardless of which scanner found which entry.
     static let activeSessionWindowSeconds: TimeInterval = ClaudeSessionScanner.activeSessionWindowSeconds
 
-    static func mostRecentActivity(roots: [String] = projectRoots()) -> ClaudeSessionActivity? {
-        guard let newestFile = newestTranscriptFile(roots: roots) else { return nil }
-        return lastAnthropicActivity(inFileAtPath: newestFile)
+    /// The newest turn `provider` served in an omp session written within `lookbackSeconds`. One
+    /// omp session can switch providers, so the newest file isn't necessarily the right one: files
+    /// are checked newest first, stopping once the next file was last written before the best turn
+    /// found (it can't hold a newer one). Bounded to the day the menu bar considers "recent", so a
+    /// provider never used through omp doesn't read the tail of every omp session ever written.
+    static func mostRecentActivity(provider: ProviderID = .claude, roots: [String] = projectRoots(), now: Date = Date(), lookbackSeconds: TimeInterval = 24 * 3600) -> ClaudeSessionActivity? {
+        guard let ompProvider = OmpUsageLog.ompProvider(for: provider) else { return nil }
+        var best: ClaudeSessionActivity?
+        let files = transcriptFiles(roots: roots, modifiedSince: now.addingTimeInterval(-lookbackSeconds))
+        for file in files.sorted(by: { $0.modified > $1.modified }) {
+            if let best, file.modified < best.timestamp { break }
+            if let activity = lastActivity(inFileAtPath: file.path, ompProvider: ompProvider), activity.timestamp > best?.timestamp ?? .distantPast {
+                best = activity
+            }
+        }
+        return best
     }
 
-    static func allRecentActivity(roots: [String] = projectRoots(), now: Date = Date(), windowSeconds: TimeInterval = activeSessionWindowSeconds) -> [ClaudeSessionActivity] {
+    static func allRecentActivity(provider: ProviderID = .claude, roots: [String] = projectRoots(), now: Date = Date(), windowSeconds: TimeInterval = activeSessionWindowSeconds) -> [ClaudeSessionActivity] {
+        guard let ompProvider = OmpUsageLog.ompProvider(for: provider) else { return [] }
         let cutoff = now.addingTimeInterval(-windowSeconds)
         let files = transcriptFiles(roots: roots, modifiedSince: cutoff)
-        let activities = files.compactMap { lastAnthropicActivity(inFileAtPath: $0.path) }
+        let activities = files.compactMap { lastActivity(inFileAtPath: $0.path, ompProvider: ompProvider) }
         return activities.sorted { $0.timestamp > $1.timestamp }
     }
 
@@ -70,17 +86,13 @@ enum OmpSessionScanner {
         return results
     }
 
-    private static func newestTranscriptFile(roots: [String]) -> String? {
-        transcriptFiles(roots: roots, modifiedSince: .distantPast).max { $0.modified < $1.modified }?.path
-    }
-
-    /// Scans the tail of `path` for the last assistant message tagged `provider == "anthropic"`.
+    /// Scans the tail of `path` for the last assistant message served by `ompProvider`.
     /// A single omp session can mix providers/models turn to turn (switching models mid-conversation
-    /// is a normal user action), so this looks past any trailing non-Anthropic turns rather than
-    /// stopping at the very last line. Bounded to the last `tailReadBytes` of the file -- an
+    /// is a normal user action), so this looks past any trailing turns from other providers rather
+    /// than stopping at the very last line. Bounded to the last `tailReadBytes` of the file -- an
     /// actively-used omp session observed during implementation was 10+ MB after a few days, and a
     /// handful of the most recent messages are always well within a couple hundred KB of the tail.
-    private static func lastAnthropicActivity(inFileAtPath path: String) -> ClaudeSessionActivity? {
+    private static func lastActivity(inFileAtPath path: String, ompProvider: String) -> ClaudeSessionActivity? {
         guard let text = tailText(ofFileAtPath: path) else { return nil }
         let sessionLabel = ompSessionCwd(atPath: path).map { ($0 as NSString).lastPathComponent }
             ?? ((path as NSString).deletingLastPathComponent as NSString).lastPathComponent
@@ -91,7 +103,7 @@ enum OmpSessionScanner {
                   entry.type == "message",
                   let message = entry.message,
                   message.role == "assistant",
-                  message.provider == "anthropic",
+                  message.provider == ompProvider,
                   let usage = message.usage,
                   let timestampString = entry.timestamp,
                   let timestamp = FlexibleISO8601.parse(timestampString)

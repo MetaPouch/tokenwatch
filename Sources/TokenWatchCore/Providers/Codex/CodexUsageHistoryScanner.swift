@@ -1,8 +1,10 @@
 import Foundation
 
 /// Daily token usage and estimated spend for Codex, from the Codex CLI's local rollout logs
-/// (`$CODEX_HOME/sessions/**/*.jsonl` plus `archived_sessions/`), priced at API list rates. The
-/// counterpart of `ClaudeUsageHistoryScanner`; both feed `UsageDay`s into the same Usage-tab views.
+/// (`$CODEX_HOME/sessions/**/*.jsonl` plus `archived_sessions/`) and the Codex turns in omp's logs
+/// (`OmpUsageLog`, provider `openai-codex` -- omp calls the API directly, so those never appear in
+/// a rollout), priced at API list rates. The counterpart of `ClaudeUsageHistoryScanner`; both feed
+/// `UsageDay`s into the same Usage-tab views.
 ///
 /// Ported from OpenUsage's `CodexLogUsageScanner`/`CodexLogFileParser` (itself ccusage's Codex
 /// adapter), whose rules each prevent a real miscount:
@@ -22,7 +24,7 @@ public enum CodexUsageHistoryScanner {
         return [home + "/sessions", home + "/archived_sessions"]
     }
 
-    public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, roots: [String]? = nil) -> [UsageDay] {
+    public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, roots: [String]? = nil, ompRoots: [String]? = nil) -> [UsageDay] {
         var accumulator = UsageDayAccumulator(days: days, now: now, calendar: calendar)
         var seen = Set<Event>()
         for path in rolloutPaths(roots: roots ?? Self.roots(), modifiedSince: accumulator.cutoff) {
@@ -41,6 +43,21 @@ public enum CodexUsageHistoryScanner {
                     output: event.output, costUSD: cost, approximate: approximate
                 )
             }
+        }
+
+        // omp's buckets are already disjoint; its own recorded cost wins over re-pricing.
+        let ompProvider = OmpUsageLog.ompProvider(for: .codex)
+        for turn in OmpUsageLog.turns(roots: ompRoots ?? OmpUsageLog.roots(), modifiedSince: accumulator.cutoff)
+            where turn.provider == ompProvider && turn.timestamp >= accumulator.cutoff {
+            let repriced = ModelPricing.codexCostUSD(
+                model: turn.model, inputTokens: turn.input + turn.cacheRead + turn.cacheWrite,
+                cachedInputTokens: turn.cacheRead, outputTokens: turn.output
+            )
+            accumulator.add(
+                timestamp: turn.timestamp, model: turn.model,
+                input: turn.input, cacheRead: turn.cacheRead, cacheWrite: turn.cacheWrite, output: turn.output,
+                costUSD: turn.costUSD ?? repriced.cost, approximate: turn.costUSD == nil && repriced.approximate
+            )
         }
         return accumulator.build()
     }

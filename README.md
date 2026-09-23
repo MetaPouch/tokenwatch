@@ -136,10 +136,12 @@ minutes only for a log that doesn't record it. Codex's detail does not, since Op
 retention is server-side, org-dependent, and machine-local, so it only reports whether the last
 turn itself was a cache hit.
 
-Claude's local activity also picks up sessions run through a coding-agent harness that talks to
-Anthropic's API directly rather than shelling out to the `claude` CLI (currently: `omp`, the CLI
-behind [Superset](https://superset.sh)) -- without this, usage through such a harness would be
-completely invisible to the local session list even though it's real Claude usage. This depends
+Claude's and Codex's local activity also picks up sessions run through a coding-agent harness
+that talks to the model APIs directly rather than shelling out to the `claude` or `codex` CLI
+(currently: `omp`, the CLI behind [Superset](https://superset.sh)) -- without this, usage
+through such a harness would be completely invisible to the session lists and spend even though
+it's real usage. One omp session can switch providers turn to turn; its Anthropic turns count as
+Claude and its `openai-codex` turns (a ChatGPT sign-in, the Codex quota) as Codex. This depends
 on that harness's own undocumented local session-log format, not a stable public contract the
 way Claude Code's and Codex's are, so it's read defensively and fails soft if the format ever
 changes.
@@ -156,7 +158,8 @@ required. A day's token total is input + cache reads + cache writes + output.
   `costUSD`, `omp`'s per-turn cost) is used as-is; otherwise tokens are priced at list rates, with
   1-hour cache writes at 2x input and 5-minute ones at 1.25x. `<synthetic>` (locally generated)
   messages cost nothing.
-- **Codex** (`$CODEX_HOME/sessions` and `archived_sessions`), ported from OpenUsage's Codex
+- **Codex** (`$CODEX_HOME/sessions` and `archived_sessions`, plus `omp`'s `openai-codex` turns
+  at `omp`'s own recorded cost), ported from OpenUsage's Codex
   scanner: a turn is a `token_count` event's `last_token_usage` (or its delta from the previous
   running total); a re-emitted, unchanged running total isn't a new turn; a subagent or forked
   session's replay of its parent's history isn't counted; and an identical event in two files

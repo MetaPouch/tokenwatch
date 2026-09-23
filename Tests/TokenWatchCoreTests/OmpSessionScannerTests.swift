@@ -96,6 +96,24 @@ final class OmpSessionScannerTests: XCTestCase {
         XCTAssertEqual(activity?.cacheReadTokens, 200)
     }
 
+    /// Each provider gets its own omp sessions: the newest file here holds only Codex turns, which
+    /// must neither hide Claude's newest session (in an older file) nor show up as a Claude one.
+    func testEachProviderFindsItsOwnNewestSessionAcrossFiles() {
+        writeSession("claude.jsonl", projectDir: "-a", lines: [
+            sessionLine(cwd: "/Users/alice/claude-work"),
+            messageLine(timestamp: "2026-01-01T00:00:00.000Z", provider: "anthropic", input: 500, cacheRead: 200, cacheWrite: 0),
+        ], modifiedSecondsAgo: 600)
+        writeSession("codex.jsonl", projectDir: "-b", lines: [
+            sessionLine(cwd: "/Users/alice/codex-work"),
+            messageLine(timestamp: "2026-01-01T00:20:00.000Z", provider: "openai-codex", input: 70, cacheRead: 30, cacheWrite: 0),
+        ])
+
+        XCTAssertEqual(OmpSessionScanner.mostRecentActivity(roots: [tempRoot.path])?.sessionLabel, "claude-work")
+        XCTAssertEqual(OmpSessionScanner.mostRecentActivity(provider: .codex, roots: [tempRoot.path])?.sessionLabel, "codex-work")
+        XCTAssertEqual(OmpSessionScanner.allRecentActivity(roots: [tempRoot.path]).map(\.sessionLabel), ["claude-work"])
+        XCTAssertEqual(OmpSessionScanner.allRecentActivity(provider: .codex, roots: [tempRoot.path]).map(\.sessionLabel), ["codex-work"])
+    }
+
     func testSkipsNonAssistantRoleMessages() {
         writeSession("session.jsonl", lines: [
             sessionLine(cwd: "/Users/alice/.superset/projects/widget"),

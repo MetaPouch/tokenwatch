@@ -46,8 +46,35 @@ final class CodexUsageHistoryScannerTests: XCTestCase {
     }
 
     private func day15() -> UsageDay? {
-        CodexUsageHistoryScanner.dailyUsage(days: 30, now: now, roots: [root.appendingPathComponent("sessions").path, root.appendingPathComponent("archived_sessions").path])
+        CodexUsageHistoryScanner.dailyUsage(days: 30, now: now, roots: [root.appendingPathComponent("sessions").path, root.appendingPathComponent("archived_sessions").path], ompRoots: [root.appendingPathComponent("omp").path])
             .first { $0.id == "2026-06-15" }
+    }
+
+    /// Codex used through omp is logged only in omp's session files (omp calls the API itself), in
+    /// omp's disjoint buckets with its own cost. It counts toward Codex -- and only omp's
+    /// `openai-codex` turns do, not the Anthropic turns in the same session.
+    func testOmpCodexTurnsCountTowardCodexButNotOtherProviders() {
+        let turn = { (provider: String, model: String) in
+            #"{"type":"message","timestamp":"2026-06-15T10:00:00.000Z","message":{"role":"assistant","provider":"\#(provider)","model":"\#(model)","usage":{"input":4000,"cacheRead":30000,"cacheWrite":0,"output":500,"cost":{"total":0.1}}}}"#
+        }
+        writeRollout("omp/-Users-alice-widget/session.jsonl", lines: [
+            turn("openai-codex", "gpt-6-astra"),
+            turn("anthropic", "claude-sonnet-5"),
+        ])
+        let day = day15()
+        XCTAssertEqual(day?.inputTokens, 4_000)
+        XCTAssertEqual(day?.cacheReadTokens, 30_000)
+        XCTAssertEqual(day?.estimatedCostUSD ?? -1, 0.1, accuracy: 0.0001)
+        XCTAssertEqual(day?.modelBreakdown.map(\.id), ["gpt-6-astra"])
+    }
+
+    /// Without a recorded cost, omp's disjoint input is re-joined with its cache reads so cached
+    /// tokens bill at the cache rate: gpt-6-astra 4K x $10/M + 30K x $1/M + 500 x $50/M.
+    func testOmpCodexTurnWithoutCostIsRepricedAtCacheRate() {
+        writeRollout("omp/-Users-alice-widget/session.jsonl", lines: [
+            #"{"type":"message","timestamp":"2026-06-15T10:00:00.000Z","message":{"role":"assistant","provider":"openai-codex","model":"gpt-6-astra","usage":{"input":4000,"cacheRead":30000,"cacheWrite":0,"output":500}}}"#,
+        ])
+        XCTAssertEqual(day15()?.estimatedCostUSD ?? -1, 0.095, accuracy: 0.0001)
     }
 
     /// Cached tokens are inside `input_tokens`: only the uncached part bills at the input rate.

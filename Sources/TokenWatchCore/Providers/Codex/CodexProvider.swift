@@ -59,20 +59,26 @@ public struct CodexProvider: ProviderRuntime {
         }
     }
 
-    /// Scans local Codex CLI rollout transcripts (best-effort, non-fatal on any failure) and
-    /// appends a cache-temperature badge per active session on top of the usage `lines` already
-    /// fetched from the API -- shared by both the primary and app-server-fallback refresh paths
-    /// so cache-temperature works regardless of which credential source produced the usage %.
+    /// Scans local Codex activity (best-effort, non-fatal on any failure) and appends a
+    /// cache-temperature badge per active session on top of the usage `lines` already fetched from
+    /// the API -- shared by both the primary and app-server-fallback refresh paths so
+    /// cache-temperature works regardless of which credential source produced the usage %. Merges
+    /// two sources, like `ClaudeProvider`: Codex CLI rollouts (`CodexSessionScanner`) and Codex used
+    /// through omp (`OmpSessionScanner`), which calls the API itself and never writes a rollout.
     /// `plan` is the usage endpoint's own `plan_type` when the primary path produced it -- the
     /// app-server fallback has no equivalent field, so it always passes `nil`.
     private static func appendingCacheTemperature(to usageLines: [MetricLine], plan: String?) -> ProviderSnapshot {
         var lines = usageLines
-        let activity = CodexSessionScanner.mostRecentActivity()
+        let activity = [CodexSessionScanner.mostRecentActivity(), OmpSessionScanner.mostRecentActivity(provider: id).map(CodexSessionActivity.init(omp:))]
+            .compactMap { $0 }
+            .max { $0.timestamp < $1.timestamp }
         if let cacheLine = CodexCacheTemperature.evaluate(activity: activity) {
             lines.append(cacheLine)
         }
 
-        let otherActiveSessions = CodexSessionScanner.allRecentActivity().filter { $0.filePath != activity?.filePath }
+        let otherActiveSessions = (CodexSessionScanner.allRecentActivity() + OmpSessionScanner.allRecentActivity(provider: id).map(CodexSessionActivity.init(omp:)))
+            .filter { $0.filePath != activity?.filePath }
+            .sorted { $0.timestamp > $1.timestamp }
         for (index, session) in otherActiveSessions.enumerated() {
             if let line = CodexCacheTemperature.evaluate(activity: session, badgeID: "cacheTemperature-other-\(index)") {
                 lines.append(line)
@@ -80,5 +86,19 @@ public struct CodexProvider: ProviderRuntime {
         }
 
         return ProviderSnapshot(provider: Self.id, plan: plan, lines: lines, fetchedAt: Date(), lastActivityAt: activity?.timestamp, lastActivityLabel: activity?.sessionLabel)
+    }
+}
+
+extension CodexSessionActivity {
+    /// A Codex turn from omp's log. omp keeps cache reads/writes out of `input`; OpenAI's shape
+    /// (and `CodexCacheTemperature`'s hit ratio) counts cached tokens inside it.
+    init(omp activity: ClaudeSessionActivity) {
+        self.init(
+            filePath: activity.filePath,
+            timestamp: activity.timestamp,
+            inputTokens: activity.inputTokens + activity.cacheReadTokens + activity.cacheCreationTokens,
+            cachedInputTokens: activity.cacheReadTokens,
+            sessionLabel: activity.sessionLabel
+        )
     }
 }
