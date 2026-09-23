@@ -17,7 +17,7 @@ struct DashboardView: View {
     @ObservedObject var displayStore: MeterDisplayStore
     @ObservedObject var appearanceStore: AppearanceStore
     @ObservedObject var notificationSettingsStore: NotificationSettingsStore
-    @ObservedObject var claudeSpendHistoryStore: ClaudeSpendHistoryStore
+    @ObservedObject var spendHistoryStore: SpendHistoryStore
     @ObservedObject var hintStore: HintStore
     let notificationService: QuotaNotificationService
     let toggleDashboardPanel: () -> Void
@@ -418,9 +418,9 @@ struct DashboardView: View {
     /// never a quota bar (those live on Limits; see `MetricLine.category`). Only a provider with
     /// something to show here gets a card -- most providers have no usage-category data today.
     private var usageList: some View {
-        MeasuredScrollView(maxHeight: maxContentHeight, refreshID: "\(usageProviders)-\(claudeSpendHistoryStore.days.count)") {
+        MeasuredScrollView(maxHeight: maxContentHeight, refreshID: "\(usageProviders)-\(spendHistoryStore.lastLoadedAt?.timeIntervalSince1970 ?? 0)") {
             VStack(alignment: .leading, spacing: 10) {
-                TotalSpendCard(dataStore: dataStore, enablementStore: enablementStore, displayStore: displayStore, spendHistoryStore: claudeSpendHistoryStore)
+                TotalSpendCard(dataStore: dataStore, enablementStore: enablementStore, displayStore: displayStore, spendHistoryStore: spendHistoryStore)
                 ForEach(usageProviders) { provider in
                     ProviderSectionView(
                         provider: provider,
@@ -431,13 +431,13 @@ struct DashboardView: View {
                         timeFormat: appearanceStore.timeFormat,
                         category: .usage,
                         isDraggable: false,
-                        spendHistoryStore: provider == .claude ? claudeSpendHistoryStore : nil,
+                        spendHistoryStore: SpendHistoryStore.hasHistory(provider) ? spendHistoryStore : nil,
                         onRefresh: { refreshScheduler.refreshProvider(provider) },
                         onHideProvider: { enablementStore.setEnabled(provider, false) },
                         onCustomizeProvider: { customizeDetailProvider = provider; currentScreen = .customize }
                     )
                 }
-                UsageHistoryView(store: claudeSpendHistoryStore)
+                UsageHistoryView(store: spendHistoryStore, providers: SpendHistoryStore.providers.filter { enablementStore.isEnabled($0) })
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
@@ -453,7 +453,7 @@ struct DashboardView: View {
                 category: .usage,
                 layoutStore: layoutStore,
                 provider: provider,
-                spendHistoryStore: provider == .claude ? claudeSpendHistoryStore : nil
+                spendHistoryStore: SpendHistoryStore.hasHistory(provider) ? spendHistoryStore : nil
             )
         }
     }

@@ -21,17 +21,17 @@ public enum SpendMetricMode: String, CaseIterable, Sendable, Identifiable {
 /// Pure period-filtering over a day-bucketed local spend history, split out of
 /// `TotalSpendCard` so it's testable without a real (multi-second) filesystem scan.
 public enum SpendAggregator {
-    public static func amount(for period: SpendPeriod, days: [ClaudeUsageDay], calendar: Calendar = .current, now: Date = Date()) -> Double {
+    public static func amount(for period: SpendPeriod, days: [UsageDay], calendar: Calendar = .current, now: Date = Date()) -> Double {
         sum(for: period, days: days, calendar: calendar, now: now) { $0.estimatedCostUSD }
     }
 
-    public static func tokens(for period: SpendPeriod, days: [ClaudeUsageDay], calendar: Calendar = .current, now: Date = Date()) -> Int {
+    public static func tokens(for period: SpendPeriod, days: [UsageDay], calendar: Calendar = .current, now: Date = Date()) -> Int {
         Int(sum(for: period, days: days, calendar: calendar, now: now) { Double($0.totalTokens) })
     }
 
     /// Dollars per million tokens over the period -- `nil` when there's no token volume to divide
     /// by (never a divide-by-zero crash, never a fabricated rate).
-    public static func costPerMillionTokens(for period: SpendPeriod, days: [ClaudeUsageDay], calendar: Calendar = .current, now: Date = Date()) -> Double? {
+    public static func costPerMillionTokens(for period: SpendPeriod, days: [UsageDay], calendar: Calendar = .current, now: Date = Date()) -> Double? {
         let totalTokens = tokens(for: period, days: days, calendar: calendar, now: now)
         guard totalTokens > 0 else { return nil }
         let cost = amount(for: period, days: days, calendar: calendar, now: now)
@@ -41,8 +41,8 @@ public enum SpendAggregator {
     /// Per-model spend across every day in the period, merged by model name and sorted largest
     /// first. Models past the top 5 or under 5% of the period's total cost fold into a single
     /// "Other" entry, so a long tail of one-off model names doesn't crowd out a hover list.
-    public static func modelBreakdown(for period: SpendPeriod, days: [ClaudeUsageDay], calendar: Calendar = .current, now: Date = Date()) -> [ModelSpend] {
-        let relevantDays: [ClaudeUsageDay]
+    public static func modelBreakdown(for period: SpendPeriod, days: [UsageDay], calendar: Calendar = .current, now: Date = Date()) -> [ModelSpend] {
+        let relevantDays: [UsageDay]
         switch period {
         case .today:
             relevantDays = days.filter { calendar.isDate($0.date, inSameDayAs: now) }
@@ -77,7 +77,7 @@ public enum SpendAggregator {
         return Array(named) + [ModelSpend(id: "Other", costUSD: otherCost, tokens: otherTokens)]
     }
 
-    private static func sum(for period: SpendPeriod, days: [ClaudeUsageDay], calendar: Calendar, now: Date, value: (ClaudeUsageDay) -> Double) -> Double {
+    private static func sum(for period: SpendPeriod, days: [UsageDay], calendar: Calendar, now: Date, value: (UsageDay) -> Double) -> Double {
         switch period {
         case .today:
             return days.first { calendar.isDate($0.date, inSameDayAs: now) }.map(value) ?? 0

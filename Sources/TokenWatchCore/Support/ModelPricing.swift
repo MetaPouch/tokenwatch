@@ -10,7 +10,7 @@ import Foundation
 /// prices -- `pricingTableUpdatedOn` is surfaced in the UI so an estimate is never presented as
 /// more current than it actually is.
 public enum ModelPricing {
-    public static let pricingTableUpdatedOn = "2026-09-11"
+    public static let pricingTableUpdatedOn = "2026-09-23"
 
     struct Rate {
         let inputPerMillion: Double
@@ -27,6 +27,7 @@ public enum ModelPricing {
     private static let cacheWrite1hMultiplier = 2.0
 
     private static let claudeRates: [String: Rate] = [
+        "claude-opus-5-5": Rate(inputPerMillion: 4, outputPerMillion: 20, cacheReadPerMillion: 0.2),
         "claude-opus-5": Rate(inputPerMillion: 5, outputPerMillion: 25, cacheReadPerMillion: nil),
         "claude-opus-4-8": Rate(inputPerMillion: 5, outputPerMillion: 25, cacheReadPerMillion: nil),
         "claude-opus-4-7": Rate(inputPerMillion: 5, outputPerMillion: 25, cacheReadPerMillion: nil),
@@ -39,7 +40,15 @@ public enum ModelPricing {
         "claude-3-5-haiku": Rate(inputPerMillion: 0.8, outputPerMillion: 4, cacheReadPerMillion: nil),
     ]
 
+    /// Rates for current models from LiteLLM's public price list (the same source
+    /// `PricingRefreshService` refreshes from), so estimates are right offline and on first launch.
     private static let codexRates: [String: Rate] = [
+        "gpt-6-astra": Rate(inputPerMillion: 10, outputPerMillion: 50, cacheReadPerMillion: 1),
+        "gpt-5.6-sol": Rate(inputPerMillion: 4, outputPerMillion: 20, cacheReadPerMillion: 0.4),
+        "gpt-5.6-terra": Rate(inputPerMillion: 2, outputPerMillion: 12, cacheReadPerMillion: 0.2),
+        "gpt-5.6-luna": Rate(inputPerMillion: 0.2, outputPerMillion: 1.2, cacheReadPerMillion: 0.02),
+        "gpt-5.5": Rate(inputPerMillion: 5, outputPerMillion: 30, cacheReadPerMillion: 0.5),
+        "gpt-5.4": Rate(inputPerMillion: 2.5, outputPerMillion: 15, cacheReadPerMillion: 0.25),
         "gpt-5.3-codex": Rate(inputPerMillion: 1.75, outputPerMillion: 14, cacheReadPerMillion: nil),
         "gpt-5.3": Rate(inputPerMillion: 1.75, outputPerMillion: 14, cacheReadPerMillion: nil),
         "gpt-5-codex": Rate(inputPerMillion: 1.25, outputPerMillion: 10, cacheReadPerMillion: nil),
@@ -120,5 +129,48 @@ public enum ModelPricing {
             + (Double(cacheReadTokens) / 1_000_000) * cacheReadRate
             + (Double(cacheWriteTokens - write1h) / 1_000_000) * rate.inputPerMillion * cacheWriteMultiplier
             + (Double(write1h) / 1_000_000) * rate.inputPerMillion * cacheWrite1hMultiplier
+    }
+
+    /// Codex/OpenAI request pricing, ported from OpenUsage's `CodexUsagePricing`. OpenAI's usage
+    /// shape counts cached tokens *inside* `inputTokens`, so only the uncached remainder is billed
+    /// at the input rate. Two request-level rules apply on top of the base rate:
+    /// - Long context: a request above 272K input tokens on a model with a long-context tier bills
+    ///   entirely at 2x input / 2x cache read / 1.5x output.
+    /// - Priority (Codex "fast" service tier): the whole request is multiplied, 2.5x for gpt-5.5
+    ///   and 2x otherwise.
+    static func codexCostUSD(model: String, inputTokens: Int, cachedInputTokens: Int, outputTokens: Int, priorityTier: Bool = false) -> (cost: Double, approximate: Bool) {
+        let (rate, approximate) = rate(provider: .codex, model: model)
+        let base = datedBaseModel(model.lowercased())
+        let longContext = inputTokens > codexLongContextThreshold && hasCodexLongContextTier(base)
+        let inputRate = rate.inputPerMillion * (longContext ? 2 : 1)
+        let cacheReadRate = (rate.cacheReadPerMillion ?? rate.inputPerMillion * cacheReadMultiplier) * (longContext ? 2 : 1)
+        let outputRate = rate.outputPerMillion * (longContext ? 1.5 : 1)
+        let cached = min(max(cachedInputTokens, 0), inputTokens)
+        let cost = (Double(inputTokens - cached) / 1_000_000) * inputRate
+            + (Double(cached) / 1_000_000) * cacheReadRate
+            + (Double(outputTokens) / 1_000_000) * outputRate
+        let multiplier = priorityTier ? (base.hasPrefix("gpt-5.5") ? 2.5 : 2) : 1
+        return (cost * multiplier, approximate)
+    }
+
+    static let codexLongContextThreshold = 272_000
+
+    /// Models whose API pricing has a long-context (>272K input) tier; `-pro` variants price
+    /// differently and aren't covered.
+    private static func hasCodexLongContextTier(_ base: String) -> Bool {
+        guard !base.contains("-pro") else { return false }
+        return ["gpt-5.4", "gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra"]
+            .contains { base == $0 || base.hasPrefix($0 + "-") }
+    }
+
+    /// Strips a trailing `-YYYY-MM-DD` or `-YYYYMMDD` snapshot suffix.
+    static func datedBaseModel(_ model: String) -> String {
+        for pattern in ["-dddd-dd-dd", "-dddddddd"] where model.count > pattern.count {
+            let matches = zip(model.suffix(pattern.count), pattern).allSatisfy { character, token in
+                token == "d" ? character.isNumber : character == token
+            }
+            if matches { return String(model.dropLast(pattern.count)) }
+        }
+        return model
     }
 }

@@ -1,24 +1,33 @@
 import SwiftUI
 import TokenWatchCore
 
-/// Estimated daily token/cost history from local Claude session logs (both the real `claude` CLI
-/// and a coding-agent harness's own transcripts -- see `ClaudeUsageHistoryScanner`), priced at
-/// API list rates (`ModelPricing`). Scoped to Claude only and a 7-day window sliced from the
-/// shared 30-day `ClaudeSpendHistoryStore` -- reusing that cache instead of running its own scan
-/// means switching to the Usage tab is instant after the first load, not a fresh multi-second
-/// disk scan (and a loading spinner) every single time.
+/// Estimated daily token/cost history for the last 7 days, one bar per day stacked by provider in
+/// each provider's brand color -- every enabled provider with a local usage-history scanner
+/// (`SpendHistoryStore.providers`), priced at API list rates (`ModelPricing`). Sliced from the
+/// shared 30-day `SpendHistoryStore`, so switching to the Usage tab is instant after the first
+/// load instead of a fresh multi-second disk scan every time.
 struct UsageHistoryView: View {
-    @ObservedObject var store: ClaudeSpendHistoryStore
+    @ObservedObject var store: SpendHistoryStore
+    /// Which providers to include, in stacking order (bottom first).
+    let providers: [ProviderID]
     @State private var showCost = true
 
-    private var days: [ClaudeUsageDay] {
-        Array(store.days.suffix(7))
+    /// One entry per day (oldest first), each with every provider's day for that date.
+    private var days: [(id: String, date: Date, byProvider: [(provider: ProviderID, day: UsageDay)])] {
+        let series = providers.map { ($0, Array(store.days(for: $0).suffix(7))) }
+        guard let reference = series.first?.1 else { return [] }
+        return reference.map { referenceDay in
+            let byProvider = series.compactMap { provider, providerDays in
+                providerDays.first { $0.id == referenceDay.id }.map { (provider: provider, day: $0) }
+            }
+            return (referenceDay.id, referenceDay.date, byProvider)
+        }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Claude · last 7 days")
+                Text("Last 7 days")
                     .font(.caption.weight(.semibold))
                 Spacer()
                 Picker("", selection: $showCost) {
@@ -30,6 +39,7 @@ struct UsageHistoryView: View {
                 .frame(width: 120)
             }
 
+            let days = days
             if store.isLoading {
                 HStack {
                     Spacer()
@@ -37,14 +47,15 @@ struct UsageHistoryView: View {
                     Spacer()
                 }
                 .padding(.vertical, 24)
-            } else if days.allSatisfy({ $0.totalTokens == 0 }) {
-                Text("No local Claude activity in the last 7 days")
+            } else if days.allSatisfy({ $0.byProvider.allSatisfy { $0.day.totalTokens == 0 } }) {
+                Text("No local activity in the last 7 days")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
             } else {
-                chart
-                Text("Estimated at API list rates, refreshed against live pricing when reachable (static fallback updated \(ModelPricing.pricingTableUpdatedOn)) -- subscription usage isn't billed per token.")
+                chart(days)
+                if providers.count > 1 { legend }
+                Text("Estimated at API list rates, refreshed against live pricing when reachable (static fallback updated \(ModelPricing.pricingTableUpdatedOn)) -- subscription usage isn't billed per token. ~ marks a day with a model priced approximately.")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
@@ -54,20 +65,34 @@ struct UsageHistoryView: View {
         .task { store.loadIfNeeded() }
     }
 
-    private var chart: some View {
-        let maxValue = max(days.map { showCost ? $0.estimatedCostUSD : Double($0.totalTokens) }.max() ?? 0, 0.0001)
+    private func magnitude(_ day: UsageDay) -> Double {
+        showCost ? day.estimatedCostUSD : Double(day.totalTokens)
+    }
+
+    private func chart(_ days: [(id: String, date: Date, byProvider: [(provider: ProviderID, day: UsageDay)])]) -> some View {
+        let totals = days.map { $0.byProvider.reduce(0) { $0 + magnitude($1.day) } }
+        let maxValue = max(totals.max() ?? 0, 0.0001)
         return HStack(alignment: .bottom, spacing: 6) {
-            ForEach(days) { day in
-                let magnitude = showCost ? day.estimatedCostUSD : Double(day.totalTokens)
+            ForEach(Array(days.enumerated()), id: \.element.id) { index, day in
                 VStack(spacing: 3) {
-                    Text(valueLabel(day))
+                    Text(valueLabel(total: totals[index], approximate: day.byProvider.contains { $0.day.hasApproximateRate }))
                         .font(.system(size: 8))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .fixedSize()
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(day.hasApproximateRate ? Color.orange.opacity(0.6) : Color.accentColor.opacity(0.7))
-                        .frame(height: max(2, CGFloat(magnitude / maxValue) * 80))
+                    VStack(spacing: 0) {
+                        ForEach(day.byProvider.reversed(), id: \.provider) { entry in
+                            let value = magnitude(entry.day)
+                            if value > 0 {
+                                Rectangle()
+                                    .fill(BrandColor.forProvider(entry.provider))
+                                    .frame(height: CGFloat(value / maxValue) * 80)
+                            }
+                        }
+                    }
+                    .frame(minHeight: 2)
+                    .background(Color.secondary.opacity(0.15))
+                    .clipShape(RoundedRectangle(cornerRadius: 2))
                     Text(dayLabel(day.date))
                         .font(.system(size: 8))
                         .foregroundStyle(.tertiary)
@@ -78,14 +103,22 @@ struct UsageHistoryView: View {
         .frame(height: 110, alignment: .bottom)
     }
 
-    private func valueLabel(_ day: ClaudeUsageDay) -> String {
-        guard showCost else { return formatTokenCount(day.totalTokens) }
-        guard day.estimatedCostUSD > 0 else { return "" }
-        return day.estimatedCostUSD < 0.01 ? "<$0.01" : String(format: "$%.2f", day.estimatedCostUSD)
+    private var legend: some View {
+        HStack(spacing: 10) {
+            ForEach(providers, id: \.self) { provider in
+                HStack(spacing: 4) {
+                    Circle().fill(BrandColor.forProvider(provider)).frame(width: 6, height: 6)
+                    Text(provider.displayName).font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 
-    private func formatTokenCount(_ tokens: Int) -> String {
-        tokens == 0 ? "" : TokenCountFormatter.compact(tokens)
+    private func valueLabel(total: Double, approximate: Bool) -> String {
+        guard total > 0 else { return "" }
+        let prefix = approximate ? "~" : ""
+        guard showCost else { return prefix + TokenCountFormatter.compact(Int(total)) }
+        return total < 0.01 ? "<$0.01" : prefix + String(format: "$%.2f", total)
     }
 
     private func dayLabel(_ date: Date) -> String {

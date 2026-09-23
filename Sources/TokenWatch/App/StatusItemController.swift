@@ -19,6 +19,7 @@ final class StatusItemController {
     private let enablementStore: ProviderEnablementStore
     private let layoutStore: LayoutStore
     private let appearanceStore: AppearanceStore
+    private let spendHistoryStore: SpendHistoryStore
     private var cancellables: Set<AnyCancellable> = []
 
     init(container: AppContainer) {
@@ -26,9 +27,10 @@ final class StatusItemController {
         self.enablementStore = container.enablementStore
         self.layoutStore = container.layoutStore
         self.appearanceStore = container.appearanceStore
+        self.spendHistoryStore = container.spendHistoryStore
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.panel = TokenWatchPanel(initialHeight: 420) { onHeightChange in
-            DashboardView(dataStore: container.dataStore, enablementStore: container.enablementStore, refreshScheduler: container.refreshScheduler, apiKeyManagers: container.apiKeyManagers, usageService: container.usageService, layoutStore: container.layoutStore, displayStore: container.displayStore, appearanceStore: container.appearanceStore, notificationSettingsStore: container.notificationSettingsStore, claudeSpendHistoryStore: container.claudeSpendHistoryStore, hintStore: container.hintStore, notificationService: container.notificationService, toggleDashboardPanel: { container.toggleDashboardPanel() }, onHeightChange: onHeightChange)
+            DashboardView(dataStore: container.dataStore, enablementStore: container.enablementStore, refreshScheduler: container.refreshScheduler, apiKeyManagers: container.apiKeyManagers, usageService: container.usageService, layoutStore: container.layoutStore, displayStore: container.displayStore, appearanceStore: container.appearanceStore, notificationSettingsStore: container.notificationSettingsStore, spendHistoryStore: container.spendHistoryStore, hintStore: container.hintStore, notificationService: container.notificationService, toggleDashboardPanel: { container.toggleDashboardPanel() }, onHeightChange: onHeightChange)
         }
 
         if let button = statusItem.button {
@@ -56,6 +58,7 @@ final class StatusItemController {
         if panel.isVisible {
             panel.orderOut(nil)
         } else if let button = statusItem.button {
+            spendHistoryStore.loadIfNeeded()
             panel.show(relativeTo: button)
         }
     }
@@ -67,6 +70,7 @@ final class StatusItemController {
     /// the icon on their own.
     func showPanel() {
         guard let button = statusItem.button, !panel.isVisible else { return }
+        spendHistoryStore.loadIfNeeded()
         panel.show(relativeTo: button)
     }
 

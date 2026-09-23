@@ -3,17 +3,16 @@ import AppKit
 import TokenWatchCore
 
 /// Cross-provider spend summary: a donut segmented by provider, a Cost / Cost per MTok / Tokens
-/// mode picker, a Today/Yesterday/30 Days toggle, and a centered total. Sources spend from
-/// whichever enabled providers have a local spend-history scanner wired in -- today that's
-/// Claude only, via `ClaudeUsageHistoryScanner` -- so adding another provider's local spend is
-/// additive to `providerValues`, not a rewrite of this view. Renders nothing (not an empty card)
-/// when no enabled provider has data for the selected period/mode, matching the rest of the
-/// dashboard's "never show a misleading zero" stance.
+/// mode picker, a Today/Yesterday/30 Days toggle, and a centered total. Sources spend from every
+/// enabled provider with a local usage-history scanner (`SpendHistoryStore.providers`: Claude
+/// and Codex). Renders nothing (not an empty card) when no enabled provider has data for the
+/// selected period/mode, matching the rest of the dashboard's "never show a misleading zero"
+/// stance.
 struct TotalSpendCard: View {
     @ObservedObject var dataStore: WidgetDataStore
     @ObservedObject var enablementStore: ProviderEnablementStore
     @ObservedObject var displayStore: MeterDisplayStore
-    @ObservedObject var spendHistoryStore: ClaudeSpendHistoryStore
+    @ObservedObject var spendHistoryStore: SpendHistoryStore
 
     @AppStorage("totalSpendPeriod") private var periodRaw: String = SpendPeriod.today.rawValue
     @AppStorage("totalSpendMode") private var modeRaw: String = SpendMetricMode.cost.rawValue
@@ -22,7 +21,6 @@ struct TotalSpendCard: View {
 
     private var period: SpendPeriod { SpendPeriod(rawValue: periodRaw) ?? .today }
     private var mode: SpendMetricMode { SpendMetricMode(rawValue: modeRaw) ?? .cost }
-    private var claudeDays: [ClaudeUsageDay] { spendHistoryStore.days }
     private var isLoading: Bool { spendHistoryStore.isLoading }
 
     var body: some View {
@@ -43,17 +41,28 @@ struct TotalSpendCard: View {
     /// `nil` while still loading.
     private var providerValues: [(provider: ProviderID, value: Double)]? {
         guard !isLoading else { return nil }
-        var entries: [(ProviderID, Double)] = []
-        if enablementStore.isEnabled(.claude) {
+        var entries: [(provider: ProviderID, value: Double)] = []
+        for provider in SpendHistoryStore.providers where enablementStore.isEnabled(provider) {
+            let days = spendHistoryStore.days(for: provider)
             let value: Double?
             switch mode {
-            case .cost: value = SpendAggregator.amount(for: period, days: claudeDays)
-            case .tokens: value = Double(SpendAggregator.tokens(for: period, days: claudeDays))
-            case .costPerMTok: value = SpendAggregator.costPerMillionTokens(for: period, days: claudeDays)
+            case .cost: value = SpendAggregator.amount(for: period, days: days)
+            case .tokens: value = Double(SpendAggregator.tokens(for: period, days: days))
+            case .costPerMTok: value = SpendAggregator.costPerMillionTokens(for: period, days: days)
             }
-            if let value, value > 0 { entries.append((.claude, value)) }
+            if let value, value > 0 { entries.append((provider, value)) }
         }
-        return entries.sorted { $0.1 > $1.1 }.map { (provider: $0.0, value: $0.1) }
+        return entries.sorted { $0.value > $1.value }
+    }
+
+    /// The figure in the donut's center. Costs and tokens add up across providers; per-token
+    /// rates don't, so Cost/MTok is combined cost over combined tokens instead of a sum of rates.
+    private func centerValue(entries: [(provider: ProviderID, value: Double)]) -> Double {
+        guard mode == .costPerMTok else { return entries.reduce(0) { $0 + $1.value } }
+        let days = entries.map { spendHistoryStore.days(for: $0.provider) }
+        let cost = days.reduce(0) { $0 + SpendAggregator.amount(for: period, days: $1) }
+        let tokens = days.reduce(0) { $0 + SpendAggregator.tokens(for: period, days: $1) }
+        return tokens > 0 ? cost / Double(tokens) * 1_000_000 : 0
     }
 
     private func card(entries: [(provider: ProviderID, value: Double)]) -> some View {
@@ -91,7 +100,7 @@ struct TotalSpendCard: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             HStack(spacing: 16) {
-                donutWithCenter(entries: entries, total: total)
+                donutWithCenter(entries: entries, total: total, center: centerValue(entries: entries))
                     .frame(width: 72, height: 72)
                 legend(entries: entries, total: total)
             }
@@ -100,11 +109,11 @@ struct TotalSpendCard: View {
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
     }
 
-    private func donutWithCenter(entries: [(provider: ProviderID, value: Double)], total: Double) -> some View {
+    private func donutWithCenter(entries: [(provider: ProviderID, value: Double)], total: Double, center: Double) -> some View {
         ZStack {
             donut(entries: entries, total: total)
             if isHoveringCenter {
-                Text(preciseCenterText(total: total))
+                Text(preciseCenterText(total: center))
                     .font(.system(size: 9, weight: .bold))
                     .multilineTextAlignment(.center)
                     .minimumScaleFactor(0.6)
@@ -112,9 +121,9 @@ struct TotalSpendCard: View {
                     .padding(4)
             } else {
                 VStack(spacing: 0) {
-                    Text(compactCenterNumber(total: total))
+                    Text(compactCenterNumber(total: center))
                         .font(.caption.weight(.bold).monospacedDigit())
-                    Text(centerUnit(total: total))
+                    Text(centerUnit(total: center))
                         .font(.system(size: 8))
                         .foregroundStyle(.secondary)
                 }
@@ -155,7 +164,7 @@ struct TotalSpendCard: View {
                     hoveredProvider = isHovering ? entry.provider : (hoveredProvider == entry.provider ? nil : hoveredProvider)
                 }
                 .popover(isPresented: Binding(
-                    get: { hoveredProvider == entry.provider && entry.provider == .claude },
+                    get: { hoveredProvider == entry.provider },
                     set: { if !$0 { hoveredProvider = nil } }
                 ), arrowEdge: .trailing) {
                     modelBreakdownPopover(provider: entry.provider)
@@ -165,10 +174,8 @@ struct TotalSpendCard: View {
     }
 
     /// A ranked per-model spend list for `provider`, shown while hovering its legend row.
-    /// Currently only Claude has model-level data (`ClaudeUsageHistoryScanner`); other
-    /// providers simply never trigger this popover until they have a comparable local scanner.
     private func modelBreakdownPopover(provider: ProviderID) -> some View {
-        let breakdown = SpendAggregator.modelBreakdown(for: period, days: claudeDays)
+        let breakdown = SpendAggregator.modelBreakdown(for: period, days: spendHistoryStore.days(for: provider))
         let breakdownTotal = breakdown.reduce(0) { $0 + $1.costUSD }
         return VStack(alignment: .leading, spacing: 6) {
             Text("\(provider.displayName) by model").font(.caption.weight(.semibold))

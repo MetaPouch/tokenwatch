@@ -86,7 +86,7 @@ final class ClaudeUsageHistoryScannerTests: XCTestCase {
         XCTAssertEqual(day?.totalTokens, 2 * 1_160)
     }
 
-    private func dailyUsageOn15th() -> ClaudeUsageDay? {
+    private func dailyUsageOn15th() -> UsageDay? {
         ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], ompRoots: [ompRoot.path])
             .first { $0.id == "2026-06-15" }
     }
@@ -130,6 +130,17 @@ final class ClaudeUsageHistoryScannerTests: XCTestCase {
             #"{"type":"message","timestamp":"2026-06-15T09:00:00.000Z","message":{"role":"assistant","provider":"anthropic","model":"claude-sonnet-5","usage":{"input":0,"output":0,"cacheWrite":1000000,"cttl":{"ephemeral1h":1000000}}}}"#,
         ])
         XCTAssertEqual(dailyUsageOn15th()?.estimatedCostUSD ?? -1, 4, accuracy: 0.0001) // $2/M input x 2
+    }
+
+    /// `<synthetic>` is Claude Code's placeholder for a locally generated message: no API call, so
+    /// no cost, and not a reason to mark the day's estimate approximate.
+    func testSyntheticPlaceholderIsFreeAndNotApproximate() {
+        writeClaudeTranscript("s.jsonl", lines: [
+            claudeCodeLine(timestamp: "2026-06-15T08:00:00.000Z", model: "<synthetic>", input: 1_000, cacheRead: 0, cacheCreate: 0, output: 1_000),
+        ])
+        let day = dailyUsageOn15th()
+        XCTAssertEqual(day?.estimatedCostUSD, 0)
+        XCTAssertEqual(day?.hasApproximateRate, false)
     }
 
     func testBucketsIntoSeparateDays() {

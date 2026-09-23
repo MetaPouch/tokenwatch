@@ -5,9 +5,9 @@ final class SpendAggregatorTests: XCTestCase {
     private let calendar = Calendar(identifier: .gregorian)
     private let now = Date(timeIntervalSince1970: 1_800_000_000) // fixed instant
 
-    private func day(offsetFromNow days: Int, cost: Double, tokens: Int = 0) -> ClaudeUsageDay {
+    private func day(offsetFromNow days: Int, cost: Double, tokens: Int = 0) -> UsageDay {
         let date = calendar.date(byAdding: .day, value: days, to: now)!
-        return ClaudeUsageDay(id: "\(days)", date: date, inputTokens: tokens, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0, estimatedCostUSD: cost, hasApproximateRate: false)
+        return UsageDay(id: "\(days)", date: date, inputTokens: tokens, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0, estimatedCostUSD: cost, hasApproximateRate: false)
     }
 
     func testTodayReadsTheSameCalendarDaysEntry() {
@@ -59,12 +59,12 @@ final class SpendAggregatorTests: XCTestCase {
         XCTAssertNil(SpendAggregator.costPerMillionTokens(for: .today, days: [zeroTokenDay], calendar: calendar, now: now))
     }
 
-    private func dayWithModels(offsetFromNow days: Int, models: [(name: String, cost: Double, tokens: Int)]) -> ClaudeUsageDay {
+    private func dayWithModels(offsetFromNow days: Int, models: [(name: String, cost: Double, tokens: Int)]) -> UsageDay {
         let date = calendar.date(byAdding: .day, value: days, to: now)!
         let breakdown = models.map { ModelSpend(id: $0.name, costUSD: $0.cost, tokens: $0.tokens) }
         let totalCost = models.reduce(0) { $0 + $1.cost }
         let totalTokens = models.reduce(0) { $0 + $1.tokens }
-        return ClaudeUsageDay(id: "\(days)", date: date, inputTokens: totalTokens, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0, estimatedCostUSD: totalCost, hasApproximateRate: false, modelBreakdown: breakdown)
+        return UsageDay(id: "\(days)", date: date, inputTokens: totalTokens, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0, estimatedCostUSD: totalCost, hasApproximateRate: false, modelBreakdown: breakdown)
     }
 
     func testModelBreakdownMergesSameModelAcrossDays() {

@@ -1,50 +1,5 @@
 import Foundation
 
-/// One model's share of a day's (or aggregated period's) spend, ranked for the hover breakdown.
-public struct ModelSpend: Sendable, Equatable, Identifiable {
-    public let id: String
-    public let costUSD: Double
-    public let tokens: Int
-
-    public init(id: String, costUSD: Double, tokens: Int) {
-        self.id = id
-        self.costUSD = costUSD
-        self.tokens = tokens
-    }
-}
-
-/// One local calendar day's worth of Claude token usage, aggregated across every local
-/// transcript and priced at API list rates via `ModelPricing`.
-public struct ClaudeUsageDay: Sendable, Equatable, Identifiable {
-    public let id: String
-    public let date: Date
-    public let inputTokens: Int
-    public let cacheReadTokens: Int
-    public let cacheWriteTokens: Int
-    public let outputTokens: Int
-    public let estimatedCostUSD: Double
-    /// True when at least one turn priced into this day used a model not in `ModelPricing`'s
-    /// table (fell back to the cheapest known rate) -- the day's total is a rougher estimate
-    /// than usual.
-    public let hasApproximateRate: Bool
-    /// Per-model spend within this day, largest first. Empty for a day with no activity.
-    public let modelBreakdown: [ModelSpend]
-
-    public init(id: String, date: Date, inputTokens: Int, cacheReadTokens: Int, cacheWriteTokens: Int, outputTokens: Int, estimatedCostUSD: Double, hasApproximateRate: Bool, modelBreakdown: [ModelSpend] = []) {
-        self.id = id
-        self.date = date
-        self.inputTokens = inputTokens
-        self.cacheReadTokens = cacheReadTokens
-        self.cacheWriteTokens = cacheWriteTokens
-        self.outputTokens = outputTokens
-        self.estimatedCostUSD = estimatedCostUSD
-        self.hasApproximateRate = hasApproximateRate
-        self.modelBreakdown = modelBreakdown
-    }
-
-    public var totalTokens: Int { inputTokens + cacheReadTokens + cacheWriteTokens + outputTokens }
-}
-
 /// Scans every local Claude transcript -- both the real `claude` CLI's own session logs
 /// (`ClaudeSessionScanner`) and a coding-agent harness's own transcripts (`OmpSessionScanner`) --
 /// for a bounded trailing window, summing *every* turn's token usage per calendar day and
@@ -54,85 +9,66 @@ public struct ClaudeUsageDay: Sendable, Equatable, Identifiable {
 /// machine's session history -- callers should run it off the main actor. Every read is
 /// defensive: a missing/unreadable file, or one that doesn't parse, is skipped, never thrown.
 public enum ClaudeUsageHistoryScanner {
-    public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, claudeRoots: [String]? = nil, ompRoots: [String]? = nil) -> [ClaudeUsageDay] {
+    public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, claudeRoots: [String]? = nil, ompRoots: [String]? = nil) -> [UsageDay] {
         let claudeRoots = claudeRoots ?? ClaudeSessionScanner.projectRoots()
         let ompRoots = ompRoots ?? OmpSessionScanner.projectRoots()
-        let todayStart = calendar.startOfDay(for: now)
-        let cutoff = calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) ?? todayStart
+        var accumulator = UsageDayAccumulator(days: days, now: now, calendar: calendar)
+        let cutoff = accumulator.cutoff
 
-        var buckets: [String: Bucket] = [:]
         func record(_ turn: Turn) {
-            let (timestamp, model, input, cacheRead, cacheWrite, output) = (turn.timestamp, turn.model, turn.input, turn.cacheRead, turn.cacheWrite, turn.output)
-            guard timestamp >= cutoff else { return }
-            let dayStart = calendar.startOfDay(for: timestamp)
-            let key = dayKey(dayStart)
             // A cost the log itself carries (what the tool that made the call computed) wins over
             // re-pricing its tokens here, same as OpenUsage/ccusage "auto" cost mode.
-            let approximate = turn.carriedCostUSD == nil && ModelPricing.rate(provider: .claude, model: model).approximate
-            let cost = turn.carriedCostUSD ?? ModelPricing.costUSD(provider: .claude, model: model, inputTokens: input, cacheReadTokens: cacheRead, cacheWriteTokens: cacheWrite, cacheWrite1hTokens: turn.cacheWrite1h, outputTokens: output)
-            var bucket = buckets[key] ?? Bucket(date: dayStart)
-            bucket.input += input
-            bucket.cacheRead += cacheRead
-            bucket.cacheWrite += cacheWrite
-            bucket.output += output
-            bucket.cost += cost
-            bucket.approximate = bucket.approximate || approximate
-            var modelBucket = bucket.byModel[model] ?? ModelBucket()
-            modelBucket.cost += cost
-            modelBucket.tokens += input + cacheRead + cacheWrite + output
-            bucket.byModel[model] = modelBucket
-            buckets[key] = bucket
+            let approximate = turn.carriedCostUSD == nil && ModelPricing.rate(provider: .claude, model: turn.model).approximate
+            let cost = turn.carriedCostUSD ?? ModelPricing.costUSD(provider: .claude, model: turn.model, inputTokens: turn.input, cacheReadTokens: turn.cacheRead, cacheWriteTokens: turn.cacheWrite, cacheWrite1hTokens: turn.cacheWrite1h, outputTokens: turn.output)
+            accumulator.add(timestamp: turn.timestamp, model: turn.model, input: turn.input, cacheRead: turn.cacheRead, cacheWrite: turn.cacheWrite, output: turn.output, costUSD: cost, approximate: approximate)
         }
 
         // Path-sorted so dedup's keep-first is deterministic across runs.
-        let codeTurns = transcriptPaths(roots: claudeRoots, modifiedSince: cutoff).sorted()
-            .flatMap { claudeCodeTurns(inFileAtPath: $0) }
-        for turn in dedup(codeTurns) where turn.timestamp >= cutoff {
+        let codeFiles = transcriptFiles(roots: claudeRoots, modifiedSince: cutoff).sorted { $0.path < $1.path }
+        for turn in dedup(claudeCodeCache.turns(for: codeFiles, parse: claudeCodeTurns)) where turn.timestamp >= cutoff {
             record(turn)
         }
-        for path in transcriptPaths(roots: ompRoots, modifiedSince: cutoff) {
-            for turn in ompTurns(inFileAtPath: path) where turn.timestamp >= cutoff {
-                record(turn)
+        for turn in ompCache.turns(for: transcriptFiles(roots: ompRoots, modifiedSince: cutoff), parse: ompTurns) where turn.timestamp >= cutoff {
+            record(turn)
+        }
+        return accumulator.build()
+    }
+
+    /// Parsed turns of each transcript, reused across scans while its size and modification date
+    /// are unchanged (as OpenUsage does) -- a rescan then only parses files that changed, instead
+    /// of seconds of re-decoding a month of untouched history on every refresh cycle. Holds only
+    /// the files of the latest scan, so it never grows past the scan window.
+    private final class TurnCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var entries: [String: (size: Int, modified: Date, turns: [Turn])] = [:]
+
+        func turns(for files: [TranscriptFile], parse: (String) -> [Turn]) -> [Turn] {
+            lock.lock()
+            defer { lock.unlock() }
+            var next: [String: (size: Int, modified: Date, turns: [Turn])] = [:]
+            var all: [Turn] = []
+            for file in files {
+                let turns: [Turn]
+                if let cached = entries[file.path], cached.size == file.size, cached.modified == file.modified {
+                    turns = cached.turns
+                } else {
+                    turns = parse(file.path)
+                }
+                next[file.path] = (file.size, file.modified, turns)
+                all += turns
             }
+            entries = next
+            return all
         }
-
-        var days: [ClaudeUsageDay] = []
-        var cursor = cutoff
-        var previousCursor: Date?
-        while cursor <= todayStart {
-            let key = dayKey(cursor)
-            let bucket = buckets[key]
-            let breakdown = (bucket?.byModel ?? [:])
-                .map { ModelSpend(id: $0.key, costUSD: $0.value.cost, tokens: $0.value.tokens) }
-                .sorted { $0.costUSD > $1.costUSD }
-            days.append(ClaudeUsageDay(
-                id: key, date: cursor,
-                inputTokens: bucket?.input ?? 0, cacheReadTokens: bucket?.cacheRead ?? 0,
-                cacheWriteTokens: bucket?.cacheWrite ?? 0, outputTokens: bucket?.output ?? 0,
-                estimatedCostUSD: bucket?.cost ?? 0, hasApproximateRate: bucket?.approximate ?? false,
-                modelBreakdown: breakdown
-            ))
-            let next = calendar.date(byAdding: .day, value: 1, to: cursor) ?? cursor.addingTimeInterval(86400)
-            // Defensive: guarantee forward progress even if `calendar` misbehaves, rather than
-            // trusting `Calendar.date(byAdding:)` never returns a non-advancing date.
-            guard next > cursor, previousCursor != next else { break }
-            previousCursor = cursor
-            cursor = next
-        }
-        return days
     }
 
-    private struct Bucket {
-        let date: Date
-        var input = 0, cacheRead = 0, cacheWrite = 0, output = 0
-        var cost = 0.0
-        var approximate = false
-        var byModel: [String: ModelBucket] = [:]
-    }
+    private static let claudeCodeCache = TurnCache()
+    private static let ompCache = TurnCache()
 
-    private struct ModelBucket {
-        var cost = 0.0
-        var tokens = 0
+    private struct TranscriptFile {
+        let path: String
+        let size: Int
+        let modified: Date
     }
 
     private struct Turn {
@@ -189,21 +125,12 @@ public enum ClaudeUsageHistoryScanner {
         return kept
     }
 
-
-    private static let dayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
-
-    private static func dayKey(_ dayStart: Date) -> String { dayFormatter.string(from: dayStart) }
-
     /// Every `.jsonl` under `roots`, recursively, modified at or after `modifiedSince` -- the
     /// same bounded-recursion shape `ClaudeSessionScanner`/`OmpSessionScanner` use, duplicated
     /// here rather than shared since each scanner's file-selection rules differ slightly.
-    private static func transcriptPaths(roots: [String], modifiedSince: Date) -> [String] {
+    private static func transcriptFiles(roots: [String], modifiedSince: Date) -> [TranscriptFile] {
         let fileManager = FileManager.default
-        var results: [String] = []
+        var results: [TranscriptFile] = []
         for root in roots {
             guard let enumerator = fileManager.enumerator(atPath: root) else { continue }
             for case let relativePath as String in enumerator {
@@ -213,7 +140,7 @@ public enum ClaudeUsageHistoryScanner {
                       let modified = attributes[.modificationDate] as? Date,
                       modified >= modifiedSince
                 else { continue }
-                results.append(fullPath)
+                results.append(TranscriptFile(path: fullPath, size: (attributes[.size] as? Int) ?? -1, modified: modified))
             }
         }
         return results
@@ -272,7 +199,9 @@ public enum ClaudeUsageHistoryScanner {
                     messageID: messageID, requestID: entry.requestId, isSidechain: entry.isSidechain ?? false
                 )
             }
-            turns.append(turn(usage, model: message.model ?? "", messageID: message.id, carriedCostUSD: entry.costUSD))
+            // `<synthetic>` marks a message Claude Code generated locally, not an API call: $0.
+            let model = message.model ?? ""
+            turns.append(turn(usage, model: model, messageID: message.id, carriedCostUSD: model == "<synthetic>" ? 0 : entry.costUSD))
             // An advisor model consulted inside this response is billed separately under its own
             // model, so it's its own turn. Other iteration types are already in the parent total.
             var advisorIndex = 0

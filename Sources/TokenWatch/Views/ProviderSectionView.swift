@@ -21,10 +21,10 @@ struct ProviderSectionView: View {
     /// Whether to show the drag handle and accept reordering -- Limits owns provider order;
     /// Usage renders the same card type read-only, so its handle would do nothing if shown.
     var isDraggable: Bool = true
-    /// Non-nil only for providers with a local spend-history scanner (today: Claude only), and
-    /// only rendered when `category == .usage`. The inline Today/Yesterday spend row is simply
+    /// Non-nil only for providers with a local spend-history scanner (`SpendHistoryStore.providers`),
+    /// and only rendered when `category == .usage`. The inline Today/Yesterday spend row is simply
     /// absent for every other provider or on the Limits card.
-    var spendHistoryStore: ClaudeSpendHistoryStore?
+    var spendHistoryStore: SpendHistoryStore?
     var onRefresh: () -> Void
     var onHideProvider: () -> Void
     var onCustomizeProvider: () -> Void
@@ -33,7 +33,7 @@ struct ProviderSectionView: View {
     @State private var isExpanded: Bool
     @State private var isSpendRowExpanded: Bool
 
-    init(provider: ProviderID, snapshot: ProviderSnapshot?, layoutStore: LayoutStore, displayStore: MeterDisplayStore, refreshIntervalSeconds: Int, timeFormat: TimeFormatPreference = .auto, category: MetricCategory, isDraggable: Bool = true, spendHistoryStore: ClaudeSpendHistoryStore? = nil, onRefresh: @escaping () -> Void, onHideProvider: @escaping () -> Void, onCustomizeProvider: @escaping () -> Void) {
+    init(provider: ProviderID, snapshot: ProviderSnapshot?, layoutStore: LayoutStore, displayStore: MeterDisplayStore, refreshIntervalSeconds: Int, timeFormat: TimeFormatPreference = .auto, category: MetricCategory, isDraggable: Bool = true, spendHistoryStore: SpendHistoryStore? = nil, onRefresh: @escaping () -> Void, onHideProvider: @escaping () -> Void, onCustomizeProvider: @escaping () -> Void) {
         self.provider = provider
         self.snapshot = snapshot
         self.layoutStore = layoutStore
@@ -52,10 +52,11 @@ struct ProviderSectionView: View {
 
     /// Whether this provider has anything at all to show for `category` -- lets a caller skip
     /// rendering an empty (header-only) card, e.g. most providers have no `.usage` lines today.
-    static func hasContent(snapshot: ProviderSnapshot?, category: MetricCategory, layoutStore: LayoutStore, provider: ProviderID, spendHistoryStore: ClaudeSpendHistoryStore? = nil) -> Bool {
+    static func hasContent(snapshot: ProviderSnapshot?, category: MetricCategory, layoutStore: LayoutStore, provider: ProviderID, spendHistoryStore: SpendHistoryStore? = nil) -> Bool {
         if category == .usage, let spendHistoryStore, !spendHistoryStore.isLoading {
-            let hasSpend = SpendAggregator.amount(for: .today, days: spendHistoryStore.days) > 0
-                || SpendAggregator.amount(for: .yesterday, days: spendHistoryStore.days) > 0
+            let days = spendHistoryStore.days(for: provider)
+            let hasSpend = SpendAggregator.amount(for: .today, days: days) > 0
+                || SpendAggregator.amount(for: .yesterday, days: days) > 0
             if hasSpend { return true }
         }
         guard let snapshot else { return false }
@@ -157,9 +158,10 @@ struct ProviderSectionView: View {
     /// entirely when neither day has any recorded spend (a brand-new install, or a provider with
     /// no local spend-history scanner never gets here at all -- see `spendHistoryStore`).
     @ViewBuilder
-    private func inlineSpendRow(store: ClaudeSpendHistoryStore) -> some View {
-        let today = SpendAggregator.amount(for: .today, days: store.days)
-        let yesterday = SpendAggregator.amount(for: .yesterday, days: store.days)
+    private func inlineSpendRow(store: SpendHistoryStore) -> some View {
+        let days = store.days(for: provider)
+        let today = SpendAggregator.amount(for: .today, days: days)
+        let yesterday = SpendAggregator.amount(for: .yesterday, days: days)
         if today > 0 || yesterday > 0 {
             VStack(alignment: .leading, spacing: 4) {
                 Button(action: toggleSpendRow) {
@@ -177,7 +179,7 @@ struct ProviderSectionView: View {
                 }
                 .buttonStyle(.plain)
                 if isSpendRowExpanded {
-                    modelBreakdown(days: store.days)
+                    modelBreakdown(days: days)
                 }
             }
         }
@@ -189,7 +191,7 @@ struct ProviderSectionView: View {
     }
 
     /// Ranked per-model spend for today, shown inline under the spend row once expanded.
-    private func modelBreakdown(days: [ClaudeUsageDay]) -> some View {
+    private func modelBreakdown(days: [UsageDay]) -> some View {
         let breakdown = SpendAggregator.modelBreakdown(for: .today, days: days)
         let total = breakdown.reduce(0) { $0 + $1.costUSD }
         return VStack(alignment: .leading, spacing: 3) {

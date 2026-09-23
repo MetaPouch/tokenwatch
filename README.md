@@ -103,7 +103,7 @@ provider with something to actually show here gets a card; most providers have n
 `MetricLine.category`).
 
 A cross-provider **Total Spend** card sits at the top when Settings' **Show Total Spend** is on
-and at least one enabled provider has local spend data (today: Claude, via a 30-day scan shared
+and at least one enabled provider has local spend data (Claude and Codex, via a 30-day scan shared
 with the per-provider spend row below it and the cost history chart at the bottom -- one scan,
 cached, not three). The title is a pull-down for **Cost** / **Cost per MTok** / **Tokens**; a
 **Today** / **Yesterday** / **30 Days** segmented toggle sits alongside it. The donut's segments
@@ -112,7 +112,7 @@ hover the center for the exact figure instead of the rounded one; hover a provid
 for a ranked per-model spend breakdown (name, cost, share, tokens); the share icon copies a PNG
 of the card to your clipboard, and the ⓘ names which providers feed the total.
 
-Any provider with its own local spend history (today: Claude) shows a **Today/Yesterday** line
+Any provider with its own local spend history (Claude and Codex) shows a **Today/Yesterday** line
 directly on its own card, chevron-collapsible to that provider's own per-model breakdown -- the
 same figures as the Total Spend card's hover popover, without needing to open it.
 
@@ -133,22 +133,32 @@ on that harness's own undocumented local session-log format, not a stable public
 way Claude Code's and Codex's are, so it's read defensively and fails soft if the format ever
 changes.
 
-A daily Cost/Tokens bar chart for the last 7 days sits at the bottom, built by summing *every*
-turn's local session tokens (not just the newest, the way cache-temperature works) across local
-Claude session logs and pricing them at API list rates -- no Admin API key required. A day's
-token total is input + cache reads + cache writes + output. Each Claude Code API response counts
-once, deduplicated the way OpenUsage and ccusage do it: Claude Code writes one line per content
-block of a response, each repeating the full usage, and subagent (sidechain) and resumed-session
-logs replay earlier messages. A cost the log itself records (Claude Code's `costUSD`, `omp`'s
-per-turn cost) is used as-is; otherwise tokens are priced at list rates, with 1-hour cache writes
-at 2x input and 5-minute ones at 1.25x. It shares
-its 30-day scan with the Total Spend card and each provider's inline spend row above, so it's
-instant after the first load instead of a fresh multi-second disk scan (and a loading spinner)
-every time you switch to this tab. The estimate is explicitly labeled as one: subscription usage
-isn't billed per token. Rates come from a small static table refreshed against LiteLLM's public,
-community-maintained price list roughly hourly (`PricingRefreshService`) -- a fetch failure or
-not having fetched yet falls straight through to the static table, so cost estimates work
-offline and on first launch too.
+A daily Cost/Tokens bar chart for the last 7 days sits at the bottom, one bar per day stacked by
+provider in brand colors, built by summing *every* turn's local session tokens (not just the
+newest, the way cache-temperature works) and pricing them at API list rates -- no Admin API key
+required. A day's token total is input + cache reads + cache writes + output.
+
+- **Claude** (Claude Code and `omp` logs): each Claude Code API response counts once,
+  deduplicated the way OpenUsage and ccusage do it -- Claude Code writes one line per content
+  block of a response, each repeating the full usage, and subagent (sidechain) and
+  resumed-session logs replay earlier messages. A cost the log itself records (Claude Code's
+  `costUSD`, `omp`'s per-turn cost) is used as-is; otherwise tokens are priced at list rates, with
+  1-hour cache writes at 2x input and 5-minute ones at 1.25x. `<synthetic>` (locally generated)
+  messages cost nothing.
+- **Codex** (`$CODEX_HOME/sessions` and `archived_sessions`), ported from OpenUsage's Codex
+  scanner: a turn is a `token_count` event's `last_token_usage` (or its delta from the previous
+  running total); a re-emitted, unchanged running total isn't a new turn; a subagent or forked
+  session's replay of its parent's history isn't counted; and an identical event in two files
+  counts once. Cached input bills at the cache-read rate, a request above 272K input tokens at the
+  model's long-context rate, and a priority ("fast") tier session at 2x (2.5x for gpt-5.5).
+
+All of it shares one 30-day scan with the Total Spend card and each provider's inline spend row,
+rescanned when the Usage tab is opened more than a minute after the last scan -- instant after
+the first load, and still current while the app keeps running. The estimate is explicitly
+labeled as one: subscription usage isn't billed per token. Rates come from a small static table
+refreshed against LiteLLM's public, community-maintained price list roughly hourly
+(`PricingRefreshService`) -- a fetch failure or not having fetched yet falls straight through to
+the static table, so cost estimates work offline and on first launch too.
 
 ## Customize
 
@@ -233,7 +243,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for project layout, how to add a provider
 
 This is a from-scratch, clean-room build. It implements one reliable auth path and the primary
 usage metric(s) per provider, plus read-only multi-account visibility for Claude/Codex and a
-Claude-only cost history (see Usage tab, above) -- not every edge case (account *switching*,
+local cost history for Claude and Codex (see Usage tab, above) -- not every edge case (account *switching*,
 team budgets, enterprise hosts) that larger, multi-year usage trackers eventually grow. See
 inline doc comments on each provider for the specific scope cuts. Zero external SwiftPM
 dependencies and zero telemetry are firm project principles -- an in-app auto-updater and any

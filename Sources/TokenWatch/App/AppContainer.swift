@@ -16,7 +16,7 @@ public final class AppContainer {
     public let notificationSettingsStore: NotificationSettingsStore
     let notificationService: QuotaNotificationService
     public let pricingRefreshService: PricingRefreshService
-    public let claudeSpendHistoryStore = ClaudeSpendHistoryStore()
+    public let spendHistoryStore = SpendHistoryStore()
     public let hintStore = HintStore()
     /// Providers backed by a plain API key, keyed by id, for Settings' secure text fields.
     public let apiKeyManagers: [ProviderID: any APIKeyManaging]
@@ -26,6 +26,7 @@ public final class AppContainer {
     public var toggleDashboardPanel: () -> Void = {}
 
     private var notificationCancellable: AnyCancellable?
+    private var spendRefreshCancellable: AnyCancellable?
 
     public init() {
         let runtimes: [any ProviderRuntime] = Self.buildRuntimes()
@@ -48,6 +49,16 @@ public final class AppContainer {
         notificationCancellable = dataStore.$snapshots
             .receive(on: RunLoop.main)
             .sink { snapshots in notificationService.evaluate(snapshots: snapshots) }
+
+        // Local spend history rides along with every refresh cycle (timer, ⌘R, footer click):
+        // rescan once a provider refresh finishes.
+        let spendHistoryStore = self.spendHistoryStore
+        spendRefreshCancellable = dataStore.$isRefreshing
+            .removeDuplicates()
+            .dropFirst()
+            .filter { !$0 }
+            .receive(on: RunLoop.main)
+            .sink { _ in spendHistoryStore.reload() }
     }
 
     /// Every registered provider runtime, in menu display order. Real providers are appended

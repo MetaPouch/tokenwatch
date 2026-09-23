@@ -226,7 +226,9 @@
   .hist-head .seg button { font-size: 11px; padding: 2px 9px; }
   .hist { display: flex; align-items: flex-end; gap: 6px; height: 74px; }
   .hist div { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
-  .hist i { display: block; width: 100%; border-radius: 3px 3px 1px 1px; background: var(--claude); opacity: 0.9; transition: height 0.25s; }
+  .hist .stack { display: flex; flex-direction: column; width: 100%; border-radius: 3px 3px 1px 1px; overflow: hidden; }
+  .hist i { display: block; width: 100%; background: var(--claude); opacity: 0.9; transition: height 0.25s; }
+  .hist i.codex { background: var(--openai); }
   .hist small { font-size: 9.5px; color: #8c8c92; }
   .est { font-size: 10px; color: #8c8c92; margin-top: 8px; }
 
@@ -536,11 +538,12 @@
               </div>
               <div class="ts-body">
                 <div class="donut" title="Hover for the exact figure">
-                  <svg viewBox="0 0 42 42"><circle cx="21" cy="21" r="16" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="6"/><circle id="donut-claude" cx="21" cy="21" r="16" fill="none" stroke="#d97757" stroke-width="6" stroke-dasharray="100.5 0"/></svg>
-                  <div class="center"><b class="rounded" id="ts-round">$133</b><b class="precise" id="ts-precise">$133.12</b><small id="ts-unit">today</small></div>
+                  <svg viewBox="0 0 42 42"><circle cx="21" cy="21" r="16" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="6"/><circle id="donut-claude" cx="21" cy="21" r="16" fill="none" stroke="#d97757" stroke-width="6"/><circle id="donut-codex" cx="21" cy="21" r="16" fill="none" stroke="#10a37f" stroke-width="6"/></svg>
+                  <div class="center"><b class="rounded" id="ts-round">$152</b><b class="precise" id="ts-precise">$151.52</b><small id="ts-unit">today</small></div>
                 </div>
                 <div class="legend">
                   <div><span class="sw" style="background:#d97757"></span>Claude<span class="v" id="ts-claude">$133.12</span></div>
+                  <div><span class="sw" style="background:#10a37f"></span>Codex<span class="v" id="ts-codex">$18.40</span></div>
                   <div style="color:#8c8c92;font-size:10.5px">Estimated at API list rates</div>
                 </div>
               </div>
@@ -559,11 +562,16 @@
             </div>
             <div class="pcard">
               <div class="pcard-head"><img src="icons/codex.svg" alt=""><b>Codex</b><span class="plan">plus</span></div>
+              <div class="spend-line"><span class="chev">&#9654;</span><b>Today $18</b><span class="y">&middot; Yesterday $31</span></div>
+              <div class="models">
+                <div><span>gpt-6-astra</span><span>82%</span><span>$15.09</span></div>
+                <div><span>gpt-5.6-terra</span><span>18%</span><span>$3.31</span></div>
+              </div>
               <div class="sess warm"><svg class="ic"><use href="#i-flame"/></svg><b>infra-scripts</b><span class="d">98% hit last turn</span></div>
               <div class="sess cold"><svg class="ic"><use href="#i-snow"/></svg><b>docs-site</b><span class="d">no hit last turn &middot; re-reads ~86.2K tok if cold</span></div>
             </div>
             <div class="pcard">
-              <div class="hist-head"><b>Claude &middot; last 7 days</b>
+              <div class="hist-head"><b>Last 7 days</b>
                 <div class="seg" id="histmode"><button aria-selected="true" data-mode="cost">Cost</button><button aria-selected="false" data-mode="tokens">Tokens</button></div>
               </div>
               <div class="hist" id="hist"></div>
@@ -993,34 +1001,47 @@
 
   // Total Spend range toggle
   const ranges = [
-    { round: "$133", precise: "$133.12", unit: "today" },
-    { round: "$254", precise: "$254.07", unit: "yesterday" },
-    { round: "$2.9K", precise: "$2,918.44", unit: "30 days" },
+    { claude: 133.12, codex: 18.40, round: "$152", unit: "today" },
+    { claude: 254.07, codex: 31.20, round: "$285", unit: "yesterday" },
+    { claude: 2918.44, codex: 412.60, round: "$3.3K", unit: "30 days" },
   ];
+  const money = v => "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const circumference = 2 * Math.PI * 16;
+  const drawDonut = r => {
+    const claudeLen = circumference * r.claude / (r.claude + r.codex);
+    const claude = document.getElementById("donut-claude"), codex = document.getElementById("donut-codex");
+    claude.setAttribute("stroke-dasharray", `${claudeLen} ${circumference}`);
+    codex.setAttribute("stroke-dasharray", `${circumference - claudeLen} ${circumference}`);
+    codex.setAttribute("stroke-dashoffset", `${-claudeLen}`);
+    document.getElementById("ts-round").textContent = r.round;
+    document.getElementById("ts-precise").textContent = money(r.claude + r.codex);
+    document.getElementById("ts-unit").textContent = r.unit;
+    document.getElementById("ts-claude").textContent = money(r.claude);
+    document.getElementById("ts-codex").textContent = money(r.codex);
+  };
+  drawDonut(ranges[0]);
   const range = document.getElementById("range");
   range.addEventListener("click", e => {
     const btn = e.target.closest("button"); if (!btn) return;
     select(range, btn);
-    const r = ranges[+btn.dataset.range];
-    document.getElementById("ts-round").textContent = r.round;
-    document.getElementById("ts-precise").textContent = r.precise;
-    document.getElementById("ts-unit").textContent = r.unit;
-    document.getElementById("ts-claude").textContent = r.precise;
+    drawDonut(ranges[+btn.dataset.range]);
   });
 
   // Collapsible per-model spend
   pop.querySelectorAll(".spend-line").forEach(l => l.addEventListener("click", () => l.classList.toggle("open")));
 
-  // 7-day history chart
+  // 7-day history chart, stacked by provider like the app's
   const days = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"];
   const data = {
-    cost: { v: [182, 241, 64, 38, 297, 254, 133], fmt: v => `$${v}` },
-    tokens: { v: [412, 530, 151, 88, 640, 575, 301], fmt: v => `${v}M tok` },
+    cost: { claude: [182, 241, 64, 38, 297, 254, 133], codex: [22, 35, 0, 4, 41, 31, 18], fmt: v => `$${v}` },
+    tokens: { claude: [412, 530, 151, 88, 640, 575, 301], codex: [9, 14, 0, 2, 17, 12, 7], fmt: v => `${v}M tok` },
   };
   const hist = document.getElementById("hist");
   const draw = mode => {
-    const { v, fmt } = data[mode]; const max = Math.max(...v);
-    hist.innerHTML = v.map((x, i) => `<div title="${days[i]}: ${fmt(x)}"><i style="height:${Math.round((x / max) * 56)}px"></i><small>${days[i]}</small></div>`).join("");
+    const { claude, codex, fmt } = data[mode];
+    const max = Math.max(...claude.map((c, i) => c + codex[i]));
+    const h = v => Math.round((v / max) * 56);
+    hist.innerHTML = claude.map((c, i) => `<div title="${days[i]}: Claude ${fmt(c)}, Codex ${fmt(codex[i])}"><span class="stack"><i class="codex" style="height:${h(codex[i])}px"></i><i style="height:${h(c)}px"></i></span><small>${days[i]}</small></div>`).join("");
   };
   draw("cost");
   const histmode = document.getElementById("histmode");
