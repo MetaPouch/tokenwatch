@@ -59,4 +59,30 @@ final class ModelPricingTests: XCTestCase {
         let cost = ModelPricing.costUSD(provider: .claude, model: "claude-sonnet-5", inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0)
         XCTAssertEqual(cost, 0)
     }
+
+    /// OpenRouter and harnesses spell Claude versions with a dot (`claude-haiku-4.5`); without
+    /// normalizing, that prefix-matches nothing better than `claude-haiku-4` or falls back.
+    func testDottedClaudeVersionPricesAsDashedId() {
+        let (rate, approximate) = ModelPricing.rate(provider: .claude, model: "anthropic/claude-haiku-4.5")
+        XCTAssertEqual(rate, ModelPricing.rate(provider: .claude, model: "claude-haiku-4-5").rate)
+        XCTAssertEqual(rate.inputPerMillion, 1)
+        XCTAssertFalse(approximate)
+    }
+
+    /// Newer point releases carry their own cache-read rate and must not fall through to the
+    /// shorter family prefix (`claude-mythos-5-1` isn't `claude-mythos`'s 0.1x-input default).
+    func testNewModelsResolveToTheirOwnRates() {
+        XCTAssertEqual(ModelPricing.rate(provider: .claude, model: "claude-mythos-5-1").rate.cacheReadPerMillion, 0.25)
+        XCTAssertEqual(ModelPricing.rate(provider: .claude, model: "claude-fable-5-1-20260601").rate.cacheReadPerMillion, 0.25)
+        XCTAssertEqual(ModelPricing.rate(provider: .codex, model: "gpt-6-luna").rate.inputPerMillion, 0.1)
+        XCTAssertEqual(ModelPricing.rate(provider: .codex, model: "gpt-5.6").rate, ModelPricing.rate(provider: .codex, model: "gpt-5.6-sol").rate)
+    }
+
+    /// Codex counts cache writes inside `input_tokens`, like cached reads. They're billed at 1.25x
+    /// input, not at the plain input rate.
+    func testCodexCacheWritesAreSplitOutOfInputAndPricedAtWriteRate() {
+        // gpt-6-sol: $2/M input, so 1M plain + 1M written = $2 + $2.5.
+        let withWrites = ModelPricing.codexCostUSD(model: "gpt-6-sol", inputTokens: 2_000_000, cachedInputTokens: 0, cacheWriteInputTokens: 1_000_000, outputTokens: 0)
+        XCTAssertEqual(withWrites.cost, 2 + 2.5, accuracy: 1e-9)
+    }
 }

@@ -1,9 +1,10 @@
 import Foundation
 
-/// Reads a coding-agent harness's own local session transcripts (currently: `omp`, the CLI behind
-/// Superset, at `~/.omp/agent/sessions/<encoded-cwd>/<timestamp>_<ulid>.jsonl`) as a supplementary
-/// local-activity source for Claude's and Codex's cache-temperature/session lists -- each taking
-/// the turns omp served through its own model provider (`OmpUsageLog.ompProvider(for:)`).
+/// Reads the coding-agent harnesses' own local session transcripts (`omp`, the CLI behind
+/// Superset, at `~/.omp/agent/sessions/<encoded-cwd>/<timestamp>_<ulid>.jsonl`, and `pi`, which omp
+/// forked, in the same format) as a supplementary local-activity source for Claude's and Codex's
+/// cache-temperature/session lists -- each taking the turns served through its own provider
+/// (`HarnessUsageLog.source(forHarnessProvider:)`).
 ///
 /// Why this exists: a harness like `omp` calls the Anthropic API directly -- confirmed on a live
 /// machine via `ps aux` (the process is `omp --model anthropic/...`, never `claude`) -- so it never
@@ -24,7 +25,7 @@ import Foundation
 /// merges both sources into one list with no special-casing downstream; `CodexProvider` converts.
 enum OmpSessionScanner {
     static func projectRoots(homeDirectory: String = NSHomeDirectory()) -> [String] {
-        OmpUsageLog.roots(homeDirectory: homeDirectory)
+        HarnessUsageLog.roots(homeDirectory: homeDirectory)
     }
 
     /// Matches `ClaudeSessionScanner`'s window so a merged "active sessions" list has one
@@ -37,12 +38,12 @@ enum OmpSessionScanner {
     /// found (it can't hold a newer one). Bounded to the day the menu bar considers "recent", so a
     /// provider never used through omp doesn't read the tail of every omp session ever written.
     static func mostRecentActivity(provider: ProviderID = .claude, roots: [String] = projectRoots(), now: Date = Date(), lookbackSeconds: TimeInterval = 24 * 3600) -> ClaudeSessionActivity? {
-        guard let ompProvider = OmpUsageLog.ompProvider(for: provider) else { return nil }
+        let source = SpendSource.provider(provider)
         var best: ClaudeSessionActivity?
         let files = transcriptFiles(roots: roots, modifiedSince: now.addingTimeInterval(-lookbackSeconds))
         for file in files.sorted(by: { $0.modified > $1.modified }) {
             if let best, file.modified < best.timestamp { break }
-            if let activity = lastActivity(inFileAtPath: file.path, ompProvider: ompProvider), activity.timestamp > best?.timestamp ?? .distantPast {
+            if let activity = lastActivity(inFileAtPath: file.path, source: source), activity.timestamp > best?.timestamp ?? .distantPast {
                 best = activity
             }
         }
@@ -50,10 +51,10 @@ enum OmpSessionScanner {
     }
 
     static func allRecentActivity(provider: ProviderID = .claude, roots: [String] = projectRoots(), now: Date = Date(), windowSeconds: TimeInterval = activeSessionWindowSeconds) -> [ClaudeSessionActivity] {
-        guard let ompProvider = OmpUsageLog.ompProvider(for: provider) else { return [] }
+        let source = SpendSource.provider(provider)
         let cutoff = now.addingTimeInterval(-windowSeconds)
         let files = transcriptFiles(roots: roots, modifiedSince: cutoff)
-        let activities = files.compactMap { lastActivity(inFileAtPath: $0.path, ompProvider: ompProvider) }
+        let activities = files.compactMap { lastActivity(inFileAtPath: $0.path, source: source) }
         return activities.sorted { $0.timestamp > $1.timestamp }
     }
 
@@ -86,13 +87,13 @@ enum OmpSessionScanner {
         return results
     }
 
-    /// Scans the tail of `path` for the last assistant message served by `ompProvider`.
+    /// Scans the tail of `path` for the last assistant message served through `source`.
     /// A single omp session can mix providers/models turn to turn (switching models mid-conversation
     /// is a normal user action), so this looks past any trailing turns from other providers rather
     /// than stopping at the very last line. Bounded to the last `tailReadBytes` of the file -- an
     /// actively-used omp session observed during implementation was 10+ MB after a few days, and a
     /// handful of the most recent messages are always well within a couple hundred KB of the tail.
-    private static func lastActivity(inFileAtPath path: String, ompProvider: String) -> ClaudeSessionActivity? {
+    private static func lastActivity(inFileAtPath path: String, source: SpendSource) -> ClaudeSessionActivity? {
         guard let text = tailText(ofFileAtPath: path) else { return nil }
         let sessionLabel = ompSessionCwd(atPath: path).map { ($0 as NSString).lastPathComponent }
             ?? ((path as NSString).deletingLastPathComponent as NSString).lastPathComponent
@@ -103,7 +104,7 @@ enum OmpSessionScanner {
                   entry.type == "message",
                   let message = entry.message,
                   message.role == "assistant",
-                  message.provider == ompProvider,
+                  message.provider.map(HarnessUsageLog.source(forHarnessProvider:)) == source,
                   let usage = message.usage,
                   let timestampString = entry.timestamp,
                   let timestamp = FlexibleISO8601.parse(timestampString)

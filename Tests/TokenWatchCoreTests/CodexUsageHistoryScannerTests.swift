@@ -46,7 +46,7 @@ final class CodexUsageHistoryScannerTests: XCTestCase {
     }
 
     private func day15() -> UsageDay? {
-        CodexUsageHistoryScanner.dailyUsage(days: 30, now: now, roots: [root.appendingPathComponent("sessions").path, root.appendingPathComponent("archived_sessions").path], ompRoots: [root.appendingPathComponent("omp").path])
+        CodexUsageHistoryScanner.dailyUsage(days: 30, now: now, roots: [root.appendingPathComponent("sessions").path, root.appendingPathComponent("archived_sessions").path], harnessRoots: [root.appendingPathComponent("omp").path])
             .first { $0.id == "2026-06-15" }
     }
 
@@ -75,6 +75,20 @@ final class CodexUsageHistoryScannerTests: XCTestCase {
             #"{"type":"message","timestamp":"2026-06-15T10:00:00.000Z","message":{"role":"assistant","provider":"openai-codex","model":"gpt-6-astra","usage":{"input":4000,"cacheRead":30000,"cacheWrite":0,"output":500}}}"#,
         ])
         XCTAssertEqual(day15()?.estimatedCostUSD ?? -1, 0.095, accuracy: 0.0001)
+    }
+
+    /// Cache writes are inside `input_tokens` too: they leave the input bucket, land in cache
+    /// writes, and bill at 1.25x input. gpt-6-sol: 1M uncached x $2/M + 1M written x $2.5/M.
+    func testCacheWritesAreSplitOutOfInput() {
+        writeRollout("sessions/2026/06/15/rollout.jsonl", lines: [
+            meta(),
+            turnContext("gpt-6-sol"),
+            #"{"timestamp":"2026-06-15T09:00:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":2000000,"cached_input_tokens":0,"cache_write_input_tokens":1000000,"output_tokens":0,"total_tokens":2000000}}}}"#,
+        ])
+        let day = day15()
+        XCTAssertEqual(day?.inputTokens, 1_000_000)
+        XCTAssertEqual(day?.cacheWriteTokens, 1_000_000)
+        XCTAssertEqual(day?.estimatedCostUSD ?? -1, 4.5, accuracy: 1e-9)
     }
 
     /// Cached tokens are inside `input_tokens`: only the uncached part bills at the input rate.

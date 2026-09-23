@@ -1,26 +1,26 @@
 import SwiftUI
 import TokenWatchCore
 
-/// The last 7 days inside `TotalSpendCard`: one bar per day, stacked by provider in brand colors,
+/// The last 7 days inside `TotalSpendCard`: one bar per day, stacked by source in brand colors,
 /// in whichever quantity the card shows (`SpendMetricMode`). Per-token rates don't stack, so
 /// Cost/MTok draws one bar per day of combined cost over combined tokens. The days the card's
 /// selected period covers stay full strength and the rest dim, tying the bars to the donut above.
 struct SpendHistoryChart: View {
     @ObservedObject var store: SpendHistoryStore
-    /// Which providers to include, in stacking order (bottom first).
-    let providers: [ProviderID]
+    /// Which sources to include, in stacking order (bottom first).
+    let sources: [SpendSource]
     let mode: SpendMetricMode
     let period: SpendPeriod
 
     private struct Day: Identifiable {
         let id: String
         let date: Date
-        let byProvider: [(provider: ProviderID, day: UsageDay)]
+        let byProvider: [(provider: SpendSource, day: UsageDay)]
     }
 
     /// One entry per day (oldest first, ending today), each with every provider's day for that date.
     private var days: [Day] {
-        let series = providers.map { ($0, Array(store.days(for: $0).suffix(7))) }
+        let series = sources.map { ($0, Array(store.days(for: $0).suffix(7))) }
         guard let reference = series.first?.1 else { return [] }
         return reference.map { referenceDay in
             Day(id: referenceDay.id, date: referenceDay.date, byProvider: series.compactMap { provider, providerDays in
@@ -72,9 +72,9 @@ struct SpendHistoryChart: View {
     private func segments(for day: Day) -> [(color: Color, value: Double)] {
         switch mode {
         case .cost:
-            return day.byProvider.map { (BrandColor.forProvider($0.provider), $0.day.estimatedCostUSD) }.filter { $0.value > 0 }
+            return day.byProvider.map { (BrandColor.forSource($0.provider), $0.day.estimatedCostUSD) }.filter { $0.value > 0 }
         case .tokens:
-            return day.byProvider.map { (BrandColor.forProvider($0.provider), Double($0.day.totalTokens)) }.filter { $0.value > 0 }
+            return day.byProvider.map { (BrandColor.forSource($0.provider), Double($0.day.totalTokens)) }.filter { $0.value > 0 }
         case .costPerMTok:
             let value = total(for: day)
             return value > 0 ? [(Color.accentColor.opacity(0.7), value)] : []

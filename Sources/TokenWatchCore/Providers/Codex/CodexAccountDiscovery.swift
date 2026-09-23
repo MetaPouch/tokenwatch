@@ -37,6 +37,17 @@ enum CodexAccountDiscovery {
         return accounts
     }
 
+    /// Every rollout directory whose sessions count toward usage history: `sessions/` and
+    /// `archived_sessions/` of the default home (`CODEX_HOME`, else `~/.codex`) and of every other
+    /// `~/.codex*` home -- one per account by convention, each keeping its own rollouts. Resolved
+    /// through symlinks and deduplicated so a linked home isn't scanned twice.
+    static func historyRoots(homeDirectory: String = NSHomeDirectory(), environment: [String: String] = ProcessInfo.processInfo.environment) -> [String] {
+        var homes = [environment["CODEX_HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? homeDirectory + "/.codex"]
+        let entries = (try? FileManager.default.contentsOfDirectory(atPath: homeDirectory)) ?? []
+        homes += entries.sorted().filter { $0.hasPrefix(".codex") }.map { homeDirectory + "/" + $0 }
+        return ClaudeAccountDiscovery.uniqueExistingDirectories(homes.flatMap { [$0 + "/sessions", $0 + "/archived_sessions"] })
+    }
+
     private static func readAccessToken(codexHome: String) -> String? {
         guard let data = FileManager.default.contents(atPath: codexHome + "/auth.json") else { return nil }
         guard let file = try? JSONDecoder().decode(CodexAuthFile.self, from: data) else { return nil }

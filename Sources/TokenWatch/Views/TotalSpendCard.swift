@@ -2,12 +2,14 @@ import SwiftUI
 import AppKit
 import TokenWatchCore
 
-/// Cross-provider spend: a donut segmented by provider for the selected period (Today /
-/// Yesterday / 30 Days), a Cost / Cost per MTok / Tokens mode picker, and below it the last 7 days
-/// as a stacked bar chart (`SpendHistoryChart`) in the same mode, the selected period's days
-/// highlighted. Sources spend from every enabled provider with a local usage-history scanner
-/// (`SpendHistoryStore.providers`: Claude and Codex). Shown whenever any of them has history in
-/// the window; a period with nothing in it says so instead of drawing an empty donut.
+/// Cross-provider spend: a donut segmented by source for the selected period (Today / Yesterday /
+/// 30 Days), a Cost / Cost per MTok / Tokens mode picker, and below it the last 7 days as a
+/// stacked bar chart (`SpendHistoryChart`) in the same mode, the selected period's days
+/// highlighted. Covers every source with local history (`SpendHistoryStore.sources`) -- Claude and
+/// Codex from their CLIs and harnesses, plus any other provider omp/pi called, and "Other" for
+/// providers TokenWatch has no card for -- whether or not that provider's limits card is enabled:
+/// it's the total of what was spent locally, not of what's tracked. Shown whenever there's history
+/// in the last 7 days; a period with nothing in it says so instead of drawing an empty donut.
 struct TotalSpendCard: View {
     @ObservedObject var dataStore: WidgetDataStore
     @ObservedObject var enablementStore: ProviderEnablementStore
@@ -17,7 +19,7 @@ struct TotalSpendCard: View {
     @AppStorage("totalSpendPeriod") private var periodRaw: String = SpendPeriod.today.rawValue
     @AppStorage("totalSpendMode") private var modeRaw: String = SpendMetricMode.cost.rawValue
     @State private var isHoveringCenter = false
-    @State private var hoveredProvider: ProviderID?
+    @State private var hoveredSource: SpendSource?
 
     private var period: SpendPeriod { SpendPeriod(rawValue: periodRaw) ?? .today }
     private var mode: SpendMetricMode { SpendMetricMode(rawValue: modeRaw) ?? .cost }
@@ -37,36 +39,34 @@ struct TotalSpendCard: View {
         .task { spendHistoryStore.loadIfNeeded() }
     }
 
-    private var historyProviders: [ProviderID] {
-        SpendHistoryStore.providers.filter { enablementStore.isEnabled($0) }
-    }
+    private var historySources: [SpendSource] { spendHistoryStore.sources }
 
-    /// Any enabled provider has local activity in the last 7 days (what the chart covers).
+    /// Any source has local activity in the last 7 days (what the chart covers).
     private var hasHistory: Bool {
-        historyProviders.contains { spendHistoryStore.days(for: $0).suffix(7).contains { $0.totalTokens > 0 } }
+        historySources.contains { spendHistoryStore.days(for: $0).suffix(7).contains { $0.totalTokens > 0 } }
     }
 
-    /// One entry per provider with a nonzero value for the current mode/period, largest first.
+    /// One entry per source with a nonzero value for the current mode/period, largest first.
     /// `nil` while still loading.
-    private var providerValues: [(provider: ProviderID, value: Double)]? {
+    private var providerValues: [(provider: SpendSource, value: Double)]? {
         guard !isLoading else { return nil }
-        var entries: [(provider: ProviderID, value: Double)] = []
-        for provider in SpendHistoryStore.providers where enablementStore.isEnabled(provider) {
-            let days = spendHistoryStore.days(for: provider)
+        var entries: [(provider: SpendSource, value: Double)] = []
+        for source in historySources {
+            let days = spendHistoryStore.days(for: source)
             let value: Double?
             switch mode {
             case .cost: value = SpendAggregator.amount(for: period, days: days)
             case .tokens: value = Double(SpendAggregator.tokens(for: period, days: days))
             case .costPerMTok: value = SpendAggregator.costPerMillionTokens(for: period, days: days)
             }
-            if let value, value > 0 { entries.append((provider, value)) }
+            if let value, value > 0 { entries.append((source, value)) }
         }
         return entries.sorted { $0.value > $1.value }
     }
 
     /// The figure in the donut's center. Costs and tokens add up across providers; per-token
     /// rates don't, so Cost/MTok is combined cost over combined tokens instead of a sum of rates.
-    private func centerValue(entries: [(provider: ProviderID, value: Double)]) -> Double {
+    private func centerValue(entries: [(provider: SpendSource, value: Double)]) -> Double {
         guard mode == .costPerMTok else { return entries.reduce(0) { $0 + $1.value } }
         let days = entries.map { spendHistoryStore.days(for: $0.provider) }
         let cost = days.reduce(0) { $0 + SpendAggregator.amount(for: period, days: $1) }
@@ -74,7 +74,7 @@ struct TotalSpendCard: View {
         return tokens > 0 ? cost / Double(tokens) * 1_000_000 : 0
     }
 
-    private func card(entries: [(provider: ProviderID, value: Double)]) -> some View {
+    private func card(entries: [(provider: SpendSource, value: Double)]) -> some View {
         let total = entries.reduce(0) { $0 + $1.value }
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
@@ -93,7 +93,7 @@ struct TotalSpendCard: View {
                 Image(systemName: "info.circle")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
-                    .help("Includes: \(historyProviders.map(\.displayName).joined(separator: ", ")). Estimated at API list rates, refreshed against live pricing when reachable (static fallback updated \(ModelPricing.pricingTableUpdatedOn)) -- subscription usage isn't billed per token. ~ marks a day with a model priced approximately.")
+                    .help("Includes: \(historySources.map(\.displayName).joined(separator: ", ")). Estimated at API list rates, refreshed against live pricing when reachable (static fallback updated \(ModelPricing.pricingTableUpdatedOn)) -- subscription usage isn't billed per token. ~ marks a day with a model priced approximately.")
                 Spacer()
                 Button(action: { shareToClipboard(entries: entries, total: total) }) {
                     Image(systemName: "square.and.arrow.up")
@@ -128,10 +128,10 @@ struct TotalSpendCard: View {
     }
 
     private var chart: some View {
-        SpendHistoryChart(store: spendHistoryStore, providers: historyProviders, mode: mode, period: period)
+        SpendHistoryChart(store: spendHistoryStore, sources: historySources, mode: mode, period: period)
     }
 
-    private func donutWithCenter(entries: [(provider: ProviderID, value: Double)], total: Double, center: Double) -> some View {
+    private func donutWithCenter(entries: [(provider: SpendSource, value: Double)], total: Double, center: Double) -> some View {
         ZStack {
             donut(entries: entries, total: total)
             if isHoveringCenter {
@@ -154,7 +154,7 @@ struct TotalSpendCard: View {
         .onHover { isHoveringCenter = $0 }
     }
 
-    private func donut(entries: [(provider: ProviderID, value: Double)], total: Double) -> some View {
+    private func donut(entries: [(provider: SpendSource, value: Double)], total: Double) -> some View {
         Canvas { context, size in
             let lineWidth: CGFloat = 10
             let rect = CGRect(origin: .zero, size: size).insetBy(dx: lineWidth / 2, dy: lineWidth / 2)
@@ -165,29 +165,29 @@ struct TotalSpendCard: View {
                 let sweep = Angle(degrees: max(fraction * 360, entries.count > 1 ? 3 : 360))
                 var path = Path()
                 path.addArc(center: CGPoint(x: rect.midX, y: rect.midY), radius: rect.width / 2, startAngle: startAngle, endAngle: startAngle + sweep, clockwise: false)
-                context.stroke(path, with: .color(BrandColor.forProvider(entry.provider)), style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
+                context.stroke(path, with: .color(BrandColor.forSource(entry.provider)), style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
                 startAngle += sweep
             }
         }
     }
 
-    private func legend(entries: [(provider: ProviderID, value: Double)], total: Double) -> some View {
+    private func legend(entries: [(provider: SpendSource, value: Double)], total: Double) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             ForEach(entries, id: \.provider) { entry in
                 HStack(spacing: 5) {
-                    Circle().fill(BrandColor.forProvider(entry.provider)).frame(width: 6, height: 6)
+                    Circle().fill(BrandColor.forSource(entry.provider)).frame(width: 6, height: 6)
                     Text(entry.provider.displayName).font(.caption2)
                     Spacer(minLength: 8)
                     Text(legendValueText(entry.value)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
                 }
                 .contentShape(Rectangle())
-                .background(hoveredProvider == entry.provider ? Color.secondary.opacity(0.12) : .clear)
+                .background(hoveredSource == entry.provider ? Color.secondary.opacity(0.12) : .clear)
                 .onHover { isHovering in
-                    hoveredProvider = isHovering ? entry.provider : (hoveredProvider == entry.provider ? nil : hoveredProvider)
+                    hoveredSource = isHovering ? entry.provider : (hoveredSource == entry.provider ? nil : hoveredSource)
                 }
                 .popover(isPresented: Binding(
-                    get: { hoveredProvider == entry.provider },
-                    set: { if !$0 { hoveredProvider = nil } }
+                    get: { hoveredSource == entry.provider },
+                    set: { if !$0 { hoveredSource = nil } }
                 ), arrowEdge: .trailing) {
                     modelBreakdownPopover(provider: entry.provider)
                 }
@@ -196,7 +196,7 @@ struct TotalSpendCard: View {
     }
 
     /// A ranked per-model spend list for `provider`, shown while hovering its legend row.
-    private func modelBreakdownPopover(provider: ProviderID) -> some View {
+    private func modelBreakdownPopover(provider: SpendSource) -> some View {
         let breakdown = SpendAggregator.modelBreakdown(for: period, days: spendHistoryStore.days(for: provider))
         let breakdownTotal = breakdown.reduce(0) { $0 + $1.costUSD }
         return VStack(alignment: .leading, spacing: 6) {
@@ -219,7 +219,7 @@ struct TotalSpendCard: View {
                         Capsule().fill(Color.secondary.opacity(0.2))
                             .overlay(alignment: .leading) {
                                 let share = breakdownTotal > 0 ? model.costUSD / breakdownTotal : 0
-                                Capsule().fill(BrandColor.forProvider(provider)).frame(width: proxy.size.width * CGFloat(share))
+                                Capsule().fill(BrandColor.forSource(provider)).frame(width: proxy.size.width * CGFloat(share))
                             }
                     }
                     .frame(height: 3)
@@ -231,7 +231,7 @@ struct TotalSpendCard: View {
     }
 
 
-    private func shareToClipboard(entries: [(provider: ProviderID, value: Double)], total: Double) {
+    private func shareToClipboard(entries: [(provider: SpendSource, value: Double)], total: Double) {
         let content = VStack(spacing: 10) {
             Text("TokenWatch — Total Spend").font(.headline)
             if !entries.isEmpty {
@@ -319,6 +319,14 @@ enum BrandColor {
         case .amp: return Color(red: 0.910, green: 0.451, blue: 0.204) // amp orange
         case .grok: return Color(white: 0.82) // xAI near-white/gray (visible on dark UI)
         case .opencode: return Color(red: 0.204, green: 0.780, blue: 0.349) // terminal green
+        }
+    }
+
+    /// A provider's color, or a neutral gray for "Other".
+    static func forSource(_ source: SpendSource) -> Color {
+        switch source {
+        case let .provider(provider): return forProvider(provider)
+        case .other: return Color(white: 0.55)
         }
     }
 }

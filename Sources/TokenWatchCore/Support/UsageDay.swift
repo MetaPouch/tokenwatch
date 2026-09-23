@@ -13,6 +13,39 @@ public struct ModelSpend: Sendable, Equatable, Identifiable {
     }
 }
 
+/// Who a slice of local spend belongs to: one of TokenWatch's providers, or `other` -- a model
+/// provider a coding-agent harness called that TokenWatch has no provider for (DeepSeek, Mistral,
+/// Bedrock, Groq, ...). Kept rather than dropped, so Total Spend really is the total.
+public enum SpendSource: Hashable, Sendable, Identifiable, Comparable {
+    case provider(ProviderID)
+    case other
+
+    public var id: String {
+        switch self {
+        case let .provider(provider): return provider.rawValue
+        case .other: return "other"
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case let .provider(provider): return provider.displayName
+        case .other: return "Other"
+        }
+    }
+
+    /// `ProviderID` order, then `other`.
+    public static func < (lhs: SpendSource, rhs: SpendSource) -> Bool {
+        func rank(_ source: SpendSource) -> Int {
+            switch source {
+            case let .provider(provider): return ProviderID.allCases.firstIndex(of: provider) ?? 0
+            case .other: return ProviderID.allCases.count
+            }
+        }
+        return rank(lhs) < rank(rhs)
+    }
+}
+
 /// One local calendar day of one provider's token usage, aggregated across its local session
 /// logs and priced at API list rates (or at the cost the logs themselves recorded). Token buckets
 /// are disjoint: `inputTokens` excludes cache reads/writes, so `totalTokens` is a plain sum.

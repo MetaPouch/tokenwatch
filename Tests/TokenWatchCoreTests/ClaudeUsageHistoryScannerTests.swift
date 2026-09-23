@@ -46,7 +46,7 @@ final class ClaudeUsageHistoryScannerTests: XCTestCase {
             claudeCodeLine(timestamp: "2026-06-15T08:00:00.000Z", model: "claude-sonnet-5", input: 100, cacheRead: 0, cacheCreate: 0, output: 50),
             claudeCodeLine(timestamp: "2026-06-15T09:00:00.000Z", model: "claude-sonnet-5", input: 200, cacheRead: 0, cacheCreate: 0, output: 75),
         ])
-        let days = ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], ompRoots: [ompRoot.path])
+        let days = ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], harnessRoots: [ompRoot.path])
         let day = days.first { $0.id == "2026-06-15" }
         XCTAssertEqual(day?.inputTokens, 300)
         XCTAssertEqual(day?.outputTokens, 125)
@@ -59,7 +59,7 @@ final class ClaudeUsageHistoryScannerTests: XCTestCase {
         writeOmpTranscript("session.jsonl", lines: [
             ompLine(timestamp: "2026-06-15T10:00:00.000Z", model: "claude-sonnet-5", input: 400, cacheRead: 0, cacheWrite: 0, output: 20),
         ])
-        let days = ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], ompRoots: [ompRoot.path])
+        let days = ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], harnessRoots: [ompRoot.path])
         let day = days.first { $0.id == "2026-06-15" }
         XCTAssertEqual(day?.inputTokens, 500)
         XCTAssertEqual(day?.outputTokens, 70)
@@ -79,7 +79,7 @@ final class ClaudeUsageHistoryScannerTests: XCTestCase {
             claudeCodeLine(timestamp: "2026-06-15T08:05:00.000Z", model: "claude-sonnet-5", input: 100, cacheRead: 1_000, cacheCreate: 10, output: 50, messageID: "msg_B", requestID: "req_B"),
         ])
         writeClaudeTranscript("resumed.jsonl", lines: [response("2026-06-15T08:00:00.000Z")])
-        let days = ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], ompRoots: [ompRoot.path])
+        let days = ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], harnessRoots: [ompRoot.path])
         let day = days.first { $0.id == "2026-06-15" }
         XCTAssertEqual(day?.inputTokens, 200)
         XCTAssertEqual(day?.outputTokens, 100)
@@ -87,7 +87,7 @@ final class ClaudeUsageHistoryScannerTests: XCTestCase {
     }
 
     private func dailyUsageOn15th() -> UsageDay? {
-        ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], ompRoots: [ompRoot.path])
+        ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], harnessRoots: [ompRoot.path])
             .first { $0.id == "2026-06-15" }
     }
 
@@ -152,7 +152,7 @@ final class ClaudeUsageHistoryScannerTests: XCTestCase {
             var cal = Calendar(identifier: .gregorian)
             cal.timeZone = TimeZone(identifier: "UTC")!
             return cal
-        }(), claudeRoots: [claudeRoot.path], ompRoots: [ompRoot.path])
+        }(), claudeRoots: [claudeRoot.path], harnessRoots: [ompRoot.path])
         XCTAssertEqual(days.first { $0.id == "2026-06-14" }?.inputTokens, 10)
         XCTAssertEqual(days.first { $0.id == "2026-06-15" }?.inputTokens, 20)
     }
@@ -161,7 +161,7 @@ final class ClaudeUsageHistoryScannerTests: XCTestCase {
         writeClaudeTranscript("session.jsonl", lines: [
             claudeCodeLine(timestamp: "2026-01-01T00:00:00.000Z", model: "claude-sonnet-5", input: 999, cacheRead: 0, cacheCreate: 0, output: 999),
         ])
-        let days = ClaudeUsageHistoryScanner.dailyUsage(days: 7, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], ompRoots: [ompRoot.path])
+        let days = ClaudeUsageHistoryScanner.dailyUsage(days: 7, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], harnessRoots: [ompRoot.path])
         XCTAssertEqual(days.reduce(0) { $0 + $1.inputTokens }, 0)
     }
 
@@ -169,7 +169,7 @@ final class ClaudeUsageHistoryScannerTests: XCTestCase {
         writeClaudeTranscript("session.jsonl", lines: [
             claudeCodeLine(timestamp: "2026-06-15T08:00:00.000Z", model: "claude-sonnet-5", input: 1_000_000, cacheRead: 0, cacheCreate: 0, output: 1_000_000),
         ])
-        let days = ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], ompRoots: [ompRoot.path])
+        let days = ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], harnessRoots: [ompRoot.path])
         let day = days.first { $0.id == "2026-06-15" }
         XCTAssertEqual(day?.estimatedCostUSD ?? -1, 12, accuracy: 0.01) // $2/M input + $10/M output
     }
@@ -178,12 +178,12 @@ final class ClaudeUsageHistoryScannerTests: XCTestCase {
         writeClaudeTranscript("session.jsonl", lines: [
             claudeCodeLine(timestamp: "2026-06-15T08:00:00.000Z", model: "claude-mystery-model", input: 100, cacheRead: 0, cacheCreate: 0, output: 100),
         ])
-        let days = ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], ompRoots: [ompRoot.path])
+        let days = ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], harnessRoots: [ompRoot.path])
         XCTAssertEqual(days.first { $0.id == "2026-06-15" }?.hasApproximateRate, true)
     }
 
     func testReturnsEveryDayInWindowIncludingZeroUsageDays() {
-        let days = ClaudeUsageHistoryScanner.dailyUsage(days: 7, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], ompRoots: [ompRoot.path])
+        let days = ClaudeUsageHistoryScanner.dailyUsage(days: 7, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], harnessRoots: [ompRoot.path])
         XCTAssertEqual(days.count, 7)
         XCTAssertTrue(days.allSatisfy { $0.totalTokens == 0 })
     }
@@ -195,7 +195,7 @@ final class ClaudeUsageHistoryScannerTests: XCTestCase {
         writeOmpTranscript("session.jsonl", lines: [
             ompLine(timestamp: "2026-06-15T08:00:00.000Z", model: "gpt-5", input: 500, cacheRead: 0, cacheWrite: 0, output: 500).replacingOccurrences(of: "\"provider\":\"anthropic\"", with: "\"provider\":\"openai\""),
         ])
-        let days = ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], ompRoots: [ompRoot.path])
+        let days = ClaudeUsageHistoryScanner.dailyUsage(days: 30, now: Date(timeIntervalSince1970: 1_781_937_000), claudeRoots: [claudeRoot.path], harnessRoots: [ompRoot.path])
         XCTAssertEqual(days.reduce(0) { $0 + $1.totalTokens }, 0)
     }
 }

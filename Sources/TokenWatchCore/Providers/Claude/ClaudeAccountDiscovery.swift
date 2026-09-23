@@ -56,6 +56,39 @@ enum ClaudeAccountDiscovery {
         return results.sorted()
     }
 
+    /// Every Claude Code `projects/` directory whose transcripts count toward usage history: the
+    /// two default config dirs, each entry of a comma-separated `CLAUDE_CONFIG_DIR`, and every
+    /// profile directory (`candidateDirectories`) that is a Claude config dir -- it has a
+    /// `projects/` folder and Claude's own `.claude.json` or `.credentials.json`. A profile keeps
+    /// its transcripts inside itself, so without this a second account's usage never counts.
+    /// Resolved through symlinks and deduplicated, since a profile that shares history links its
+    /// `projects/` to `~/.claude/projects` and must not be counted twice.
+    static func historyRoots(homeDirectory: String = NSHomeDirectory(), environment: [String: String] = ProcessInfo.processInfo.environment) -> [String] {
+        let fileManager = FileManager.default
+        var configDirs = [homeDirectory + "/.claude", homeDirectory + "/.config/claude"]
+        configDirs += (environment["CLAUDE_CONFIG_DIR"] ?? "").split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .map { ($0 as NSString).expandingTildeInPath }
+        configDirs += candidateDirectories(homeDirectory: homeDirectory).filter { dir in
+            fileManager.fileExists(atPath: dir + "/.claude.json") || fileManager.fileExists(atPath: dir + "/.credentials.json")
+        }
+        return uniqueExistingDirectories(configDirs.map { $0 + "/projects" })
+    }
+
+    /// `paths` that exist as directories, resolved through symlinks, first occurrence kept.
+    static func uniqueExistingDirectories(_ paths: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for path in paths {
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue else { continue }
+            let resolved = (path as NSString).resolvingSymlinksInPath
+            if seen.insert(resolved).inserted { result.append(resolved) }
+        }
+        return result
+    }
+
     private static func subdirectories(of directory: String) -> [String] {
         let fileManager = FileManager.default
         guard let entries = try? fileManager.contentsOfDirectory(atPath: directory) else { return [] }

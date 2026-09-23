@@ -2,17 +2,15 @@ import Foundation
 import Combine
 import TokenWatchCore
 
-/// Shared cache of every provider's local spend history (`ClaudeUsageHistoryScanner`,
-/// `CodexUsageHistoryScanner`) -- several views want the same 30-day window at once (the
-/// cross-provider Total Spend card, each provider card's inline Today/Yesterday row, the 7-day
-/// chart), and the scans are real disk I/O proportional to local session history. One shared
-/// scan instead of one per observer.
+/// Shared cache of all local spend history -- Claude (`ClaudeUsageHistoryScanner`), Codex
+/// (`CodexUsageHistoryScanner`), and whatever else the omp/pi harnesses called
+/// (`HarnessUsageHistoryScanner`) -- keyed by `SpendSource`. Several views want the same 30-day
+/// window at once (the Total Spend card with its 7-day chart, each provider card's inline
+/// Today/Yesterday row), and the scans are real disk I/O proportional to local session history.
+/// One shared scan instead of one per observer.
 @MainActor
 public final class SpendHistoryStore: ObservableObject {
-    /// Providers with a local usage-history scanner, in display order.
-    public static let providers: [ProviderID] = [.claude, .codex]
-
-    @Published public private(set) var daysByProvider: [ProviderID: [UsageDay]] = [:]
+    @Published public private(set) var daysBySource: [SpendSource: [UsageDay]] = [:]
     /// True only until the first scan completes; later rescans keep showing the previous data.
     @Published public private(set) var isLoading = true
     /// When the latest scan finished; changes on every rescan, so layouts can re-measure.
@@ -26,12 +24,17 @@ public final class SpendHistoryStore: ObservableObject {
 
     public init() {}
 
-    public func days(for provider: ProviderID) -> [UsageDay] {
-        daysByProvider[provider] ?? []
+    public func days(for source: SpendSource) -> [UsageDay] {
+        daysBySource[source] ?? []
     }
 
-    public static func hasHistory(_ provider: ProviderID) -> Bool {
-        providers.contains(provider)
+    public func days(for provider: ProviderID) -> [UsageDay] {
+        days(for: .provider(provider))
+    }
+
+    /// Every source with any local usage in the scanned window, `ProviderID` order then Other.
+    public var sources: [SpendSource] {
+        daysBySource.filter { $0.value.contains { $0.totalTokens > 0 } }.keys.sorted()
     }
 
     /// Scans unless a scan is already running or finished within `staleAfter`. Called when the
@@ -50,11 +53,15 @@ public final class SpendHistoryStore: ObservableObject {
                 await Task.detached(priority: .userInitiated) {
                     async let claude = ClaudeUsageHistoryScanner.dailyUsage(days: 30)
                     async let codex = CodexUsageHistoryScanner.dailyUsage(days: 30)
-                    return [ProviderID.claude: await claude, .codex: await codex]
+                    async let harness = HarnessUsageHistoryScanner.dailyUsage(days: 30)
+                    var result = await harness
+                    result[.provider(.claude)] = await claude
+                    result[.provider(.codex)] = await codex
+                    return result
                 }.value
             }
             guard let self else { return }
-            daysByProvider = result
+            daysBySource = result
             isLoading = false
             lastLoadedAt = Date()
             loadTask = nil

@@ -105,7 +105,8 @@ what it's showing. Discovery is file-based only: it finds a profile whose login 
 profile-specific service name. A found-but-lapsed credential shows why (self-heals on next CLI
 run, or needs a real re-login) rather than a raw HTTP error. This is read-only visibility, not
 account switching -- TokenWatch doesn't change which login your `claude`/`codex` CLI actually
-uses.
+uses. Spend history on the Usage tab reads every account's local logs the same way, whether or
+not it has a card here.
 
 ## Usage tab
 
@@ -114,8 +115,11 @@ provider with something to actually show here gets a card; most providers have n
 `MetricLine.category`).
 
 A cross-provider **Total Spend** card sits at the top when Settings' **Show Total Spend** is on
-and at least one enabled provider has local activity in the last 7 days (Claude and Codex, via a
-30-day scan shared with the per-provider spend rows below it -- one scan, cached). The title is a
+and anything on this Mac has local activity in the last 7 days, via a 30-day scan shared with the
+per-provider spend rows below it (one scan, cached). It totals every source with local history --
+Claude and Codex from their CLIs and harnesses, any other provider a harness called, and
+**Other** for providers TokenWatch has no card for -- whether or not that provider's card is
+enabled: it's what was spent locally, not just what's tracked. The title is a
 pull-down for **Cost** / **Cost per MTok** / **Tokens**; a **Today** / **Yesterday** / **30 Days**
 segmented toggle sits alongside it. The donut's segments use each provider's real brand color
 (Anthropic's terracotta, OpenAI's teal-green, and so on); hover the center for the exact figure
@@ -126,7 +130,7 @@ Cost and Tokens, one combined bar per day for Cost per MTok (rates don't stack) 
 the selected period covers at full strength and the rest dimmed. The share icon copies a PNG of
 the whole card to your clipboard, and the ⓘ names which providers feed the total.
 
-Any provider with its own local spend history (Claude and Codex) shows a **Today/Yesterday** line
+Any provider with local spend history in the last two days shows a **Today/Yesterday** line
 directly on its own card, chevron-collapsible to that provider's own per-model breakdown -- the
 same figures as the Total Spend card's hover popover, without needing to open it.
 
@@ -139,35 +143,45 @@ minutes only for a log that doesn't record it. Codex's detail does not, since Op
 retention is server-side, org-dependent, and machine-local, so it only reports whether the last
 turn itself was a cache hit.
 
-Claude's and Codex's local activity also picks up sessions run through a coding-agent harness
-that talks to the model APIs directly rather than shelling out to the `claude` or `codex` CLI
-(currently: `omp`, the CLI behind [Superset](https://superset.sh)) -- without this, usage
-through such a harness would be completely invisible to the session lists and spend even though
-it's real usage. One omp session can switch providers turn to turn; its Anthropic turns count as
-Claude and its `openai-codex` turns (a ChatGPT sign-in, the Codex quota) as Codex. This depends
-on that harness's own undocumented local session-log format, not a stable public contract the
-way Claude Code's and Codex's are, so it's read defensively and fails soft if the format ever
-changes.
+Local activity also picks up sessions run through a coding-agent harness that talks to the model
+APIs directly rather than shelling out to the `claude` or `codex` CLI -- `omp` (the CLI behind
+[Superset](https://superset.sh), `~/.omp/agent/sessions`) and `pi`, which omp is a fork of
+(`~/.pi/agent/sessions`, or `PI_CODING_AGENT_SESSION_DIR` / `PI_CODING_AGENT_DIR/sessions`).
+Without this, usage through such a harness would be completely invisible to the session lists
+and spend even though it's real usage. One harness session can switch providers turn to turn, and
+each turn counts toward the provider that served it: Anthropic turns as Claude, `openai-codex`
+turns (a ChatGPT sign-in, the Codex quota) as Codex, and OpenRouter, OpenAI, Gemini, xAI, z.ai,
+Kimi, Copilot, Cursor, OpenCode and Amp turns as their own providers' spend; anything else is
+Other. This depends on the harnesses' own undocumented local session-log format, not a stable
+public contract the way Claude Code's and Codex's are, so it's read defensively and fails soft if
+the format ever changes.
 
 Every spend figure -- the donut, the 7-day bars, each provider's spend row -- is built by summing
 *every* turn's local session tokens (not just the newest, the way cache-temperature works) and
 pricing them at API list rates -- no Admin API key required. A day's token total is input + cache
 reads + cache writes + output.
 
-- **Claude** (Claude Code and `omp` logs): each Claude Code API response counts once,
+- **Claude** (Claude Code logs in every Claude config dir on this Mac -- `~/.claude`,
+  `~/.config/claude`, each `CLAUDE_CONFIG_DIR` entry, and any other account profile holding
+  Claude's own `.claude.json` or `.credentials.json`, a folder shared through a symlink counted
+  once -- plus harness Anthropic turns): each Claude Code API response counts once,
   deduplicated the way OpenUsage and ccusage do it -- Claude Code writes one line per content
   block of a response, each repeating the full usage, and subagent (sidechain) and
   resumed-session logs replay earlier messages. A cost the log itself records (Claude Code's
-  `costUSD`, `omp`'s per-turn cost) is used as-is; otherwise tokens are priced at list rates, with
-  1-hour cache writes at 2x input and 5-minute ones at 1.25x. `<synthetic>` (locally generated)
-  messages cost nothing.
-- **Codex** (`$CODEX_HOME/sessions` and `archived_sessions`, plus `omp`'s `openai-codex` turns
-  at `omp`'s own recorded cost), ported from OpenUsage's Codex
-  scanner: a turn is a `token_count` event's `last_token_usage` (or its delta from the previous
-  running total); a re-emitted, unchanged running total isn't a new turn; a subagent or forked
-  session's replay of its parent's history isn't counted; and an identical event in two files
-  counts once. Cached input bills at the cache-read rate, a request above 272K input tokens at the
+  `costUSD`, a harness's per-turn cost) is used as-is; otherwise tokens are priced at list rates,
+  with 1-hour cache writes at 2x input and 5-minute ones at 1.25x. A dotted version
+  (`claude-haiku-4.5`, as OpenRouter and harnesses spell it) prices as Anthropic's dashed id,
+  and `<synthetic>` (locally generated) messages cost nothing.
+- **Codex** (`sessions` and `archived_sessions` in `$CODEX_HOME` and every other `~/.codex*`
+  home, plus harness `openai-codex` turns at the harness's own recorded cost), ported from
+  OpenUsage's Codex scanner: a turn is a `token_count` event's `last_token_usage` (or its delta
+  from the previous running total); a re-emitted, unchanged running total isn't a new turn; a
+  subagent or forked session's replay of its parent's history isn't counted; and an identical
+  event in two files counts once. Cached input bills at the cache-read rate and cache writes
+  (also counted inside Codex's input) at 1.25x input, a request above 272K input tokens at the
   model's long-context rate, and a priority ("fast") tier session at 2x (2.5x for gpt-5.5).
+- **Every other harness provider** at the harness's own recorded cost, or, when a turn has none,
+  at the list rate of whichever known model family (Claude, OpenAI, Grok, Gemini) matches its id.
 
 All of it shares one 30-day scan with the Total Spend card and each provider's inline spend row,
 rescanned when the Usage tab is opened more than a minute after the last scan -- instant after

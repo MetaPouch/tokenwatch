@@ -199,8 +199,12 @@ final class OmpSessionScannerTests: XCTestCase {
         XCTAssertTrue(OmpSessionScanner.allRecentActivity(roots: ["/nonexistent/path/xyz"]).isEmpty)
     }
 
-    func testProjectRootsDefaultsToOmpAgentSessions() {
-        let roots = OmpSessionScanner.projectRoots(homeDirectory: "/home/alice")
-        XCTAssertEqual(roots, ["/home/alice/.omp/agent/sessions"])
+    /// omp's and pi's session directories; pi's follows `PI_CODING_AGENT_SESSION_DIR`, then
+    /// `PI_CODING_AGENT_DIR/sessions`, the same way pi itself resolves it.
+    func testHarnessRootsCoverOmpAndPiWithPiOverrides() {
+        let home = "/home/alice"
+        XCTAssertEqual(HarnessUsageLog.roots(homeDirectory: home, environment: [:]), ["/home/alice/.omp/agent/sessions", "/home/alice/.pi/agent/sessions"])
+        XCTAssertEqual(HarnessUsageLog.roots(homeDirectory: home, environment: ["PI_CODING_AGENT_DIR": "/cfg/pi"]).last, "/cfg/pi/sessions")
+        XCTAssertEqual(HarnessUsageLog.roots(homeDirectory: home, environment: ["PI_CODING_AGENT_DIR": "/cfg/pi", "PI_CODING_AGENT_SESSION_DIR": "/s"]).last, "/s")
     }
 }

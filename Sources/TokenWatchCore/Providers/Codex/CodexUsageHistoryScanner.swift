@@ -1,9 +1,10 @@
 import Foundation
 
-/// Daily token usage and estimated spend for Codex, from the Codex CLI's local rollout logs
-/// (`$CODEX_HOME/sessions/**/*.jsonl` plus `archived_sessions/`) and the Codex turns in omp's logs
-/// (`OmpUsageLog`, provider `openai-codex` -- omp calls the API directly, so those never appear in
-/// a rollout), priced at API list rates. The counterpart of `ClaudeUsageHistoryScanner`; both feed
+/// Daily token usage and estimated spend for Codex, from the Codex CLI's local rollout logs in
+/// every Codex home (`$CODEX_HOME` and other `~/.codex*` accounts: `sessions/**/*.jsonl` plus
+/// `archived_sessions/`) and the Codex turns in the omp/pi harness logs (`HarnessUsageLog`,
+/// provider `openai-codex` -- a harness calls the API directly, so those never appear in a
+/// rollout), priced at API list rates. The counterpart of `ClaudeUsageHistoryScanner`; both feed
 /// `UsageDay`s into the same Usage-tab views.
 ///
 /// Ported from OpenUsage's `CodexLogUsageScanner`/`CodexLogFileParser` (itself ccusage's Codex
@@ -18,13 +19,12 @@ import Foundation
 ///   ("fast") service tier from the session's own `thread_settings_applied` events.
 /// - An identical event in two files (a copied or archived rollout) counts once.
 public enum CodexUsageHistoryScanner {
-    /// `sessions/` and `archived_sessions/` under `$CODEX_HOME` (default `~/.codex`).
+    /// Every Codex home's `sessions/` and `archived_sessions/` (see `CodexAccountDiscovery.historyRoots`).
     public static func roots(homeDirectory: String = NSHomeDirectory(), environment: [String: String] = ProcessInfo.processInfo.environment) -> [String] {
-        let home = environment["CODEX_HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? homeDirectory + "/.codex"
-        return [home + "/sessions", home + "/archived_sessions"]
+        CodexAccountDiscovery.historyRoots(homeDirectory: homeDirectory, environment: environment)
     }
 
-    public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, roots: [String]? = nil, ompRoots: [String]? = nil) -> [UsageDay] {
+    public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, roots: [String]? = nil, harnessRoots: [String]? = nil) -> [UsageDay] {
         var accumulator = UsageDayAccumulator(days: days, now: now, calendar: calendar)
         var seen = Set<Event>()
         for path in rolloutPaths(roots: roots ?? Self.roots(), modifiedSince: accumulator.cutoff) {
@@ -34,24 +34,24 @@ public enum CodexUsageHistoryScanner {
                 guard seen.insert(event).inserted else { continue }
                 let (cost, approximate) = ModelPricing.codexCostUSD(
                     model: event.pricingModel ?? event.model,
-                    inputTokens: event.input, cachedInputTokens: event.cached,
+                    inputTokens: event.input, cachedInputTokens: event.cached, cacheWriteInputTokens: event.cacheWrite,
                     outputTokens: event.output, priorityTier: event.isPriority
                 )
+                // Cached tokens and cache writes are both inside `input` (OpenAI's shape).
                 accumulator.add(
                     timestamp: event.timestamp, model: event.model,
-                    input: event.input - event.cached, cacheRead: event.cached, cacheWrite: 0,
+                    input: event.input - event.cached - event.cacheWrite, cacheRead: event.cached, cacheWrite: event.cacheWrite,
                     output: event.output, costUSD: cost, approximate: approximate
                 )
             }
         }
 
-        // omp's buckets are already disjoint; its own recorded cost wins over re-pricing.
-        let ompProvider = OmpUsageLog.ompProvider(for: .codex)
-        for turn in OmpUsageLog.turns(roots: ompRoots ?? OmpUsageLog.roots(), modifiedSince: accumulator.cutoff)
-            where turn.provider == ompProvider && turn.timestamp >= accumulator.cutoff {
+        // Harness buckets are already disjoint; the harness's recorded cost wins over re-pricing.
+        for turn in HarnessUsageLog.turns(roots: harnessRoots ?? HarnessUsageLog.roots(), modifiedSince: accumulator.cutoff)
+            where turn.source == .provider(.codex) && turn.timestamp >= accumulator.cutoff {
             let repriced = ModelPricing.codexCostUSD(
                 model: turn.model, inputTokens: turn.input + turn.cacheRead + turn.cacheWrite,
-                cachedInputTokens: turn.cacheRead, outputTokens: turn.output
+                cachedInputTokens: turn.cacheRead, cacheWriteInputTokens: turn.cacheWrite, outputTokens: turn.output
             )
             accumulator.add(
                 timestamp: turn.timestamp, model: turn.model,
@@ -62,8 +62,8 @@ public enum CodexUsageHistoryScanner {
         return accumulator.build()
     }
 
-    /// One turn's usage. `input` includes `cached` (OpenAI's usage shape); `output` includes
-    /// reasoning tokens.
+    /// One turn's usage. `input` includes `cached` and `cacheWrite` (OpenAI's usage shape);
+    /// `output` includes reasoning tokens.
     struct Event: Hashable {
         let timestamp: Date
         let model: String
@@ -71,6 +71,7 @@ public enum CodexUsageHistoryScanner {
         let pricingModel: String?
         let input: Int
         let cached: Int
+        let cacheWrite: Int
         let output: Int
         let isPriority: Bool
     }
@@ -206,7 +207,8 @@ public enum CodexUsageHistoryScanner {
                 return Event(
                     timestamp: timestamp, model: model,
                     pricingModel: CodexUsageHistoryScanner.pricingModel(for: model, at: timestampRaw),
-                    input: usage.input, cached: min(usage.cached, usage.input), output: usage.output,
+                    input: usage.input, cached: min(usage.cached, usage.input),
+                    cacheWrite: min(usage.cacheWrite, max(0, usage.input - min(usage.cached, usage.input))), output: usage.output,
                     isPriority: priorityTier
                 )
             default:
@@ -238,16 +240,17 @@ public enum CodexUsageHistoryScanner {
 
     /// A `token_count` usage object, tolerating older field spellings.
     struct Usage: Equatable {
-        var input: Int, cached: Int, output: Int, reasoning: Int, total: Int
+        var input: Int, cached: Int, cacheWrite: Int, output: Int, reasoning: Int, total: Int
 
-        init(input: Int, cached: Int, output: Int, reasoning: Int, total: Int) {
-            (self.input, self.cached, self.output, self.reasoning, self.total) = (input, cached, output, reasoning, total)
+        init(input: Int, cached: Int, cacheWrite: Int, output: Int, reasoning: Int, total: Int) {
+            (self.input, self.cached, self.cacheWrite, self.output, self.reasoning, self.total) = (input, cached, cacheWrite, output, reasoning, total)
         }
 
         init(json: [String: Any]) {
             func int(_ keys: String...) -> Int? { keys.lazy.compactMap { (json[$0] as? NSNumber)?.intValue }.first }
             input = int("input_tokens", "prompt_tokens", "input") ?? 0
             cached = int("cached_input_tokens", "cache_read_input_tokens", "cached_tokens") ?? 0
+            cacheWrite = int("cache_write_input_tokens") ?? 0
             output = int("output_tokens", "completion_tokens", "output") ?? 0
             reasoning = int("reasoning_output_tokens", "reasoning_tokens") ?? 0
             total = int("total_tokens") ?? 0
@@ -256,6 +259,7 @@ public enum CodexUsageHistoryScanner {
         func subtracting(_ previous: Usage?) -> Usage {
             Usage(
                 input: max(0, input - (previous?.input ?? 0)), cached: max(0, cached - (previous?.cached ?? 0)),
+                cacheWrite: max(0, cacheWrite - (previous?.cacheWrite ?? 0)),
                 output: max(0, output - (previous?.output ?? 0)), reasoning: max(0, reasoning - (previous?.reasoning ?? 0)),
                 total: max(0, total - (previous?.total ?? 0))
             )

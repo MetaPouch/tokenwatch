@@ -1,17 +1,18 @@
 import Foundation
 
-/// Scans every local Claude transcript -- both the real `claude` CLI's own session logs
-/// (`ClaudeSessionScanner`) and the Anthropic turns in omp's logs (`OmpUsageLog`) -- for a bounded
-/// trailing window, summing *every* turn's token usage per calendar day and pricing it at API
-/// list rates. Unlike the session scanners (which only care about the single newest turn per
-/// file, for cache-temperature), this reads every qualifying line of every file modified within
-/// the window, so it's real disk I/O proportional to the window and the machine's session
+/// Scans every local Claude transcript -- Claude Code's own session logs in every Claude config
+/// dir (`ClaudeAccountDiscovery.historyRoots`: the defaults, `CLAUDE_CONFIG_DIR`, and other
+/// account profiles) and the Anthropic turns in the omp/pi harness logs (`HarnessUsageLog`) -- for
+/// a bounded trailing window, summing *every* turn's token usage per calendar day and pricing it
+/// at API list rates. Unlike the session scanners (which only care about the single newest turn
+/// per file, for cache-temperature), this reads every qualifying line of every file modified
+/// within the window, so it's real disk I/O proportional to the window and the machine's session
 /// history -- callers should run it off the main actor. Every read is defensive: a
 /// missing/unreadable file, or one that doesn't parse, is skipped, never thrown.
 public enum ClaudeUsageHistoryScanner {
-    public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, claudeRoots: [String]? = nil, ompRoots: [String]? = nil) -> [UsageDay] {
-        let claudeRoots = claudeRoots ?? ClaudeSessionScanner.projectRoots()
-        let ompRoots = ompRoots ?? OmpUsageLog.roots()
+    public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, claudeRoots: [String]? = nil, harnessRoots: [String]? = nil) -> [UsageDay] {
+        let claudeRoots = claudeRoots ?? ClaudeAccountDiscovery.historyRoots()
+        let harnessRoots = harnessRoots ?? HarnessUsageLog.roots()
         var accumulator = UsageDayAccumulator(days: days, now: now, calendar: calendar)
         let cutoff = accumulator.cutoff
 
@@ -28,8 +29,7 @@ public enum ClaudeUsageHistoryScanner {
         for turn in dedup(claudeCodeCache.items(for: codeFiles, parse: claudeCodeTurns)) where turn.timestamp >= cutoff {
             record(turn)
         }
-        let ompProvider = OmpUsageLog.ompProvider(for: .claude)
-        for omp in OmpUsageLog.turns(roots: ompRoots, modifiedSince: cutoff) where omp.provider == ompProvider && omp.timestamp >= cutoff {
+        for omp in HarnessUsageLog.turns(roots: harnessRoots, modifiedSince: cutoff) where omp.source == .provider(.claude) && omp.timestamp >= cutoff {
             record(Turn(
                 timestamp: omp.timestamp, model: omp.model,
                 input: omp.input, cacheRead: omp.cacheRead, cacheWrite: omp.cacheWrite, output: omp.output,

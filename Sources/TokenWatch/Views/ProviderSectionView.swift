@@ -21,9 +21,8 @@ struct ProviderSectionView: View {
     /// Whether to show the drag handle and accept reordering -- Limits owns provider order;
     /// Usage renders the same card type read-only, so its handle would do nothing if shown.
     var isDraggable: Bool = true
-    /// Non-nil only for providers with a local spend-history scanner (`SpendHistoryStore.providers`),
-    /// and only rendered when `category == .usage`. The inline Today/Yesterday spend row is simply
-    /// absent for every other provider or on the Limits card.
+    /// The shared local spend history, rendered only when `category == .usage`: a Today/Yesterday
+    /// row for this provider, shown only if it has local spend in either day.
     var spendHistoryStore: SpendHistoryStore?
     var onRefresh: () -> Void
     var onHideProvider: () -> Void
