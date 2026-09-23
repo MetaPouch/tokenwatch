@@ -417,7 +417,7 @@ struct DashboardView: View {
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
     }
 
-    /// Spend, cache activity, and 7-day cost history -- "what have I actually spent or done,"
+    /// Spend (with its 7-day history), cache activity, and per-provider spend -- "what have I actually spent or done,"
     /// never a quota bar (those live on Limits; see `MetricLine.category`). Only a provider with
     /// something to show here gets a card -- most providers have no usage-category data today.
     private var usageList: some View {
@@ -440,7 +440,6 @@ struct DashboardView: View {
                         onCustomizeProvider: { customizeDetailProvider = provider; currentScreen = .customize }
                     )
                 }
-                UsageHistoryView(store: spendHistoryStore, providers: SpendHistoryStore.providers.filter { enablementStore.isEnabled($0) })
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)

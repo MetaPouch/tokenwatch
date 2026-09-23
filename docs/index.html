@@ -221,11 +221,10 @@
   .sess.cold .ic { color: var(--mac-blue); }
   .sess b { font-weight: 600; }
   .sess span.d { color: #a0a0a6; font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; }
-  .hist-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-  .hist-head b { font-size: 12px; }
-  .hist-head .seg button { font-size: 11px; padding: 2px 9px; }
+  .hist-head { display: flex; justify-content: space-between; align-items: center; margin: 12px 0 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); }
+  .hist-head b { font-size: 11px; color: #a0a0a6; font-weight: 600; }
   .hist { display: flex; align-items: flex-end; gap: 6px; height: 74px; }
-  .hist div { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+  .hist div { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; transition: opacity 0.2s; }
   .hist .stack { display: flex; flex-direction: column; width: 100%; border-radius: 3px 3px 1px 1px; overflow: hidden; }
   .hist i { display: block; width: 100%; background: var(--claude); opacity: 0.9; transition: height 0.25s; }
   .hist i.codex { background: var(--openai); }
@@ -544,9 +543,11 @@
                 <div class="legend">
                   <div><span class="sw" style="background:#d97757"></span>Claude<span class="v" id="ts-claude">$133.12</span></div>
                   <div><span class="sw" style="background:#10a37f"></span>Codex<span class="v" id="ts-codex">$18.40</span></div>
-                  <div style="color:#8c8c92;font-size:10.5px">Estimated at API list rates</div>
                 </div>
               </div>
+              <div class="hist-head"><b>Last 7 days</b></div>
+              <div class="hist" id="hist"></div>
+              <div class="est">Estimate at API list rates. Subscriptions aren't billed per token.</div>
             </div>
             <div class="pcard">
               <div class="pcard-head"><img src="icons/claude.svg" alt=""><b>Claude</b><span class="plan">max</span></div>
@@ -569,13 +570,6 @@
               </div>
               <div class="sess warm"><svg class="ic"><use href="#i-flame"/></svg><b>infra-scripts</b><span class="d">98% hit last turn</span></div>
               <div class="sess cold"><svg class="ic"><use href="#i-snow"/></svg><b>docs-site</b><span class="d">no hit last turn &middot; re-reads ~86.2K tok if cold</span></div>
-            </div>
-            <div class="pcard">
-              <div class="hist-head"><b>Last 7 days</b>
-                <div class="seg" id="histmode"><button aria-selected="true" data-mode="cost">Cost</button><button aria-selected="false" data-mode="tokens">Tokens</button></div>
-              </div>
-              <div class="hist" id="hist"></div>
-              <div class="est">Estimate at API list rates. Subscriptions aren't billed per token.</div>
             </div>
           </div>
         </div>
@@ -1025,30 +1019,24 @@
     const btn = e.target.closest("button"); if (!btn) return;
     select(range, btn);
     drawDonut(ranges[+btn.dataset.range]);
+    draw(+btn.dataset.range);
   });
 
   // Collapsible per-model spend
   pop.querySelectorAll(".spend-line").forEach(l => l.addEventListener("click", () => l.classList.toggle("open")));
 
-  // 7-day history chart, stacked by provider like the app's
+  // 7-day history chart inside the Total Spend card, stacked by provider like the app's; the days
+  // the selected period covers stay bright (Today = last bar, Yesterday = the one before, 30 Days = all)
   const days = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"];
-  const data = {
-    cost: { claude: [182, 241, 64, 38, 297, 254, 133], codex: [22, 35, 0, 4, 41, 31, 18], fmt: v => `$${v}` },
-    tokens: { claude: [412, 530, 151, 88, 640, 575, 301], codex: [9, 14, 0, 2, 17, 12, 7], fmt: v => `${v}M tok` },
-  };
+  const claudeCost = [182, 241, 64, 38, 297, 254, 133], codexCost = [22, 35, 0, 4, 41, 31, 18];
   const hist = document.getElementById("hist");
-  const draw = mode => {
-    const { claude, codex, fmt } = data[mode];
-    const max = Math.max(...claude.map((c, i) => c + codex[i]));
+  const draw = rangeIndex => {
+    const max = Math.max(...claudeCost.map((c, i) => c + codexCost[i]));
     const h = v => Math.round((v / max) * 56);
-    hist.innerHTML = claude.map((c, i) => `<div title="${days[i]}: Claude ${fmt(c)}, Codex ${fmt(codex[i])}"><span class="stack"><i class="codex" style="height:${h(codex[i])}px"></i><i style="height:${h(c)}px"></i></span><small>${days[i]}</small></div>`).join("");
+    const bright = i => rangeIndex === 2 || i === days.length - 1 - rangeIndex;
+    hist.innerHTML = claudeCost.map((c, i) => `<div title="${days[i]}: Claude $${c}, Codex $${codexCost[i]}" style="opacity:${bright(i) ? 1 : 0.35}"><span class="stack"><i class="codex" style="height:${h(codexCost[i])}px"></i><i style="height:${h(c)}px"></i></span><small>${days[i]}</small></div>`).join("");
   };
-  draw("cost");
-  const histmode = document.getElementById("histmode");
-  histmode.addEventListener("click", e => {
-    const btn = e.target.closest("button"); if (!btn) return;
-    select(histmode, btn); draw(btn.dataset.mode);
-  });
+  draw(0);
 
   // Footer countdown, like the real one
   const cd = document.getElementById("countdown"); let n = 42;

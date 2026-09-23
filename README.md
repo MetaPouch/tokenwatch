@@ -114,14 +114,17 @@ provider with something to actually show here gets a card; most providers have n
 `MetricLine.category`).
 
 A cross-provider **Total Spend** card sits at the top when Settings' **Show Total Spend** is on
-and at least one enabled provider has local spend data (Claude and Codex, via a 30-day scan shared
-with the per-provider spend row below it and the cost history chart at the bottom -- one scan,
-cached, not three). The title is a pull-down for **Cost** / **Cost per MTok** / **Tokens**; a
-**Today** / **Yesterday** / **30 Days** segmented toggle sits alongside it. The donut's segments
-use each provider's real brand color (Anthropic's terracotta, OpenAI's teal-green, and so on);
-hover the center for the exact figure instead of the rounded one; hover a provider's legend row
-for a ranked per-model spend breakdown (name, cost, share, tokens); the share icon copies a PNG
-of the card to your clipboard, and the ⓘ names which providers feed the total.
+and at least one enabled provider has local activity in the last 7 days (Claude and Codex, via a
+30-day scan shared with the per-provider spend rows below it -- one scan, cached). The title is a
+pull-down for **Cost** / **Cost per MTok** / **Tokens**; a **Today** / **Yesterday** / **30 Days**
+segmented toggle sits alongside it. The donut's segments use each provider's real brand color
+(Anthropic's terracotta, OpenAI's teal-green, and so on); hover the center for the exact figure
+instead of the rounded one; hover a provider's legend row for a ranked per-model spend breakdown
+(name, cost, share, tokens). A period with no usage says so instead of drawing an empty donut.
+Under it, in the same card, the last 7 days as bars in the same mode -- stacked by provider for
+Cost and Tokens, one combined bar per day for Cost per MTok (rates don't stack) -- with the days
+the selected period covers at full strength and the rest dimmed. The share icon copies a PNG of
+the whole card to your clipboard, and the ⓘ names which providers feed the total.
 
 Any provider with its own local spend history (Claude and Codex) shows a **Today/Yesterday** line
 directly on its own card, chevron-collapsible to that provider's own per-model breakdown -- the
@@ -146,10 +149,10 @@ on that harness's own undocumented local session-log format, not a stable public
 way Claude Code's and Codex's are, so it's read defensively and fails soft if the format ever
 changes.
 
-A daily Cost/Tokens bar chart for the last 7 days sits at the bottom, one bar per day stacked by
-provider in brand colors, built by summing *every* turn's local session tokens (not just the
-newest, the way cache-temperature works) and pricing them at API list rates -- no Admin API key
-required. A day's token total is input + cache reads + cache writes + output.
+Every spend figure -- the donut, the 7-day bars, each provider's spend row -- is built by summing
+*every* turn's local session tokens (not just the newest, the way cache-temperature works) and
+pricing them at API list rates -- no Admin API key required. A day's token total is input + cache
+reads + cache writes + output.
 
 - **Claude** (Claude Code and `omp` logs): each Claude Code API response counts once,
   deduplicated the way OpenUsage and ccusage do it -- Claude Code writes one line per content

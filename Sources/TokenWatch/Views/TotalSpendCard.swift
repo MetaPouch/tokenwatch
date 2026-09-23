@@ -2,12 +2,12 @@ import SwiftUI
 import AppKit
 import TokenWatchCore
 
-/// Cross-provider spend summary: a donut segmented by provider, a Cost / Cost per MTok / Tokens
-/// mode picker, a Today/Yesterday/30 Days toggle, and a centered total. Sources spend from every
-/// enabled provider with a local usage-history scanner (`SpendHistoryStore.providers`: Claude
-/// and Codex). Renders nothing (not an empty card) when no enabled provider has data for the
-/// selected period/mode, matching the rest of the dashboard's "never show a misleading zero"
-/// stance.
+/// Cross-provider spend: a donut segmented by provider for the selected period (Today /
+/// Yesterday / 30 Days), a Cost / Cost per MTok / Tokens mode picker, and below it the last 7 days
+/// as a stacked bar chart (`SpendHistoryChart`) in the same mode, the selected period's days
+/// highlighted. Sources spend from every enabled provider with a local usage-history scanner
+/// (`SpendHistoryStore.providers`: Claude and Codex). Shown whenever any of them has history in
+/// the window; a period with nothing in it says so instead of drawing an empty donut.
 struct TotalSpendCard: View {
     @ObservedObject var dataStore: WidgetDataStore
     @ObservedObject var enablementStore: ProviderEnablementStore
@@ -25,7 +25,7 @@ struct TotalSpendCard: View {
 
     var body: some View {
         Group {
-            if displayStore.showTotalSpend, !isLoading, let entries = providerValues, !entries.isEmpty {
+            if displayStore.showTotalSpend, !isLoading, hasHistory, let entries = providerValues {
                 card(entries: entries)
             } else {
                 // A view that's conditionally entirely empty on its first render doesn't
@@ -35,6 +35,15 @@ struct TotalSpendCard: View {
             }
         }
         .task { spendHistoryStore.loadIfNeeded() }
+    }
+
+    private var historyProviders: [ProviderID] {
+        SpendHistoryStore.providers.filter { enablementStore.isEnabled($0) }
+    }
+
+    /// Any enabled provider has local activity in the last 7 days (what the chart covers).
+    private var hasHistory: Bool {
+        historyProviders.contains { spendHistoryStore.days(for: $0).suffix(7).contains { $0.totalTokens > 0 } }
     }
 
     /// One entry per provider with a nonzero value for the current mode/period, largest first.
@@ -67,7 +76,7 @@ struct TotalSpendCard: View {
 
     private func card(entries: [(provider: ProviderID, value: Double)]) -> some View {
         let total = entries.reduce(0) { $0 + $1.value }
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Menu {
                     ForEach(SpendMetricMode.allCases) { candidate in
@@ -84,7 +93,7 @@ struct TotalSpendCard: View {
                 Image(systemName: "info.circle")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
-                    .help("Includes: \(entries.map { $0.provider.displayName }.joined(separator: ", "))")
+                    .help("Includes: \(historyProviders.map(\.displayName).joined(separator: ", ")). Estimated at API list rates, refreshed against live pricing when reachable (static fallback updated \(ModelPricing.pricingTableUpdatedOn)) -- subscription usage isn't billed per token. ~ marks a day with a model priced approximately.")
                 Spacer()
                 Button(action: { shareToClipboard(entries: entries, total: total) }) {
                     Image(systemName: "square.and.arrow.up")
@@ -99,14 +108,27 @@ struct TotalSpendCard: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            HStack(spacing: 16) {
-                donutWithCenter(entries: entries, total: total, center: centerValue(entries: entries))
-                    .frame(width: 72, height: 72)
-                legend(entries: entries, total: total)
+            if entries.isEmpty {
+                Text("No local usage \(period == .thirtyDays ? "in the last 30 days" : period.rawValue.lowercased())")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 40)
+            } else {
+                HStack(spacing: 16) {
+                    donutWithCenter(entries: entries, total: total, center: centerValue(entries: entries))
+                        .frame(width: 72, height: 72)
+                    legend(entries: entries, total: total)
+                }
             }
+            Divider()
+            chart
         }
         .padding(12)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var chart: some View {
+        SpendHistoryChart(store: spendHistoryStore, providers: historyProviders, mode: mode, period: period)
     }
 
     private func donutWithCenter(entries: [(provider: ProviderID, value: Double)], total: Double, center: Double) -> some View {
@@ -212,9 +234,13 @@ struct TotalSpendCard: View {
     private func shareToClipboard(entries: [(provider: ProviderID, value: Double)], total: Double) {
         let content = VStack(spacing: 10) {
             Text("TokenWatch — Total Spend").font(.headline)
-            donut(entries: entries, total: total).frame(width: 96, height: 96)
-            legend(entries: entries, total: total)
+            if !entries.isEmpty {
+                donut(entries: entries, total: total).frame(width: 96, height: 96)
+                legend(entries: entries, total: total)
+            }
+            chart
         }
+        .frame(width: 290)
         .padding(20)
         .background(Color(nsColor: .windowBackgroundColor))
         let renderer = ImageRenderer(content: content)

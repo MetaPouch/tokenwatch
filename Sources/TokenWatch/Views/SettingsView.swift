@@ -24,7 +24,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 14) {
                 settingsSection("General") {
                     Toggle("Show Total Spend", isOn: $displayStore.showTotalSpend)
-                        .help("Whether the cross-provider Total Spend card shows at the top of the dashboard.")
+                        .help("Whether the Total Spend card, with its last-7-days chart, shows at the top of the Usage tab.")
                     Toggle("Launch at Login", isOn: Binding(
                         get: { launchAtLoginEnabled },
                         set: { newValue in
