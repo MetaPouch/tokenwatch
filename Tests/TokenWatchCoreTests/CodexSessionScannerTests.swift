@@ -66,6 +66,20 @@ final class CodexSessionScannerTests: XCTestCase {
         XCTAssertEqual(CodexSessionScanner.sessionLabel(forTranscriptPath: url.path), "billing-api")
     }
 
+    /// Codex CLI 0.155 embeds the full system prompt (`base_instructions`) in `session_meta`,
+    /// making the first line ~20 KB. This one is ~100 KB of multi-byte text, spanning both the
+    /// old 8 KB read limit and the scanner's 64 KB read-chunk boundary.
+    func testSessionLabelReadsCwdFromOversizedSessionMetaLine() {
+        let instructions = String(repeating: "Use the repo’s conventions — naïve café. ", count: 2_500)
+        let meta = #"{"timestamp":"2026-01-01T00:00:00.000Z","type":"session_meta","payload":{"id":"5973b6c0-94b8","cwd":"/Users/alice/projects/billing-api","base_instructions":{"text":"\#(instructions)"}}}"#
+        XCTAssertGreaterThan(meta.utf8.count, 64 * 1024)
+        let url = writeRollout("rollout-2026-01-01T00-00-00-5973b6c0-94b8-487b-a530-2aeb6098ae0e.jsonl", lines: [
+            meta,
+            tokenCountLine(timestamp: "2026-01-01T00:00:00.000Z", input: 10, cached: 0),
+        ])
+        XCTAssertEqual(CodexSessionScanner.sessionLabel(forTranscriptPath: url.path), "billing-api")
+    }
+
     func testSessionLabelFallsBackToUUIDFragmentWhenNoCwd() {
         let url = writeRollout("rollout-2026-01-01T00-00-00-5973b6c0-94b8-487b-a530-2aeb6098ae0e.jsonl", lines: [
             sessionMetaLine(),

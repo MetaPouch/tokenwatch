@@ -106,12 +106,19 @@ struct ProviderCardView: View {
                         .font(.caption)
                         .foregroundStyle(badgeAccentColor(icon: icon, tone: tone))
                 }
+                // One line per session row: a long project name shortens in the middle (keeping
+                // distinguishing prefixes/suffixes like worktree hashes) rather than wrapping,
+                // and the hit/expiry detail keeps priority since that's the part being read.
                 Text(text)
                     .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                 if let detail {
                     Text(detail)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .layoutPriority(1)
                 }
                 Spacer(minLength: 0)
             }

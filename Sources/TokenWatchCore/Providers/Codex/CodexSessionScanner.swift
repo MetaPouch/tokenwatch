@@ -85,17 +85,41 @@ enum CodexSessionScanner {
         let payload: Payload?
     }
 
+    /// Upper bound on how far `sessionMetaCwd` reads looking for the end of the first line.
+    /// Codex CLI 0.155 embeds the full `base_instructions` prompt in `session_meta`, putting that
+    /// line at ~18-23 KB in real rollouts -- a fixed 8 KB prefix truncated it on every session,
+    /// so every label fell back to the UUID fragment. 1 MiB leaves ample headroom without ever
+    /// reading a whole multi-megabyte transcript just to find a label.
+    static let sessionMetaMaxBytes = 1 << 20
+
     /// Reads only the first line of the file (the `session_meta` record is always first) rather
     /// than the whole file, since this is called once per candidate file during scanning.
-    private static func sessionMetaCwd(atPath path: String) -> String? {
-        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
-        defer { try? handle.close() }
-        guard let data = try? handle.read(upToCount: 8192), !data.isEmpty else { return nil }
-        guard let text = String(data: data, encoding: .utf8) else { return nil }
-        guard let firstLine = text.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: true).first else { return nil }
-        guard let lineData = firstLine.data(using: .utf8) else { return nil }
+    private static func sessionMetaCwd(atPath path: String, maxBytes: Int = sessionMetaMaxBytes) -> String? {
+        guard let lineData = firstLine(ofFileAtPath: path, maxBytes: maxBytes) else { return nil }
         guard let meta = try? JSONDecoder().decode(SessionMetaLine.self, from: lineData), meta.type == "session_meta" else { return nil }
         return meta.payload?.cwd
+    }
+
+    /// The file's first non-empty line as raw bytes, read in chunks until its newline; `nil` if
+    /// it doesn't end within `maxBytes`. Works on bytes rather than decoding a fixed-size prefix
+    /// as UTF-8, which fails outright whenever the cut lands mid-character.
+    private static func firstLine(ofFileAtPath path: String, maxBytes: Int) -> Data? {
+        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+        var line = Data()
+        while true {
+            guard let chunk = try? handle.read(upToCount: 64 * 1024), !chunk.isEmpty else {
+                return line.isEmpty ? nil : line // EOF: the file is a single unterminated line
+            }
+            var rest = chunk[...]
+            while let newline = rest.firstIndex(of: UInt8(ascii: "\n")) {
+                line.append(contentsOf: rest[rest.startIndex..<newline])
+                if !line.isEmpty { return line }
+                rest = rest[rest.index(after: newline)...]
+            }
+            line.append(contentsOf: rest)
+            if line.count > maxBytes { return nil }
+        }
     }
 
     /// Every `.jsonl` transcript under `roots` modified at or after `modifiedSince`, with its
