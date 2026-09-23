@@ -44,4 +44,16 @@ final class CursorAuthStoreCookieCacheTests: XCTestCase {
         // the result is nil -- proving the TTL boundary is enforced, not just "cache present".
         XCTAssertNil(authStore.resolvedSessionToken())
     }
+
+    /// cursor.com answers a bare access token in the session cookie with 401; the cookie must be
+    /// `<WorkOS user id>%3A%3A<jwt>`, the user id being the JWT subject after its provider prefix.
+    func testAppTokenIsWrappedIntoUserIdSessionCookie() {
+        func base64URL(_ json: String) -> String {
+            Data(json.utf8).base64EncodedString().replacingOccurrences(of: "+", with: "-")
+                .replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+        }
+        let token = base64URL(#"{"alg":"HS256"}"#) + "." + base64URL(#"{"sub":"google-oauth2|user_01ABC","exp":4102444800}"#) + ".sig"
+        XCTAssertEqual(CursorAuthStore.sessionCookieValue(forAccessToken: token), "user_01ABC%3A%3A" + token)
+        XCTAssertNil(CursorAuthStore.sessionCookieValue(forAccessToken: "not-a-jwt"))
+    }
 }
