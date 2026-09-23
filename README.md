@@ -41,9 +41,16 @@ immediately rather than on the next refresh cycle. Detection is silent by constr
 directory checks, a lookup of CLIs on `PATH` plus the usual install directories (Homebrew, npm,
 `~/.local/bin`, ...) that an app launched from Finder doesn't inherit, and Keychain *existence*
 probes that ask for attributes only with authentication UI disallowed -- never a secret read, so
-no macOS access prompt, no network, no subprocess. When tracking a provider will read another
-app's Keychain item (Claude Code's sign-in), onboarding says so up front, since that's where
-macOS asks once. Settings marks each provider found on this Mac the same way.
+no macOS access prompt, no network, no subprocess. Settings marks each provider found on this Mac
+the same way.
+
+Reading Claude Code's sign-in doesn't raise macOS's "wants to use your confidential information"
+prompt either. Claude Code writes its Keychain item with Apple's `security` tool, which puts that
+tool on the item's access list; TokenWatch checks the access list (never the secret, so the check
+itself can't prompt) and, when it trusts `/usr/bin/security` and admits Apple's command-line
+tools, reads the item through `security find-generic-password` instead of from its own process.
+Only when the item doesn't allow that -- written some other way -- does TokenWatch read it
+directly, where macOS asks once; onboarding then says so up front.
 
 By default (nothing starred yet) the status item shows a smart summary: whichever enabled
 provider has a recent local-activity signal (currently: Claude and Codex, from local session
@@ -58,10 +65,12 @@ provider with real data, up to two metrics per provider. A provider whose stars 
 yet drops out of the strip entirely rather than showing a placeholder.
 
 Alongside that summary (including Bars style), compact **In / Out / Cache** counters show today's
-local tokens across enabled Claude and Codex providers, including their omp sessions. **In**
+tokens across enabled providers with usage history, including their omp/pi sessions. **In**
 excludes cache reads/writes, **Out** is output, and **Cache** combines cache reads and writes:
 the three counts are disjoint. Hover for exact counts, separate cache-read/write totals, and
 the included providers. These are daily totals, not tokens per second.
+Named services (Devin, fx, Muse Code) and Other remain in Total Spend; they have no provider
+enablement toggle and are not included in the enabled-provider menu-bar counts.
 
 Counters update from local log changes without opening the popover, follow provider enablement,
 and reset for the new local calendar day. They remain hidden until history is loaded or when no
@@ -122,7 +131,8 @@ what it's showing. Discovery is file-based only: it finds a profile whose login 
 profile-specific service name. A found-but-lapsed credential shows why (self-heals on next CLI
 run, or needs a real re-login) rather than a raw HTTP error. This is read-only visibility, not
 account switching -- TokenWatch doesn't change which login your `claude`/`codex` CLI actually
-uses.
+uses. Spend history on the Usage tab reads every account's local logs the same way, whether or
+not it has a card here.
 
 ## Usage tab
 
@@ -131,8 +141,12 @@ provider with something to actually show here gets a card; most providers have n
 `MetricLine.category`).
 
 A cross-provider **Total Spend** card sits at the top when Settings' **Show Total Spend** is on
-and at least one enabled provider has local activity in the last 7 days (Claude and Codex, via a
-30-day scan shared with the per-provider spend rows below it -- one scan, cached). The title is a
+and anything on this Mac has local activity in the last 7 days, via a 30-day scan shared with the
+per-provider spend rows below it (one scan, cached). It totals every source with history --
+Claude and Codex from their CLIs, every other coding agent's local logs (below), Cursor's account
+usage, a named slice each for Devin, fx and Muse Code (which bill through their own services), and
+**Other** for model providers TokenWatch has no card for -- whether or not that provider's
+card is enabled: it's what was spent, not just what's tracked. The title is a
 pull-down for **Cost** / **Cost per MTok** / **Tokens**; a **Today** / **Yesterday** / **30 Days**
 segmented toggle sits alongside it. The donut's segments use each provider's real brand color
 (Anthropic's terracotta, OpenAI's teal-green, and so on); hover the center for the exact figure
@@ -143,7 +157,7 @@ Cost and Tokens, one combined bar per day for Cost per MTok (rates don't stack) 
 the selected period covers at full strength and the rest dimmed. The share icon copies a PNG of
 the whole card to your clipboard, and the ⓘ names which providers feed the total.
 
-Any provider with its own local spend history (Claude and Codex) shows a **Today/Yesterday** line
+Any provider with local spend history in the last two days shows a **Today/Yesterday** line
 directly on its own card, chevron-collapsible to that provider's own per-model breakdown -- the
 same figures as the Total Spend card's hover popover, without needing to open it.
 
@@ -156,46 +170,82 @@ minutes only for a log that doesn't record it. Codex's detail does not, since Op
 retention is server-side, org-dependent, and machine-local, so it only reports whether the last
 turn itself was a cache hit.
 
-Claude's and Codex's local activity also picks up sessions run through a coding-agent harness
-that talks to the model APIs directly rather than shelling out to the `claude` or `codex` CLI
-(currently: `omp`, the CLI behind [Superset](https://superset.sh)) -- without this, usage
-through such a harness would be completely invisible to the session lists and spend even though
-it's real usage. One omp session can switch providers turn to turn; its Anthropic turns count as
-Claude and its `openai-codex` turns (a ChatGPT sign-in, the Codex quota) as Codex. This depends
-on that harness's own undocumented local session-log format, not a stable public contract the
-way Claude Code's and Codex's are, so it's read defensively and fails soft if the format ever
-changes.
+Local activity also picks up sessions run through a coding-agent harness that talks to the model
+APIs directly rather than shelling out to the `claude` or `codex` CLI -- `omp` (the CLI behind
+[Superset](https://superset.sh), `~/.omp/agent/sessions`) and `pi`, which omp is a fork of
+(`~/.pi/agent/sessions`, or `PI_CODING_AGENT_SESSION_DIR` / `PI_CODING_AGENT_DIR/sessions`).
+Without this, usage through such a harness would be completely invisible to the session lists
+and spend even though it's real usage. One harness session can switch providers turn to turn, and
+each turn counts toward the provider that served it: Anthropic turns as Claude, `openai-codex`
+turns (a ChatGPT sign-in, the Codex quota) as Codex, and OpenRouter, OpenAI, Gemini, xAI, z.ai,
+Kimi, Copilot, Cursor, OpenCode and Amp turns as their own providers' spend; anything else is
+Other.
+
+Spend also reads the other coding agents' own local usage records, each attributed to the service
+it's billed through:
+
+| Agent | Where | Counts toward |
+| --- | --- | --- |
+| OpenCode | `~/.local/share/opencode/opencode.db` (or the pre-database `storage/` tree) | The provider that served each message, like omp; `openai` is Codex when OpenCode's `auth.json` holds a ChatGPT sign-in |
+| GitHub Copilot CLI | `~/.copilot/session-store.db` | Copilot |
+| Grok CLI | `~/.grok/logs/unified.jsonl` (and `$GROK_HOME`) | Grok |
+| Antigravity CLI | `~/.gemini/antigravity-cli/brain/*/…/transcript_full.jsonl` | Antigravity |
+| Devin CLI | `~/.local/share/devin/cli/sessions.db` | Devin (its own slice) |
+| fx | `~/.fx/sessions/*/events.jsonl` | fx (its own slice) |
+| Muse Code | `~/.local/share/muse/sessions/**/session.jsonl` | Muse Code (its own slice) |
+
+(`~/.local/share` follows `XDG_DATA_HOME`.) Databases are opened read-only while the agent may be
+using them. None of these formats is a public contract the way Claude Code's and Codex's are, so
+each is read defensively and fails soft if the format ever changes.
+
+Cursor keeps no token counts on disk, so while the Cursor provider is enabled its spend comes from
+Cursor's own per-request usage history for the account (the dashboard's usage-events call, with
+Cursor.app's saved sign-in, fetched at most every 5 minutes) -- covering the app, `cursor-agent`,
+and any other client signed into it, omp's `cursor` provider included, so it replaces any locally
+logged Cursor turns rather than adding to them.
 
 Every spend figure -- the donut, the 7-day bars, each provider's spend row -- is built by summing
 *every* turn's local session tokens (not just the newest, the way cache-temperature works) and
 pricing them at API list rates -- no Admin API key required. A day's token total is input + cache
 reads + cache writes + output.
 
-- **Claude** (Claude Code and `omp` logs): each Claude Code API response counts once,
+- **Claude** (Claude Code logs in every Claude config dir on this Mac -- `~/.claude`,
+  `~/.config/claude`, each `CLAUDE_CONFIG_DIR` entry, and any other account profile holding
+  Claude's own `.claude.json` or `.credentials.json`, a folder shared through a symlink counted
+  once -- plus Anthropic turns from omp, pi and OpenCode): each Claude Code API response counts once,
   deduplicated the way OpenUsage and ccusage do it -- Claude Code writes one line per content
   block of a response, each repeating the full usage, and subagent (sidechain) and
   resumed-session logs replay earlier messages. A cost the log itself records (Claude Code's
-  `costUSD`, `omp`'s per-turn cost) is used as-is; otherwise tokens are priced at list rates, with
-  1-hour cache writes at 2x input and 5-minute ones at 1.25x. `<synthetic>` (locally generated)
-  messages cost nothing.
-- **Codex** (`$CODEX_HOME/sessions` and `archived_sessions`, plus `omp`'s `openai-codex` turns
-  at `omp`'s own recorded cost), ported from OpenUsage's Codex
-  scanner: a turn is a `token_count` event's `last_token_usage` (or its delta from the previous
-  running total); a re-emitted, unchanged running total isn't a new turn; a subagent or forked
-  session's replay of its parent's history isn't counted; and an identical event in two files
-  counts once. Cached input bills at the cache-read rate, a request above 272K input tokens at the
+  `costUSD`, another agent's per-turn cost) is used as-is; otherwise tokens are priced at list rates,
+  with 1-hour cache writes at 2x input and 5-minute ones at 1.25x. A dotted version
+  (`claude-haiku-4.5`, as OpenRouter and harnesses spell it) prices as Anthropic's dashed id,
+  and `<synthetic>` (locally generated) messages cost nothing.
+- **Codex** (`sessions` and `archived_sessions` in `$CODEX_HOME` and every other `~/.codex*`
+  home, plus omp/pi's `openai-codex` turns and OpenCode's ChatGPT-sign-in turns at the agent's
+  own recorded cost), ported from
+  OpenUsage's Codex scanner: a turn is a `token_count` event's `last_token_usage` (or its delta
+  from the previous running total); a re-emitted, unchanged running total isn't a new turn; a
+  subagent or forked session's replay of its parent's history isn't counted; and an identical
+  event in two files counts once. Cached input bills at the cache-read rate and cache writes
+  (also counted inside Codex's input) at 1.25x input, a request above 272K input tokens at the
   model's long-context rate, and a priority ("fast") tier session at 2x (2.5x for gpt-5.5).
+- **Every other agent and provider** at the agent's own recorded cost (omp, pi, OpenCode, fx, Muse
+  Code; Cursor's token-rate cost), or, when there is none, at the list rate of whichever known
+  model family (Claude, OpenAI, Grok, Gemini) matches the model id. Each agent's token buckets
+  are normalized to input / cache reads / cache writes / output -- OpenCode's reasoning tokens,
+  which it logs apart from output, count as output, and so do Gemini's thinking tokens.
 
 All of it shares one 30-day history with the Total Spend card and each provider's inline spend
 row. While TokenWatch is running, a local filesystem watcher updates these figures as Claude
-Code, Codex, and omp write usage records, even with the popover closed. Changes are coalesced
-for 300 ms after macOS delivers them; OS scheduling and scan time can add latency. Appended
-records are read incrementally, with partial records, replacement logs, and deduplication handled
-without counting a turn twice. This is live **logged usage**, not token-by-token streaming:
+Code, Codex, omp, and pi write usage records, even with the popover closed. Changes are coalesced
+for 300 ms after macOS delivers them; OS scheduling and scan time can add latency. Native
+Claude/Codex and harness JSONL records are read incrementally; other agent files and databases
+retain their format-specific caches and periodic refreshes. This is live **logged usage**, not token-by-token streaming:
 figures cannot update before the agent writes its usage.
-Native Claude and Codex changes refresh only their own provider; shared omp logs refresh both.
-Changes arriving during a scan are unioned into a follow-up scan, without discarding the other
-provider's cached figures.
+Native Claude and Codex changes refresh only their own provider, covering discovered account
+histories as well as default/configured roots. Shared omp/pi changes reconcile every billed
+source, including Other. Changes arriving during a scan are unioned into a follow-up scan;
+full reconciliation requests take precedence, and untouched source histories are preserved.
 
 The Total Spend card's **Recent local usage** rows show each provider as **Active** for 8 seconds
 after observing increased usage with a newer, recent record timestamp, then **Idle**. Startup,
@@ -203,9 +253,9 @@ counter resets, and old imported records do not create a live sample. This is re
 activity, not a claim that a model is currently streaming.
 
 When a new sample has trustworthy timing, its **output tok/s** is the newly recorded timed output
-divided by its matching response duration. Currently this uses omp's recorded request durations
-for Claude and Codex; those include first-token wait and request overhead, so the number is
-response throughput, not pure decoding speed. Native Claude Code and Codex CLI records remain
+divided by its matching response duration. This uses verified request-duration metadata from
+omp-format harness responses; those durations include first-token wait and request overhead,
+so the number is response throughput, not pure decoding speed. Native Claude Code and Codex CLI records remain
 untimed: their activity still updates, but the app does not invent a rate from refresh intervals
 or tool-inclusive turn durations. An idle timed sample is labeled **Last** and expires after
 3 minutes; a new untimed sample clears the old rate. Status transitions use scheduled expiries,
@@ -213,8 +263,9 @@ not a continuously running animation.
 
 
 Provider quota/limit APIs still use the configured refresh interval. Provider refreshes and
-opening the popover after a minute also reconcile local history as a fallback if filesystem
-notifications are unavailable. The estimate is explicitly
+opening the popover after a minute also reconcile all local history as a fallback if filesystem
+notifications are unavailable. Cursor account history keeps its five-minute fetch throttle and
+is never fetched because of a local log event. The estimate is explicitly
 labeled as one: subscription usage isn't billed per token. Rates come from a small static table
 refreshed against LiteLLM's public, community-maintained price list roughly hourly
 (`PricingRefreshService`) -- a fetch failure or not having fetched yet falls straight through to

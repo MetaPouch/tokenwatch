@@ -14,22 +14,31 @@ public final class LocalUsageWatcher {
     private var mustReplaceStream = false
 
     public init(roots: [ProviderID: [String]]? = nil, onChange: @escaping (Set<ProviderID>) -> Void) {
-        let providerRoots: [ProviderID: [String]]
-        if let roots {
-            providerRoots = roots
-        } else {
-            let ompRoots = OmpUsageLog.roots()
-            providerRoots = [
-                .claude: ClaudeSessionScanner.projectRoots() + ompRoots,
-                .codex: CodexUsageHistoryScanner.roots() + ompRoots,
-            ]
-        }
+        let providerRoots = roots ?? Self.defaultRoots()
         requestedRoots = providerRoots.mapValues { paths in
             paths.filter { !$0.isEmpty }.map {
                 URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath).standardizedFileURL.path
             }
         }
         self.onChange = onChange
+    }
+
+    static func defaultRoots(homeDirectory: String = NSHomeDirectory(), environment: [String: String] = ProcessInfo.processInfo.environment) -> [ProviderID: [String]] {
+        let harnessRoots = HarnessUsageLog.roots(homeDirectory: homeDirectory, environment: environment)
+        // Shared harness logs may bill any provider, including an unrecognized source.
+        var roots = Dictionary(uniqueKeysWithValues: ProviderID.allCases.map { ($0, harnessRoots) })
+        // Account discovery lists existing directories only. Also retain configured/default
+        // roots so a first-ever session created after launch is observed immediately.
+        let configuredClaude = (environment["CLAUDE_CONFIG_DIR"] ?? "").split(separator: ",")
+            .map { ($0.trimmingCharacters(in: .whitespaces) as NSString).expandingTildeInPath }
+            .filter { !$0.isEmpty }
+        roots[.claude, default: []] += ([homeDirectory + "/.claude", homeDirectory + "/.config/claude"] + configuredClaude)
+            .map { $0 + "/projects" }
+        let codexHome = environment["CODEX_HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? homeDirectory + "/.codex"
+        roots[.codex, default: []] += [codexHome + "/sessions", codexHome + "/archived_sessions"]
+        roots[.claude, default: []] += ClaudeAccountDiscovery.historyRoots(homeDirectory: homeDirectory, environment: environment)
+        roots[.codex, default: []] += CodexAccountDiscovery.historyRoots(homeDirectory: homeDirectory, environment: environment)
+        return roots
     }
 
     /// A failed start leaves periodic scans as the fallback. Calling start twice is harmless.

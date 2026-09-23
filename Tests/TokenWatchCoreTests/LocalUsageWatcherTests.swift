@@ -247,6 +247,48 @@ final class LocalUsageWatcherTests: XCTestCase {
         await fulfillment(of: [codexChanged], timeout: 5)
     }
 
+    func testDefaultRootsTargetNativeAccountsAndReconcileEveryProviderForHarnesses() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let allProviders = Set(ProviderID.allCases)
+        let cases: [(path: String, providers: Set<ProviderID>)] = [
+            (".claude-work/projects", [.claude]),
+            (".codex-work/sessions", [.codex]),
+            (".codex-work/archived_sessions", [.codex]),
+            (".omp/agent/sessions", allProviders),
+            (".pi/agent/sessions", allProviders),
+        ]
+        let files = try cases.map { item -> URL in
+            let root = directory.appendingPathComponent(item.path, isDirectory: true)
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            let file = root.appendingPathComponent("usage.jsonl")
+            try "{}\n".write(to: file, atomically: false, encoding: .utf8)
+            return file
+        }
+        try "{}".write(to: directory.appendingPathComponent(".claude-work/.claude.json"), atomically: false, encoding: .utf8)
+        let roots = LocalUsageWatcher.defaultRoots(homeDirectory: directory.path, environment: [:])
+        var expectedProviders: Set<ProviderID>?
+        var changed: XCTestExpectation? = expectation(description: "initial tree reconciled")
+        let initial = try XCTUnwrap(changed)
+        let watcher = LocalUsageWatcher(roots: roots) { providers in
+            if let expectedProviders { XCTAssertEqual(providers, expectedProviders) }
+            changed?.fulfill()
+            changed = nil
+        }
+        defer { watcher.stop() }
+        XCTAssertTrue(watcher.start())
+        for file in files { try append("{}\n", to: file) }
+        await fulfillment(of: [initial], timeout: 5)
+
+        for (item, file) in zip(cases, files) {
+            expectedProviders = item.providers
+            changed = expectation(description: "providers notified for \(item.path)")
+            let delivered = try XCTUnwrap(changed)
+            try append("{}\n", to: file)
+            await fulfillment(of: [delivered], timeout: 5)
+        }
+    }
+
     func testBurstUnionsProvidersInOneDelivery() async throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -283,7 +325,7 @@ final class LocalUsageWatcherTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let file = directory.appendingPathComponent("usage.jsonl")
         try "{}\n".write(to: file, atomically: false, encoding: .utf8)
-        var changed: XCTestExpectation? = expectation(description: "shared omp-style root changed")
+        var changed: XCTestExpectation? = expectation(description: "explicit shared root changed")
         let delivered = try XCTUnwrap(changed)
         let watcher = LocalUsageWatcher(roots: [.claude: [directory.path], .codex: [directory.path]]) { providers in
             XCTAssertEqual(providers, [.claude, .codex])

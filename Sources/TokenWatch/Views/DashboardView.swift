@@ -434,7 +434,7 @@ struct DashboardView: View {
                         timeFormat: appearanceStore.timeFormat,
                         category: .usage,
                         isDraggable: false,
-                        spendHistoryStore: SpendHistoryStore.hasHistory(provider) ? spendHistoryStore : nil,
+                        spendHistoryStore: spendHistoryStore,
                         onRefresh: { refreshScheduler.refreshProvider(provider) },
                         onHideProvider: { enablementStore.setEnabled(provider, false) },
                         onCustomizeProvider: { customizeDetailProvider = provider; currentScreen = .customize }
@@ -455,7 +455,7 @@ struct DashboardView: View {
                 category: .usage,
                 layoutStore: layoutStore,
                 provider: provider,
-                spendHistoryStore: SpendHistoryStore.hasHistory(provider) ? spendHistoryStore : nil
+                spendHistoryStore: spendHistoryStore
             )
         }
     }

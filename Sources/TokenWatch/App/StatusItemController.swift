@@ -50,7 +50,7 @@ final class StatusItemController {
             .sink { [weak self] _, _ in self?.render() }
             .store(in: &cancellables)
 
-        spendHistoryStore.$daysByProvider
+        spendHistoryStore.$daysBySource
             .combineLatest(spendHistoryStore.$isLoading, appearanceStore.$menuBarValues)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.render() }
@@ -203,7 +203,7 @@ final class StatusItemController {
         let values = appearanceStore.menuBarValues
         guard values.contains(where: { $0 != .limits }), !spendHistoryStore.isLoading,
               let counts = MenuBarTokenCounts.today(
-                daysByProvider: spendHistoryStore.daysByProvider,
+                daysBySource: spendHistoryStore.daysBySource,
                 enabledProviders: enablementStore.enabledProviders
               ) else { return }
         let title = NSMutableAttributedString(attributedString: button.attributedTitle)

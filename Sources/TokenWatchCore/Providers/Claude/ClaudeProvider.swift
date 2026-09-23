@@ -34,7 +34,7 @@ public struct ClaudeProvider: ProviderRuntime {
     }
 
     public func refresh() async -> ProviderSnapshot {
-        guard let credential = authStore.resolvedCredential() else {
+        guard let credential = await authStore.resolvedCredential() else {
             return .error(provider: Self.id, error: .credentialsMissing)
         }
 

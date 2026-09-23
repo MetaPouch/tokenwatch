@@ -1,16 +1,15 @@
 import Foundation
 
-/// Scans every local Claude transcript -- both the real `claude` CLI's own session logs
-/// (`ClaudeSessionScanner`) and the Anthropic turns in omp's logs (`OmpUsageLog`) -- for a bounded
-/// trailing window, summing *every* turn's token usage per calendar day and pricing it at API
-/// list rates. Unlike the session scanners (which only care about the single newest turn per
-/// file, for cache-temperature), this retains every qualifying turn and reads only appended
-/// records after the first scan of a file -- callers should run it off the main actor.
+/// Scans every local Claude transcript -- Claude Code's own session logs in every Claude config
+/// dir (`ClaudeAccountDiscovery.historyRoots`: the defaults, `CLAUDE_CONFIG_DIR`, and other
+/// account profiles) and the Anthropic turns in other agents' logs (`LocalUsageLogs`: omp, pi,
+/// OpenCode) -- for a bounded trailing window, summing every turn's token usage per calendar day
+/// and pricing it at API list rates. Native and harness JSONL history is retained across scans,
+/// reading only appended records after the first scan. Callers should run this off the main actor.
 /// Missing/unreadable files and malformed records never throw.
 public enum ClaudeUsageHistoryScanner {
-    public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, claudeRoots: [String]? = nil, ompRoots: [String]? = nil) -> [UsageDay] {
-        let claudeRoots = claudeRoots ?? ClaudeSessionScanner.projectRoots()
-        let ompRoots = ompRoots ?? OmpUsageLog.roots()
+    public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, claudeRoots: [String]? = nil, localLogs: LocalUsageLocations = .standard()) -> [UsageDay] {
+        let claudeRoots = claudeRoots ?? ClaudeAccountDiscovery.historyRoots()
         var accumulator = UsageDayAccumulator(days: days, now: now, calendar: calendar)
         let cutoff = accumulator.cutoff
 
@@ -28,19 +27,18 @@ public enum ClaudeUsageHistoryScanner {
         for turn in dedup(claudeCodeCache.items(for: codeFiles)) where turn.timestamp >= cutoff {
             record(turn)
         }
-        let ompProvider = OmpUsageLog.ompProvider(for: .claude)
-        for omp in OmpUsageLog.turns(roots: ompRoots, modifiedSince: cutoff) where omp.provider == ompProvider && omp.timestamp >= cutoff {
+        for local in LocalUsageLogs.turns(localLogs, modifiedSince: cutoff) where local.source == .provider(.claude) {
             record(Turn(
-                timestamp: omp.timestamp, model: omp.model,
-                input: omp.input, cacheRead: omp.cacheRead, cacheWrite: omp.cacheWrite, output: omp.output,
-                cacheWrite1h: omp.cacheWrite1h, carriedCostUSD: omp.costUSD,
-                completedAt: omp.completedAt, durationMs: omp.durationMs
+                timestamp: local.timestamp, model: local.model,
+                input: local.input, cacheRead: local.cacheRead, cacheWrite: local.cacheWrite, output: local.output,
+                cacheWrite1h: local.cacheWrite1h, carriedCostUSD: local.costUSD,
+                completedAt: local.completedAt, durationMs: local.durationMs
             ))
         }
         return accumulator.build()
     }
 
-    private static let claudeCodeCache = ParsedFileCache<Turn, Void>(makeState: { () }) { _, data in
+    private static let claudeCodeCache = IncrementalJSONLCache<Turn, Void>(makeState: { () }) { _, data in
         claudeCodeTurns(data)
     }
 

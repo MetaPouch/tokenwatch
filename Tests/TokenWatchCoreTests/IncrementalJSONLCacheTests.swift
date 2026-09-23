@@ -1,19 +1,19 @@
 import XCTest
 @testable import TokenWatchCore
 
-final class ParsedFileCacheTests: XCTestCase {
+final class IncrementalJSONLCacheTests: XCTestCase {
     private struct Record: Decodable {
         let value: Int
     }
 
     private var root: URL!
     private var file: URL { root.appendingPathComponent("usage.jsonl") }
-    private var cache: ParsedFileCache<Int, Int>!
+    private var cache: IncrementalJSONLCache<Int, Int>!
 
     override func setUpWithError() throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        cache = ParsedFileCache(makeState: { 0 }) { total, data in
+        cache = IncrementalJSONLCache(makeState: { 0 }) { total, data in
             data.split(separator: 0x0A).compactMap { line in
                 guard let record = try? JSONDecoder().decode(Record.self, from: line) else { return nil }
                 total += record.value

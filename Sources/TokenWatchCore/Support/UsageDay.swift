@@ -13,6 +13,60 @@ public struct ModelSpend: Sendable, Equatable, Identifiable {
     }
 }
 
+/// A coding agent that bills through its own service rather than a model provider TokenWatch has
+/// a card for: its spend still gets its own named slice.
+public enum BillingService: String, CaseIterable, Sendable {
+    case devin
+    case fx
+    case muse
+
+    public var displayName: String {
+        switch self {
+        case .devin: return "Devin"
+        case .fx: return "fx"
+        case .muse: return "Muse Code"
+        }
+    }
+}
+
+/// Who a slice of spend belongs to: one of TokenWatch's providers, a `BillingService` with no
+/// provider card, or `other` -- a model provider an agent called that TokenWatch has no provider
+/// for (DeepSeek, Mistral, Bedrock, Groq, ...). Kept rather than dropped, so Total Spend really is
+/// the total.
+public enum SpendSource: Hashable, Sendable, Identifiable, Comparable {
+    case provider(ProviderID)
+    case service(BillingService)
+    case other
+
+    public var id: String {
+        switch self {
+        case let .provider(provider): return provider.rawValue
+        case let .service(service): return "service." + service.rawValue
+        case .other: return "other"
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case let .provider(provider): return provider.displayName
+        case let .service(service): return service.displayName
+        case .other: return "Other"
+        }
+    }
+
+    /// `ProviderID` order, then `BillingService` order, then `other`.
+    public static func < (lhs: SpendSource, rhs: SpendSource) -> Bool {
+        func rank(_ source: SpendSource) -> Int {
+            switch source {
+            case let .provider(provider): return ProviderID.allCases.firstIndex(of: provider) ?? 0
+            case let .service(service): return ProviderID.allCases.count + (BillingService.allCases.firstIndex(of: service) ?? 0)
+            case .other: return ProviderID.allCases.count + BillingService.allCases.count
+            }
+        }
+        return rank(lhs) < rank(rhs)
+    }
+}
+
 /// One local calendar day of one provider's token usage, aggregated across its local session
 /// logs and priced at API list rates (or at the cost the logs themselves recorded). Token buckets
 /// are disjoint: `inputTokens` excludes cache reads/writes, so `totalTokens` is a plain sum.

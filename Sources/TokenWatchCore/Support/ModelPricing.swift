@@ -12,7 +12,7 @@ import Foundation
 public enum ModelPricing {
     public static let pricingTableUpdatedOn = "2026-09-23"
 
-    struct Rate {
+    struct Rate: Equatable {
         let inputPerMillion: Double
         let outputPerMillion: Double
         let cacheReadPerMillion: Double?
@@ -26,7 +26,13 @@ public enum ModelPricing {
     private static let cacheWriteMultiplier = 1.25
     private static let cacheWrite1hMultiplier = 2.0
 
+    /// Claude rates. Fable 5.1 and Mythos 5.1 keep Fable 5's token price but cut cache reads to
+    /// $0.25/M instead of the usual 10% of input (Superset's and LiteLLM's tables agree).
     private static let claudeRates: [String: Rate] = [
+        "claude-fable-5-1": Rate(inputPerMillion: 10, outputPerMillion: 50, cacheReadPerMillion: 0.25),
+        "claude-mythos-5-1": Rate(inputPerMillion: 10, outputPerMillion: 50, cacheReadPerMillion: 0.25),
+        "claude-fable-5": Rate(inputPerMillion: 10, outputPerMillion: 50, cacheReadPerMillion: nil),
+        "claude-mythos": Rate(inputPerMillion: 10, outputPerMillion: 50, cacheReadPerMillion: nil),
         "claude-opus-5-5": Rate(inputPerMillion: 4, outputPerMillion: 20, cacheReadPerMillion: 0.2),
         "claude-opus-5": Rate(inputPerMillion: 5, outputPerMillion: 25, cacheReadPerMillion: nil),
         "claude-opus-4-8": Rate(inputPerMillion: 5, outputPerMillion: 25, cacheReadPerMillion: nil),
@@ -44,6 +50,10 @@ public enum ModelPricing {
     /// `PricingRefreshService` refreshes from), so estimates are right offline and on first launch.
     private static let codexRates: [String: Rate] = [
         "gpt-6-astra": Rate(inputPerMillion: 10, outputPerMillion: 50, cacheReadPerMillion: 1),
+        "gpt-6-sol": Rate(inputPerMillion: 2, outputPerMillion: 10, cacheReadPerMillion: nil),
+        "gpt-6-luna": Rate(inputPerMillion: 0.1, outputPerMillion: 0.5, cacheReadPerMillion: nil),
+        // The bare `gpt-5.6` id follows Sol.
+        "gpt-5.6": Rate(inputPerMillion: 4, outputPerMillion: 20, cacheReadPerMillion: 0.4),
         "gpt-5.6-sol": Rate(inputPerMillion: 4, outputPerMillion: 20, cacheReadPerMillion: 0.4),
         "gpt-5.6-terra": Rate(inputPerMillion: 2, outputPerMillion: 12, cacheReadPerMillion: 0.2),
         "gpt-5.6-luna": Rate(inputPerMillion: 0.2, outputPerMillion: 1.2, cacheReadPerMillion: 0.02),
@@ -57,10 +67,31 @@ public enum ModelPricing {
         "gpt-4o": Rate(inputPerMillion: 2.5, outputPerMillion: 10, cacheReadPerMillion: nil),
     ]
 
+    /// xAI and Google rates, for the local agent turns routed to them (see `listCostUSD`) --
+    /// from Superset's maintained table. Gemini's >200K long-context tier isn't modeled.
+    private static let grokRates: [String: Rate] = [
+        "grok-4.6": Rate(inputPerMillion: 2, outputPerMillion: 6, cacheReadPerMillion: nil),
+        "grok-4.5": Rate(inputPerMillion: 2, outputPerMillion: 6, cacheReadPerMillion: nil),
+        "grok-4-fast": Rate(inputPerMillion: 0.2, outputPerMillion: 0.5, cacheReadPerMillion: nil),
+        "grok-4": Rate(inputPerMillion: 3, outputPerMillion: 15, cacheReadPerMillion: nil),
+        "grok-code": Rate(inputPerMillion: 0.2, outputPerMillion: 1.5, cacheReadPerMillion: nil),
+        "grok-3-mini": Rate(inputPerMillion: 0.3, outputPerMillion: 0.5, cacheReadPerMillion: nil),
+        "grok-3": Rate(inputPerMillion: 3, outputPerMillion: 15, cacheReadPerMillion: nil),
+    ]
+
+    private static let geminiRates: [String: Rate] = [
+        "gemini-3.1-pro": Rate(inputPerMillion: 2, outputPerMillion: 12, cacheReadPerMillion: nil),
+        "gemini-3-flash": Rate(inputPerMillion: 0.5, outputPerMillion: 3, cacheReadPerMillion: nil),
+        "gemini-2.5-pro": Rate(inputPerMillion: 1.25, outputPerMillion: 10, cacheReadPerMillion: nil),
+        "gemini-2.5-flash": Rate(inputPerMillion: 0.3, outputPerMillion: 2.5, cacheReadPerMillion: nil),
+    ]
+
     private static func table(for provider: ProviderID) -> [String: Rate] {
         switch provider {
         case .claude: return claudeRates
         case .codex: return codexRates
+        case .grok: return grokRates
+        case .gemini: return geminiRates
         default: return [:]
         }
     }
@@ -72,6 +103,8 @@ public enum ModelPricing {
         switch provider {
         case .claude: return "claude"
         case .codex: return "gpt"
+        case .grok: return "grok"
+        case .gemini: return "gemini"
         default: return ""
         }
     }
@@ -92,6 +125,11 @@ public enum ModelPricing {
             if afterSlash < normalized.endIndex {
                 candidates.append(String(normalized[afterSlash...]))
             }
+        }
+        // Harnesses spell Claude versions with a dot (`anthropic/claude-haiku-4.5`); Anthropic's
+        // own ids never use one, so the dashed spelling is always the one to price.
+        if provider == .claude {
+            candidates += candidates.filter { $0.contains(".") }.map { $0.replacingOccurrences(of: ".", with: "-") }
         }
 
         // A live-fetched rate (refreshed roughly hourly, see PricingRefreshService) wins over
@@ -121,7 +159,10 @@ public enum ModelPricing {
     /// total written; `cacheWrite1hTokens` is the part of it written with a 1-hour TTL (0 when a
     /// log doesn't split writes by TTL, which then prices them all as 5-minute writes).
     static func costUSD(provider: ProviderID, model: String, inputTokens: Int, cacheReadTokens: Int, cacheWriteTokens: Int, cacheWrite1hTokens: Int = 0, outputTokens: Int) -> Double {
-        let (rate, _) = rate(provider: provider, model: model)
+        costUSD(rate: rate(provider: provider, model: model).rate, inputTokens: inputTokens, cacheReadTokens: cacheReadTokens, cacheWriteTokens: cacheWriteTokens, cacheWrite1hTokens: cacheWrite1hTokens, outputTokens: outputTokens)
+    }
+
+    private static func costUSD(rate: Rate, inputTokens: Int, cacheReadTokens: Int, cacheWriteTokens: Int, cacheWrite1hTokens: Int, outputTokens: Int) -> Double {
         let cacheReadRate = rate.cacheReadPerMillion ?? rate.inputPerMillion * cacheReadMultiplier
         let write1h = min(max(cacheWrite1hTokens, 0), cacheWriteTokens)
         return (Double(inputTokens) / 1_000_000) * rate.inputPerMillion
@@ -131,14 +172,33 @@ public enum ModelPricing {
             + (Double(write1h) / 1_000_000) * rate.inputPerMillion * cacheWrite1hMultiplier
     }
 
+    /// Cost of a local agent turn (omp, pi, OpenCode, the Copilot/Grok/Antigravity/Devin CLIs, ...)
+    /// served by a model TokenWatch may have no table for, from disjoint token buckets: the model
+    /// is matched against every table (Claude, OpenAI, xAI, Google), else priced at the cheapest
+    /// known rate and flagged approximate. The fallback when a turn has no recorded cost.
+    static func listCostUSD(model: String, inputTokens: Int, cacheReadTokens: Int, cacheWriteTokens: Int, cacheWrite1hTokens: Int, outputTokens: Int) -> (cost: Double, approximate: Bool) {
+        let families: [ProviderID] = [.claude, .codex, .grok, .gemini]
+        var matched: Rate?
+        for family in families {
+            let candidate = rate(provider: family, model: model)
+            if !candidate.approximate { matched = candidate.rate; break }
+        }
+        let allRates: [Rate] = families.flatMap { Array(table(for: $0).values) }
+        let fallback = allRates.min { lhs, rhs in lhs.inputPerMillion + lhs.outputPerMillion < rhs.inputPerMillion + rhs.outputPerMillion }!
+        let cost = costUSD(rate: matched ?? fallback, inputTokens: inputTokens, cacheReadTokens: cacheReadTokens, cacheWriteTokens: cacheWriteTokens, cacheWrite1hTokens: cacheWrite1hTokens, outputTokens: outputTokens)
+        return (cost, matched == nil)
+    }
+
     /// Codex/OpenAI request pricing, ported from OpenUsage's `CodexUsagePricing`. OpenAI's usage
-    /// shape counts cached tokens *inside* `inputTokens`, so only the uncached remainder is billed
-    /// at the input rate. Two request-level rules apply on top of the base rate:
+    /// shape counts cached tokens *and cache writes* inside `inputTokens` (confirmed in
+    /// `codex-rs`: `total_tokens` = input + output, `non_cached_input` = input - cached), so only
+    /// the remainder is billed at the input rate; writes bill at 1.25x input. Two request-level
+    /// rules apply on top of the base rate:
     /// - Long context: a request above 272K input tokens on a model with a long-context tier bills
     ///   entirely at 2x input / 2x cache read / 1.5x output.
     /// - Priority (Codex "fast" service tier): the whole request is multiplied, 2.5x for gpt-5.5
     ///   and 2x otherwise.
-    static func codexCostUSD(model: String, inputTokens: Int, cachedInputTokens: Int, outputTokens: Int, priorityTier: Bool = false) -> (cost: Double, approximate: Bool) {
+    static func codexCostUSD(model: String, inputTokens: Int, cachedInputTokens: Int, cacheWriteInputTokens: Int = 0, outputTokens: Int, priorityTier: Bool = false) -> (cost: Double, approximate: Bool) {
         let (rate, approximate) = rate(provider: .codex, model: model)
         let base = datedBaseModel(model.lowercased())
         let longContext = inputTokens > codexLongContextThreshold && hasCodexLongContextTier(base)
@@ -146,8 +206,10 @@ public enum ModelPricing {
         let cacheReadRate = (rate.cacheReadPerMillion ?? rate.inputPerMillion * cacheReadMultiplier) * (longContext ? 2 : 1)
         let outputRate = rate.outputPerMillion * (longContext ? 1.5 : 1)
         let cached = min(max(cachedInputTokens, 0), inputTokens)
-        let cost = (Double(inputTokens - cached) / 1_000_000) * inputRate
+        let written = min(max(cacheWriteInputTokens, 0), inputTokens - cached)
+        let cost = (Double(inputTokens - cached - written) / 1_000_000) * inputRate
             + (Double(cached) / 1_000_000) * cacheReadRate
+            + (Double(written) / 1_000_000) * inputRate * cacheWriteMultiplier
             + (Double(outputTokens) / 1_000_000) * outputRate
         let multiplier = priorityTier ? (base.hasPrefix("gpt-5.5") ? 2.5 : 2) : 1
         return (cost * multiplier, approximate)
@@ -159,7 +221,7 @@ public enum ModelPricing {
     /// differently and aren't covered.
     private static func hasCodexLongContextTier(_ base: String) -> Bool {
         guard !base.contains("-pro") else { return false }
-        return ["gpt-5.4", "gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra"]
+        return ["gpt-5.4", "gpt-5.5", "gpt-5.6", "gpt-6-astra"]
             .contains { base == $0 || base.hasPrefix($0 + "-") }
     }
 

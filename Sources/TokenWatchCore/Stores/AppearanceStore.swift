@@ -60,8 +60,8 @@ public enum MenuBarValue: String, Sendable, Codable, CaseIterable, Identifiable 
     public var help: String {
         switch self {
         case .limits: return "Show the usual session-limit summary or your starred metrics, including the Bars style. Turn off for token counts only."
-        case .inputTokens: return "Today's input tokens excluding cache, across enabled Claude and Codex providers."
-        case .outputTokens: return "Today's output tokens across enabled Claude and Codex providers."
+        case .inputTokens: return "Today's input tokens excluding cache, across enabled providers with usage history."
+        case .outputTokens: return "Today's output tokens across enabled providers with usage history."
         case .cacheTokens: return "Today's cache reads plus writes. Hover the menu bar for the exact breakdown."
         }
     }

@@ -11,12 +11,12 @@ public struct MenuBarTokenCounts: Sendable, Equatable {
 
     public var cache: Int { cacheRead + cacheWrite }
 
-    public static func today(daysByProvider: [ProviderID: [UsageDay]], enabledProviders: Set<ProviderID>, now: Date = Date(), calendar: Calendar = .current) -> Self? {
-        let providers = ProviderID.allCases.filter { enabledProviders.contains($0) && daysByProvider[$0] != nil }
+    public static func today(daysBySource: [SpendSource: [UsageDay]], enabledProviders: Set<ProviderID>, now: Date = Date(), calendar: Calendar = .current) -> Self? {
+        let providers = ProviderID.allCases.filter { enabledProviders.contains($0) && daysBySource[.provider($0)] != nil }
         guard !providers.isEmpty else { return nil }
         var result = Self(providers: providers)
         for provider in providers {
-            guard let day = daysByProvider[provider]?.first(where: { calendar.isDate($0.date, inSameDayAs: now) }) else { continue }
+            guard let day = daysBySource[.provider(provider)]?.first(where: { calendar.isDate($0.date, inSameDayAs: now) }) else { continue }
             result.input += day.inputTokens
             result.output += day.outputTokens
             result.cacheRead += day.cacheReadTokens

@@ -9,8 +9,9 @@ private struct CachedCursorCookie: Codable {
 
 /// Resolves a Cursor session token: Cursor.app's local state DB first (Phase 2), falling back to
 /// a Safari-imported `cursor.com`/`cursor.sh` cookie (Phase 4) only when the local path reports
-/// no usable token. Cursor accepts the raw app token in the session-cookie slot, so both sources
-/// feed the same `Cookie: WorkosCursorSessionToken=<value>` header.
+/// no usable token. Both feed the same `Cookie: WorkosCursorSessionToken=<value>` header, whose
+/// value cursor.com expects as `<userId>%3A%3A<jwt>` -- a Safari cookie already has that shape;
+/// the app's raw access token is wrapped into it (`sessionCookieValue(forAccessToken:)`).
 public struct CursorAuthStore: Sendable {
     private static let cookieCacheAccount = "cursor"
     private static let cookieCacheTTL: TimeInterval = 24 * 3600
@@ -41,10 +42,20 @@ public struct CursorAuthStore: Sendable {
         return token
     }
 
-    /// The local app token if usable, else a cached or freshly-imported Safari cookie. This is
-    /// what `CursorProvider.refresh()` actually sends.
+    /// The `WorkosCursorSessionToken` cookie value `CursorProvider.refresh()` sends: the local app
+    /// token if usable, else a cached or freshly-imported Safari cookie.
     public func resolvedSessionToken() -> String? {
-        validAccessToken() ?? safariCookieToken()
+        validAccessToken().flatMap(Self.sessionCookieValue(forAccessToken:)) ?? safariCookieToken()
+    }
+
+    /// cursor.com rejects the bare access token as a session cookie (401 `not_authenticated`); it
+    /// wants the WorkOS user id -- the part of the JWT's `sub` after its last `|` -- joined to the
+    /// token by a URL-encoded `::`.
+    static func sessionCookieValue(forAccessToken token: String) -> String? {
+        guard let subject = JWT.payload(token)?["sub"] as? String,
+              let userID = subject.split(separator: "|").last, !userID.isEmpty
+        else { return nil }
+        return "\(userID)%3A%3A\(token)"
     }
 
     private func safariCookieToken() -> String? {
