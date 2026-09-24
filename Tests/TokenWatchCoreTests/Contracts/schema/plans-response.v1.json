@@ -46,13 +46,18 @@
       "minimum": 0,
       "maximum": 9007199254740991,
       "description": "Earliest time for the next sync, in seconds"
+    },
+    "paused": {
+      "type": "boolean",
+      "description": "True when the account has paused syncing on tokenwat.ch: nothing was stored and accepted is 0. Keep syncing on schedule; storing resumes once the user unpauses."
     }
   },
   "required": [
     "accepted",
     "rejected",
     "serverTime",
-    "nextSyncAfterSeconds"
+    "nextSyncAfterSeconds",
+    "paused"
   ],
   "additionalProperties": false,
   "title": "PUT /v1/plans 200 response, v1"

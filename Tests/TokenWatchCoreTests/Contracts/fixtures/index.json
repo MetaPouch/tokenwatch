@@ -307,11 +307,23 @@
       "schema": "usage-response.v1"
     },
     {
+      "file": "usage-response.v1.valid.paused.json",
+      "schema": "usage-response.v1"
+    },
+    {
       "file": "plans-response.v1.valid.accepted.json",
       "schema": "plans-response.v1"
     },
     {
       "file": "error.v1.valid.unsupported-schema-version.json",
+      "schema": "error.v1"
+    },
+    {
+      "file": "error.v1.valid.device-mismatch.json",
+      "schema": "error.v1"
+    },
+    {
+      "file": "error.v1.valid.unavailable.json",
       "schema": "error.v1"
     },
     {
@@ -328,6 +340,26 @@
     },
     {
       "file": "error.v1.valid.device-revoked.json",
+      "schema": "error.v1"
+    },
+    {
+      "file": "boards-response.v1.valid.json",
+      "schema": "boards-response.v1"
+    },
+    {
+      "file": "board-page-response.v1.valid.spend-week-claude.json",
+      "schema": "board-page-response.v1"
+    },
+    {
+      "file": "profile-response.v1.valid.json",
+      "schema": "profile-response.v1"
+    },
+    {
+      "file": "rank-history-response.v1.valid.json",
+      "schema": "rank-history-response.v1"
+    },
+    {
+      "file": "error.v1.valid.not-found.json",
       "schema": "error.v1"
     }
   ]
