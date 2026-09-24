@@ -4,7 +4,7 @@ import TokenWatchCore
 
 /// Lists every `ProviderID` with an enable/disable toggle; `APIKeyManaging` providers get a
 /// secure text field wired to `saveAPIKey`/`deleteAPIKey`; a stepper controls the refresh
-/// interval.
+/// interval; the Leaderboard section is the opt-in leaderboard's only entry point.
 struct SettingsView: View {
     @ObservedObject var enablementStore: ProviderEnablementStore
     @ObservedObject var detectionStore: ProviderDetectionStore
@@ -14,6 +14,8 @@ struct SettingsView: View {
     @ObservedObject var notificationSettingsStore: NotificationSettingsStore
     let notificationService: QuotaNotificationService
     let toggleDashboardPanel: () -> Void
+    @ObservedObject var leaderboardService: LeaderboardService
+    let webAuthenticator: LeaderboardWebAuthenticating
 
     @State private var apiKeyDrafts: [ProviderID: String] = [:]
     @State private var launchAtLoginEnabled = LaunchAtLogin.isEnabled
@@ -117,6 +119,10 @@ struct SettingsView: View {
                         in: 60...1800,
                         step: 30
                     )
+                }
+
+                settingsSection("Leaderboard") {
+                    LeaderboardSettingsSection(service: leaderboardService, authenticator: webAuthenticator)
                 }
 
                 settingsSection("Providers") {

@@ -22,6 +22,8 @@ struct DashboardView: View {
     @ObservedObject var hintStore: HintStore
     let notificationService: QuotaNotificationService
     let toggleDashboardPanel: () -> Void
+    @ObservedObject var leaderboardService: LeaderboardService
+    let webAuthenticator: LeaderboardWebAuthenticating
     /// Reports this view's total natural height (top bar + current screen + footer) so the
     /// hosting `TokenWatchPanel` can resize to fit it.
     let onHeightChange: (CGFloat) -> Void
@@ -174,7 +176,7 @@ struct DashboardView: View {
     }
 
     private var settingsScreenContent: some View {
-        SettingsView(enablementStore: enablementStore, detectionStore: detectionStore, apiKeyManagers: apiKeyManagers, displayStore: displayStore, appearanceStore: appearanceStore, notificationSettingsStore: notificationSettingsStore, notificationService: notificationService, toggleDashboardPanel: toggleDashboardPanel)
+        SettingsView(enablementStore: enablementStore, detectionStore: detectionStore, apiKeyManagers: apiKeyManagers, displayStore: displayStore, appearanceStore: appearanceStore, notificationSettingsStore: notificationSettingsStore, notificationService: notificationService, toggleDashboardPanel: toggleDashboardPanel, leaderboardService: leaderboardService, webAuthenticator: webAuthenticator)
     }
 
     private func reportTotalHeight(for screen: DashboardScreen) {
