@@ -9,8 +9,18 @@ import Foundation
 /// Missing/unreadable files and malformed records never throw.
 public enum ClaudeUsageHistoryScanner {
     public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, claudeRoots: [String]? = nil, localLogs: LocalUsageLocations = .standard()) -> [UsageDay] {
+        scan(into: UsageDayAccumulator(days: days, now: now, calendar: calendar), claudeRoots: claudeRoots, localLogs: localLogs)
+    }
+
+    /// Every local day from `start`'s through `end`'s -- the leaderboard's history backfill
+    /// (`UsageBackfill`). Same files, dedup and pricing as the trailing window.
+    public static func dailyUsage(from start: Date, through end: Date, calendar: Calendar = .current, claudeRoots: [String]? = nil, localLogs: LocalUsageLocations = .standard()) -> [UsageDay] {
+        scan(into: UsageDayAccumulator(from: start, through: end, calendar: calendar), claudeRoots: claudeRoots, localLogs: localLogs)
+    }
+
+    private static func scan(into window: UsageDayAccumulator, claudeRoots: [String]?, localLogs: LocalUsageLocations) -> [UsageDay] {
         let claudeRoots = claudeRoots ?? ClaudeAccountDiscovery.historyRoots()
-        var accumulator = UsageDayAccumulator(days: days, now: now, calendar: calendar)
+        var accumulator = window
         let cutoff = accumulator.cutoff
 
         func record(_ turn: Turn) {

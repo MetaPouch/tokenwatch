@@ -13,15 +13,30 @@ import Foundation
 public enum CursorUsageHistory {
     private static let endpoint = URL(string: "https://api2.cursor.sh/aiserver.v1.DashboardService/GetFilteredUsageEvents")!
     private static let pageSize = 300
-    /// A bound on pagination: 12,000 requests in the window is far past heavy use.
+    /// A bound on pagination: 12,000 requests in the window is far past heavy use. The
+    /// leaderboard's history backfill (`UsageBackfill`) fetches its older window under the same
+    /// bound, so Cursor history reaches back at most 12,000 requests before the 30-day window --
+    /// about two months at a heavy 200 requests a day. It isn't raised for the backfill: that
+    /// would need Cursor's rate limits checked first.
     private static let maxPages = 40
 
     /// The window's days, or `nil` when there's no usable Cursor.app sign-in or the fetch fails --
     /// the caller then keeps what it had.
     public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, authStore: CursorAuthStore = CursorAuthStore(), httpClient: HTTPClient = .shared) async -> [UsageDay]? {
+        await dailyUsage(in: UsageDayAccumulator(days: days, now: now, calendar: calendar), until: now, authStore: authStore, httpClient: httpClient)
+    }
+
+    /// Every local day from `start`'s through `end`'s (the leaderboard's history backfill), with
+    /// events fetched up to the end of `end`'s day but never past `now`.
+    public static func dailyUsage(from start: Date, through end: Date, now: Date = Date(), calendar: Calendar = .current, authStore: CursorAuthStore = CursorAuthStore(), httpClient: HTTPClient = .shared) async -> [UsageDay]? {
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: end)) ?? end
+        return await dailyUsage(in: UsageDayAccumulator(from: start, through: end, calendar: calendar), until: min(endOfDay, now), authStore: authStore, httpClient: httpClient)
+    }
+
+    private static func dailyUsage(in window: UsageDayAccumulator, until: Date, authStore: CursorAuthStore, httpClient: HTTPClient) async -> [UsageDay]? {
         guard let token = authStore.validAccessToken() else { return nil }
-        var accumulator = UsageDayAccumulator(days: days, now: now, calendar: calendar)
-        guard let events = try? await fetchEvents(token: token, since: accumulator.cutoff, until: now, httpClient: httpClient) else { return nil }
+        var accumulator = window
+        guard let events = try? await fetchEvents(token: token, since: accumulator.cutoff, until: until, httpClient: httpClient) else { return nil }
         for turn in turns(events) where turn.timestamp >= accumulator.cutoff {
             let repriced = ModelPricing.listCostUSD(
                 model: turn.model, inputTokens: turn.input, cacheReadTokens: turn.cacheRead,

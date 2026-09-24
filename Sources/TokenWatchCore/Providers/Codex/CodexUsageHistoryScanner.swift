@@ -26,7 +26,17 @@ public enum CodexUsageHistoryScanner {
     }
 
     public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, roots: [String]? = nil, localLogs: LocalUsageLocations = .standard()) -> [UsageDay] {
-        var accumulator = UsageDayAccumulator(days: days, now: now, calendar: calendar)
+        scan(into: UsageDayAccumulator(days: days, now: now, calendar: calendar), roots: roots, localLogs: localLogs)
+    }
+
+    /// Every local day from `start`'s through `end`'s -- the leaderboard's history backfill
+    /// (`UsageBackfill`). Same files, dedup and pricing as the trailing window.
+    public static func dailyUsage(from start: Date, through end: Date, calendar: Calendar = .current, roots: [String]? = nil, localLogs: LocalUsageLocations = .standard()) -> [UsageDay] {
+        scan(into: UsageDayAccumulator(from: start, through: end, calendar: calendar), roots: roots, localLogs: localLogs)
+    }
+
+    private static func scan(into window: UsageDayAccumulator, roots: [String]?, localLogs: LocalUsageLocations) -> [UsageDay] {
+        var accumulator = window
         var seen = Set<Event>()
         let files = (roots ?? Self.roots()).flatMap {
             TranscriptFiles.recursive(roots: [$0], modifiedSince: accumulator.cutoff).sorted { $0.path < $1.path }

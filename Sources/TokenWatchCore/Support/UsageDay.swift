@@ -132,22 +132,58 @@ public struct UsageDay: Sendable, Equatable, Identifiable {
     }
 
     public var totalTokens: Int { inputTokens + cacheReadTokens + cacheWriteTokens + outputTokens }
+
+    /// No tokens and no cost: nothing happened that day. The leaderboard never uploads these.
+    public var isEmpty: Bool { totalTokens == 0 && estimatedCostUSD == 0 }
+
+    /// The `yyyy-MM-dd` of the local calendar day containing `date` -- every `UsageDay.id`, and the
+    /// leaderboard's wire format. Always Gregorian digits, whatever calendar or locale the user
+    /// picked (a Buddhist-calendar Mac would otherwise write the year as 2569).
+    public static func dayID(for date: Date, timeZone: TimeZone = .current) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return dayID(for: date, gregorian: calendar)
+    }
+
+    static func dayID(for date: Date, gregorian calendar: Calendar) -> String {
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        func padded(_ value: Int?, _ width: Int) -> String {
+            let digits = String(value ?? 0)
+            return String(repeating: "0", count: max(0, width - digits.count)) + digits
+        }
+        return padded(parts.year, 4) + "-" + padded(parts.month, 2) + "-" + padded(parts.day, 2)
+    }
 }
 
-/// Buckets priced turns into local calendar days over a trailing window, then emits one
-/// `UsageDay` per day (zero-usage days included) -- shared by every provider's local
-/// usage-history scanner so they agree on day boundaries and the breakdown shape.
+/// Buckets priced turns into local calendar days over a window, then emits one `UsageDay` per
+/// day (zero-usage days included) -- shared by every provider's local usage-history scanner so
+/// they agree on day boundaries and the breakdown shape.
 struct UsageDayAccumulator {
     let cutoff: Date
     private let todayStart: Date
     private let calendar: Calendar
+    /// Gregorian, in `calendar`'s time zone: day keys use its digits (see `UsageDay.dayID`).
+    private let keyCalendar: Calendar
     private var buckets: [String: Bucket] = [:]
 
     /// The window covers `days` local days ending today; `cutoff` is the first day's start.
     init(days: Int, now: Date, calendar: Calendar) {
+        let todayStart = calendar.startOfDay(for: now)
+        self.init(cutoff: calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) ?? todayStart, lastDayStart: todayStart, calendar: calendar)
+    }
+
+    /// The window covers every local day from `start`'s through `end`'s, inclusive.
+    init(from start: Date, through end: Date, calendar: Calendar) {
+        self.init(cutoff: calendar.startOfDay(for: start), lastDayStart: calendar.startOfDay(for: end), calendar: calendar)
+    }
+
+    private init(cutoff: Date, lastDayStart: Date, calendar: Calendar) {
         self.calendar = calendar
-        todayStart = calendar.startOfDay(for: now)
-        cutoff = calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) ?? todayStart
+        self.cutoff = cutoff
+        todayStart = lastDayStart
+        var keyCalendar = Calendar(identifier: .gregorian)
+        keyCalendar.timeZone = calendar.timeZone
+        self.keyCalendar = keyCalendar
     }
 
     /// Adds one priced turn; turns before `cutoff` are ignored. Token counts are disjoint buckets.
@@ -155,7 +191,7 @@ struct UsageDayAccumulator {
     mutating func add(timestamp: Date, model: String, input: Int, cacheRead: Int, cacheWrite: Int, output: Int, costUSD: Double, approximate: Bool, observedAt: Date? = nil, durationMs: Double? = nil) {
         guard timestamp >= cutoff else { return }
         let dayStart = calendar.startOfDay(for: timestamp)
-        let key = Self.dayKey(dayStart)
+        let key = dayKey(dayStart)
         var bucket = buckets[key] ?? Bucket()
         bucket.input += input
         bucket.cacheRead += cacheRead
@@ -183,7 +219,7 @@ struct UsageDayAccumulator {
         var cursor = cutoff
         var previousCursor: Date?
         while cursor <= todayStart {
-            let key = Self.dayKey(cursor)
+            let key = dayKey(cursor)
             let bucket = buckets[key]
             let breakdown = (bucket.map { Array($0.byModel.values) } ?? [])
                 .sorted { $0.costUSD > $1.costUSD }
@@ -215,11 +251,5 @@ struct UsageDayAccumulator {
         var byModel: [String: ModelSpend] = [:]
     }
 
-    private static let dayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
-
-    private static func dayKey(_ dayStart: Date) -> String { dayFormatter.string(from: dayStart) }
+    private func dayKey(_ dayStart: Date) -> String { UsageDay.dayID(for: dayStart, gregorian: keyCalendar) }
 }

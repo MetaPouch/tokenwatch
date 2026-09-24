@@ -7,7 +7,17 @@ import Foundation
 /// list rates (`ModelPricing.listCostUSD`).
 public enum LocalUsageHistoryScanner {
     public static func dailyUsage(days: Int, now: Date = Date(), calendar: Calendar = .current, locations: LocalUsageLocations = .standard()) -> [SpendSource: [UsageDay]] {
-        let cutoff = UsageDayAccumulator(days: days, now: now, calendar: calendar).cutoff
+        scan(window: { UsageDayAccumulator(days: days, now: now, calendar: calendar) }, locations: locations)
+    }
+
+    /// Every local day from `start`'s through `end`'s -- the leaderboard's history backfill
+    /// (`UsageBackfill`). Same logs and pricing as the trailing window.
+    public static func dailyUsage(from start: Date, through end: Date, calendar: Calendar = .current, locations: LocalUsageLocations = .standard()) -> [SpendSource: [UsageDay]] {
+        scan(window: { UsageDayAccumulator(from: start, through: end, calendar: calendar) }, locations: locations)
+    }
+
+    private static func scan(window: () -> UsageDayAccumulator, locations: LocalUsageLocations) -> [SpendSource: [UsageDay]] {
+        let cutoff = window().cutoff
         var accumulators: [SpendSource: UsageDayAccumulator] = [:]
         for turn in LocalUsageLogs.turns(locations, modifiedSince: cutoff)
             where turn.source != .provider(.claude) && turn.source != .provider(.codex) {
@@ -15,7 +25,7 @@ public enum LocalUsageHistoryScanner {
                 model: turn.model, inputTokens: turn.input, cacheReadTokens: turn.cacheRead,
                 cacheWriteTokens: turn.cacheWrite, cacheWrite1hTokens: turn.cacheWrite1h, outputTokens: turn.output
             )
-            accumulators[turn.source, default: UsageDayAccumulator(days: days, now: now, calendar: calendar)].add(
+            accumulators[turn.source, default: window()].add(
                 timestamp: turn.timestamp, model: turn.model,
                 input: turn.input, cacheRead: turn.cacheRead, cacheWrite: turn.cacheWrite, output: turn.output,
                 costUSD: turn.costUSD ?? repriced.cost, approximate: turn.costUSD == nil && repriced.approximate,
