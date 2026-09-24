@@ -53,28 +53,22 @@ public enum SpendAggregator {
             relevantDays = days
         }
 
-        var merged: [String: (cost: Double, tokens: Int)] = [:]
+        var merged: [String: ModelSpend] = [:]
         for day in relevantDays {
             for entry in day.modelBreakdown {
-                var current = merged[entry.id] ?? (0, 0)
-                current.cost += entry.costUSD
-                current.tokens += entry.tokens
-                merged[entry.id] = current
+                merged[entry.id] = merged[entry.id].map { $0.adding(entry) } ?? entry
             }
         }
-        let totalCost = merged.values.reduce(0) { $0 + $1.cost }
+        let totalCost = merged.values.reduce(0) { $0 + $1.costUSD }
         guard totalCost > 0 else { return [] }
 
-        let ranked = merged.map { ModelSpend(id: $0.key, costUSD: $0.value.cost, tokens: $0.value.tokens) }
-            .sorted { $0.costUSD > $1.costUSD }
+        let ranked = merged.values.sorted { $0.costUSD > $1.costUSD }
         let maxNamedModels = 5
         let minShare = 0.05
         let named = ranked.prefix(maxNamedModels).filter { $0.costUSD / totalCost >= minShare }
         let rest = ranked.dropFirst(named.count)
         guard !rest.isEmpty else { return Array(named) }
-        let otherCost = rest.reduce(0) { $0 + $1.costUSD }
-        let otherTokens = rest.reduce(0) { $0 + $1.tokens }
-        return Array(named) + [ModelSpend(id: "Other", costUSD: otherCost, tokens: otherTokens)]
+        return Array(named) + [rest.reduce(ModelSpend.empty("Other")) { $0.adding($1, as: "Other") }]
     }
 
     private static func sum(for period: SpendPeriod, days: [UsageDay], calendar: Calendar, now: Date, value: (UsageDay) -> Double) -> Double {

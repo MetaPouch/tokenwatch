@@ -1,15 +1,41 @@
 import Foundation
 
-/// One model's share of a day's (or aggregated period's) spend, ranked for the hover breakdown.
+/// One model's share of a day's (or aggregated period's) usage, ranked for the hover breakdown.
+/// Token buckets are disjoint, like `UsageDay`'s: `inputTokens` excludes cache reads/writes.
 public struct ModelSpend: Sendable, Equatable, Identifiable {
     public let id: String
     public let costUSD: Double
-    public let tokens: Int
+    public let inputTokens: Int
+    public let cacheReadTokens: Int
+    public let cacheWriteTokens: Int
+    public let outputTokens: Int
+    /// True when any contributing turn used a model missing from `ModelPricing`'s table.
+    public let hasApproximateRate: Bool
 
-    public init(id: String, costUSD: Double, tokens: Int) {
+    public init(id: String, costUSD: Double, inputTokens: Int, cacheReadTokens: Int, cacheWriteTokens: Int, outputTokens: Int, hasApproximateRate: Bool = false) {
         self.id = id
         self.costUSD = costUSD
-        self.tokens = tokens
+        self.inputTokens = inputTokens
+        self.cacheReadTokens = cacheReadTokens
+        self.cacheWriteTokens = cacheWriteTokens
+        self.outputTokens = outputTokens
+        self.hasApproximateRate = hasApproximateRate
+    }
+
+    public var tokens: Int { inputTokens + cacheReadTokens + cacheWriteTokens + outputTokens }
+
+    /// Sums every bucket of `other` into this entry under `id`.
+    public func adding(_ other: ModelSpend, as id: String? = nil) -> ModelSpend {
+        ModelSpend(
+            id: id ?? self.id, costUSD: costUSD + other.costUSD,
+            inputTokens: inputTokens + other.inputTokens, cacheReadTokens: cacheReadTokens + other.cacheReadTokens,
+            cacheWriteTokens: cacheWriteTokens + other.cacheWriteTokens, outputTokens: outputTokens + other.outputTokens,
+            hasApproximateRate: hasApproximateRate || other.hasApproximateRate
+        )
+    }
+
+    static func empty(_ id: String) -> ModelSpend {
+        ModelSpend(id: id, costUSD: 0, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0)
     }
 }
 
@@ -147,10 +173,8 @@ struct UsageDayAccumulator {
             bucket.timedOutput += output
             bucket.timedDurationMs += durationMs
         }
-        var modelBucket = bucket.byModel[model] ?? (0, 0)
-        modelBucket.cost += costUSD
-        modelBucket.tokens += input + cacheRead + cacheWrite + output
-        bucket.byModel[model] = modelBucket
+        let turn = ModelSpend(id: model, costUSD: costUSD, inputTokens: input, cacheReadTokens: cacheRead, cacheWriteTokens: cacheWrite, outputTokens: output, hasApproximateRate: approximate)
+        bucket.byModel[model] = (bucket.byModel[model] ?? .empty(model)).adding(turn)
         buckets[key] = bucket
     }
 
@@ -161,8 +185,7 @@ struct UsageDayAccumulator {
         while cursor <= todayStart {
             let key = Self.dayKey(cursor)
             let bucket = buckets[key]
-            let breakdown = (bucket?.byModel ?? [:])
-                .map { ModelSpend(id: $0.key, costUSD: $0.value.cost, tokens: $0.value.tokens) }
+            let breakdown = (bucket.map { Array($0.byModel.values) } ?? [])
                 .sorted { $0.costUSD > $1.costUSD }
             days.append(UsageDay(
                 id: key, date: cursor,
@@ -189,7 +212,7 @@ struct UsageDayAccumulator {
         var latestUsageAt: Date?
         var timedOutput = 0
         var timedDurationMs = 0.0
-        var byModel: [String: (cost: Double, tokens: Int)] = [:]
+        var byModel: [String: ModelSpend] = [:]
     }
 
     private static let dayFormatter: DateFormatter = {

@@ -61,7 +61,7 @@ final class SpendAggregatorTests: XCTestCase {
 
     private func dayWithModels(offsetFromNow days: Int, models: [(name: String, cost: Double, tokens: Int)]) -> UsageDay {
         let date = calendar.date(byAdding: .day, value: days, to: now)!
-        let breakdown = models.map { ModelSpend(id: $0.name, costUSD: $0.cost, tokens: $0.tokens) }
+        let breakdown = models.map { ModelSpend(id: $0.name, costUSD: $0.cost, inputTokens: $0.tokens, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0) }
         let totalCost = models.reduce(0) { $0 + $1.cost }
         let totalTokens = models.reduce(0) { $0 + $1.tokens }
         return UsageDay(id: "\(days)", date: date, inputTokens: totalTokens, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0, estimatedCostUSD: totalCost, hasApproximateRate: false, modelBreakdown: breakdown)
@@ -98,5 +98,38 @@ final class SpendAggregatorTests: XCTestCase {
 
     func testModelBreakdownEmptyWhenNoActivity() {
         XCTAssertTrue(SpendAggregator.modelBreakdown(for: .today, days: [], calendar: calendar, now: now).isEmpty)
+    }
+
+    /// The leaderboard uploads per-model rows, so each model's disjoint buckets must add back up to
+    /// the day's own totals -- not just the combined token count the hover list shows.
+    func testAccumulatorPerModelBucketsSumToDayTotals() {
+        var accumulator = UsageDayAccumulator(days: 1, now: now, calendar: calendar)
+        accumulator.add(timestamp: now, model: "opus", input: 10, cacheRead: 200, cacheWrite: 30, output: 40, costUSD: 1.5, approximate: false)
+        accumulator.add(timestamp: now, model: "opus", input: 1, cacheRead: 2, cacheWrite: 3, output: 4, costUSD: 0.5, approximate: false)
+        accumulator.add(timestamp: now, model: "mystery", input: 7, cacheRead: 0, cacheWrite: 0, output: 9, costUSD: 0.1, approximate: true)
+        guard let day = accumulator.build().last else { return XCTFail("no day built") }
+
+        let opus = day.modelBreakdown.first { $0.id == "opus" }
+        XCTAssertEqual([opus?.inputTokens, opus?.cacheReadTokens, opus?.cacheWriteTokens, opus?.outputTokens], [11, 202, 33, 44])
+        XCTAssertEqual(opus?.hasApproximateRate, false)
+        XCTAssertEqual(day.modelBreakdown.first { $0.id == "mystery" }?.hasApproximateRate, true)
+        XCTAssertEqual(day.modelBreakdown.reduce(0) { $0 + $1.inputTokens }, day.inputTokens)
+        XCTAssertEqual(day.modelBreakdown.reduce(0) { $0 + $1.cacheReadTokens }, day.cacheReadTokens)
+        XCTAssertEqual(day.modelBreakdown.reduce(0) { $0 + $1.cacheWriteTokens }, day.cacheWriteTokens)
+        XCTAssertEqual(day.modelBreakdown.reduce(0) { $0 + $1.outputTokens }, day.outputTokens)
+        XCTAssertEqual(day.modelBreakdown.reduce(0) { $0 + $1.costUSD }, day.estimatedCostUSD, accuracy: 1e-9)
+    }
+
+    func testModelBreakdownMergeKeepsBucketsAndApproximateFlag() {
+        let date = calendar.startOfDay(for: now)
+        let spend = { (input: Int, output: Int, approximate: Bool) in
+            ModelSpend(id: "m", costUSD: 1, inputTokens: input, cacheReadTokens: 5, cacheWriteTokens: 0, outputTokens: output, hasApproximateRate: approximate)
+        }
+        let days = [
+            UsageDay(id: "a", date: date, inputTokens: 1, cacheReadTokens: 5, cacheWriteTokens: 0, outputTokens: 2, estimatedCostUSD: 1, hasApproximateRate: false, modelBreakdown: [spend(1, 2, false)]),
+            UsageDay(id: "b", date: date, inputTokens: 3, cacheReadTokens: 5, cacheWriteTokens: 0, outputTokens: 4, estimatedCostUSD: 1, hasApproximateRate: true, modelBreakdown: [spend(3, 4, true)]),
+        ]
+        let merged = SpendAggregator.modelBreakdown(for: .thirtyDays, days: days, calendar: calendar, now: now)
+        XCTAssertEqual(merged, [ModelSpend(id: "m", costUSD: 2, inputTokens: 4, cacheReadTokens: 10, cacheWriteTokens: 0, outputTokens: 6, hasApproximateRate: true)])
     }
 }
