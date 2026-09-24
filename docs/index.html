@@ -4,13 +4,13 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>TokenWatch: every AI limit, spend, and cache in your Mac's menu bar</title>
-<meta name="description" content="A free, open-source macOS menu-bar app that tracks usage limits, spend, and prompt-cache state across Claude, Codex, Cursor, Copilot, Gemini, OpenRouter and 7 more providers. Local only, zero telemetry." />
+<meta name="description" content="A free, open-source macOS menu-bar app that tracks usage limits, spend, and prompt-cache state across Claude, Codex, Cursor, Copilot, Gemini, OpenRouter and 7 more providers. Local by default, zero telemetry, with an opt-in leaderboard." />
 <meta name="theme-color" content="#0c0d0e" />
 <link rel="canonical" href="https://tokenwatch.fyi/" />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://tokenwatch.fyi/" />
 <meta property="og:title" content="TokenWatch: every AI limit, spend, and cache in your menu bar" />
-<meta property="og:description" content="Track usage limits, spend, and prompt-cache state across 13 AI providers from your Mac's menu bar. Free, open source, local only." />
+<meta property="og:description" content="Track usage limits, spend, and prompt-cache state across 13 AI providers from your Mac's menu bar. Free, open source, local by default." />
 <meta property="og:image" content="https://tokenwatch.fyi/og.png" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:image" content="https://tokenwatch.fyi/og.png" />
@@ -423,6 +423,7 @@
       <a class="navlink" href="#dashboard">Dashboard</a>
       <a class="navlink" href="#providers">Providers</a>
       <a class="navlink" href="#start">Get started</a>
+      <a class="navlink" href="#leaderboard">Leaderboard</a>
       <a class="navlink" href="#faq">FAQ</a>
       <a class="navlink" href="https://github.com/MetaPouch/tokenwatch">GitHub</a>
       <a class="btn-small" href="https://github.com/MetaPouch/tokenwatch/releases/latest">Download</a>
@@ -439,7 +440,8 @@
       <p class="lede">
         TokenWatch tracks usage limits, spend, and prompt-cache state for Claude, Codex, Cursor,
         Copilot, Gemini, OpenRouter, and seven more, all from your menu bar. It reads the sign-ins
-        you already have. No account to create, and nothing leaves your Mac.
+        you already have. No account to create, and nothing leaves your Mac unless you join the
+        optional leaderboard.
       </p>
       <div class="cta-row">
         <a class="btn btn-primary" href="https://github.com/MetaPouch/tokenwatch/releases/latest"><svg><use href="#i-apple"/></svg> Download for macOS</a>
@@ -689,7 +691,7 @@
         <h2>See what you spent, and what's about to cost more.</h2>
         <p class="section-lede" style="margin-bottom:32px">
           The Usage tab adds up spend from your local session logs. You don't need an admin API
-          key and nothing is uploaded.
+          key and nothing is uploaded unless you join the <a href="#leaderboard">leaderboard</a>.
         </p>
         <ul class="feature-list">
           <li><span class="fi">&#9680;</span><div><h3>Total Spend</h3><p>A donut in each provider's brand color, covering everything on this Mac: Claude Code, Codex, OpenCode, the Copilot, Grok, Antigravity and Devin CLIs, fx, Muse Code, every provider you call through omp or pi, and your Cursor account. Show it as <i>Cost</i>, <i>Cost per MTok</i>, or <i>Tokens</i> for Today, Yesterday, or 30 Days. Hover the center for the exact figure, or hover a provider to see what each model cost.</p></div></li>
@@ -872,9 +874,40 @@
     <div class="callout">
       <div>
         <h3>Updating</h3>
-        <p>TokenWatch doesn't check for updates in the background, so nothing phones home. With Homebrew, run the upgrade command. If you installed the DMG, download the <a href="https://github.com/MetaPouch/tokenwatch/releases/latest">latest release</a> and drag it over the old copy.</p>
+        <p>TokenWatch doesn't check for updates in the background. With Homebrew, run the upgrade command. If you installed the DMG, download the <a href="https://github.com/MetaPouch/tokenwatch/releases/latest">latest release</a> and drag it over the old copy.</p>
       </div>
       <span class="snippet">brew update &amp;&amp; brew upgrade --cask tokenwatch</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= LEADERBOARD ================= -->
+<section class="section" id="leaderboard">
+  <div class="wrap">
+    <p class="eyebrow">Leaderboard &middot; optional</p>
+    <h2>See how your token burn compares.</h2>
+    <p class="section-lede">
+      <a href="https://tokenwat.ch">tokenwat.ch</a> ranks daily tokens and API-equivalent spend
+      across TokenWatch users. It's off until you join in Settings, and TokenWatch makes no request
+      to it before then. Pause or leave any time.
+    </p>
+    <div class="steps">
+      <div class="step">
+        <h3>Join with GitHub</h3>
+        <p>Settings &rarr; Leaderboard &rarr; <b>Join with GitHub</b>. This Mac gets its own token, kept in the macOS Keychain. Your GitHub token never reaches the app.</p>
+      </div>
+      <div class="step">
+        <h3>What's shared</h3>
+        <p>Per day, provider and model: token counts and the estimated cost the Usage tab shows. Never prompts, code, project names, file paths, or keys. <b>Preview Upload</b> shows the exact JSON.</p>
+      </div>
+      <div class="step">
+        <h3>What's public</h3>
+        <p>Everything shared appears on your profile at tokenwat.ch/@you and on the boards. You can hide individual stats on <a href="https://tokenwat.ch/account">tokenwat.ch/account</a>.</p>
+      </div>
+      <div class="step">
+        <h3>Pause or leave</h3>
+        <p><b>Pause Syncing</b> stops all uploads. <b>Sign Out</b> revokes this Mac, and <a href="https://tokenwat.ch/account">tokenwat.ch/account</a> deletes your account and everything uploaded.</p>
+      </div>
     </div>
   </div>
 </section>
@@ -884,10 +917,11 @@
   <div class="wrap split">
     <div>
       <p class="eyebrow">Privacy</p>
-      <h2>Your usage data stays on your Mac.</h2>
+      <h2>Your usage data stays on your Mac unless you share it.</h2>
       <p class="section-lede" style="margin-bottom:24px">
-        No TokenWatch server, no telemetry, no analytics SDK, and no account. It makes two kinds
-        of network requests, and nothing else.
+        No telemetry, no analytics SDK, and no account needed. Out of the box it makes two kinds of
+        network requests, and nothing else. A third, to tokenwat.ch, starts only if you join the
+        <a href="#leaderboard">leaderboard</a>.
       </p>
       <ul class="feature-list">
         <li><span class="fi"><svg class="h-ic"><use href="#i-key"/></svg></span><div><h3>Keys in the Keychain</h3><p>API keys you paste are stored in the macOS Keychain, not in a config file.</p></div></li>
@@ -900,7 +934,8 @@
       <div class="flow">
         <div class="flow-row"><div class="node">Your credential<small>per provider</small></div><div class="arrow">&rarr;</div><div class="node">That provider's own API<small>HTTPS, e.g. api.anthropic.com</small></div></div>
         <div class="flow-row"><div class="node">Price-list request<small>~hourly, optional</small></div><div class="arrow">&rarr;</div><div class="node">Public GitHub-hosted price list<small>no credentials, no usage data</small></div></div>
-        <div class="flow-row never"><div class="node">Your usage, keys, or projects</div><div class="arrow">&times;</div><div class="node">Anyone else</div></div>
+        <div class="flow-row"><div class="node">Daily token counts &amp; cost<small>only after you join the leaderboard</small></div><div class="arrow">&rarr;</div><div class="node">api.tokenwat.ch<small>per day, provider and model</small></div></div>
+        <div class="flow-row never"><div class="node">Your prompts, code, keys, or projects</div><div class="arrow">&times;</div><div class="node">Anyone else</div></div>
       </div>
     </div>
   </div>
@@ -916,9 +951,9 @@
       <details><summary>Are the spend figures what I'll actually be billed?</summary><p>They're estimates. TokenWatch prices your local session tokens at each model's API list rate. If you're on a subscription like Claude Max, you aren't billed per token, so treat the numbers as "what this would cost on the API." It's still a good way to see which models and projects use the most.</p></details>
       <details><summary>Why does it need macOS 26 Tahoe?</summary><p>The popover is built on Liquid Glass, which requires the macOS 26 SDK.</p></details>
       <details><summary>Can I see more than one Claude or Codex account?</summary><p>Yes. If you have a second profile on this Mac (a separate <code>CLAUDE_CONFIG_DIR</code> or <code>CODEX_HOME</code>), it shows up on the Limits tab as its own card, and spend history counts every account's local logs. TokenWatch only reads these accounts. It never changes which account your CLI uses.</p></details>
-      <details><summary>Why doesn't it update itself?</summary><p>An auto-updater would contact a server in the background, and TokenWatch doesn't do that. The Homebrew cask also sets <code>auto_updates false</code>. To update, run <code>brew upgrade --cask tokenwatch</code> or download the latest DMG.</p></details>
-      <details><summary>Does it read my prompts or code?</summary><p>It reads your local session log files, but only uses token counts, timestamps, model names, and project folder names from them. Nothing from those logs is ever sent anywhere.</p></details>
-      <details><summary>How do I uninstall it completely?</summary><p>Run <code>brew uninstall --zap --cask tokenwatch</code>. This also removes its settings, caches, and preferences. For a DMG install, drag the app to the Trash and delete <code>~/Library/Application Support/TokenWatch</code>.</p></details>
+      <details><summary>Why doesn't it update itself?</summary><p>An auto-updater would check a server for new versions in the background, and TokenWatch doesn't do that. The Homebrew cask also sets <code>auto_updates false</code>. To update, run <code>brew upgrade --cask tokenwatch</code> or download the latest DMG.</p></details>
+      <details><summary>Does it read my prompts or code?</summary><p>It reads your local session log files, but only uses token counts, timestamps, model names, and project folder names from them. Prompts, code, project names, and file paths are never sent anywhere. If you join the <a href="#leaderboard">leaderboard</a>, it uploads daily token counts and estimated cost per provider and model, and nothing else.</p></details>
+      <details><summary>How do I uninstall it completely?</summary><p>If you joined the leaderboard, click <b>Sign Out</b> in Settings first so this Mac is revoked and its token removed from the Keychain. Then run <code>brew uninstall --zap --cask tokenwatch</code>. This also removes its settings, caches, and preferences. For a DMG install, drag the app to the Trash and delete <code>~/Library/Application Support/TokenWatch</code>.</p></details>
       <details><summary>My provider isn't listed. Can I add it?</summary><p>Yes. Each provider is one self-contained Swift file plus a test fixture. <a href="https://github.com/MetaPouch/tokenwatch/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> explains how to add one, or you can <a href="https://github.com/MetaPouch/tokenwatch/issues">open an issue</a> to request it.</p></details>
     </div>
   </div>

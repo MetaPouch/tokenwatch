@@ -15,16 +15,46 @@ each provider's doc comment under `Sources/TokenWatchCore/Providers/`.
   issued it.
 - Never writes to, modifies, or deletes another app's credential file or Keychain item — every
   read is read-only.
-- Never phones home. There is no telemetry, no analytics SDK, no crash reporter, no update-check
-  ping, no server TokenWatch's authors operate. You can verify this directly: every outbound host
-  is a literal string in the relevant `*UsageClient.swift` file (per-provider) or
-  `PricingRefreshService.swift` (the one exception below), and `git grep -n 'URL(string:'` finds
-  all of them.
-- The one non-credential network call: `PricingRefreshService` does a plain, unauthenticated GET
-  of a public GitHub-hosted model-price list roughly hourly, to keep local cost estimates current.
+- Doesn't phone home. There is no telemetry, no analytics SDK, no crash reporter and no
+  update-check ping, and out of the box it contacts no server TokenWatch's authors operate. You
+  can verify this directly: every outbound host is a literal string in the relevant provider file
+  (`*UsageClient.swift`, and `CursorUsageHistory.swift`), in `PricingRefreshService.swift` or in
+  `LeaderboardAPI.swift` (the two exceptions below), and `git grep -n 'URL(string:'` finds all of
+  them.
+- Exception 1, the price list: `PricingRefreshService` does a plain, unauthenticated GET of a
+  public GitHub-hosted model-price list roughly hourly, to keep local cost estimates current.
   This request carries no credential, no usage data, and no identifying information -- it's
   indistinguishable from any other visitor fetching that public file. A fetch failure falls
   straight through to a bundled static table, so it's never a hard dependency.
+- Exception 2, the opt-in leaderboard: `tokenwat.ch` and `api.tokenwat.ch` are contacted **only**
+  after you join the leaderboard in Settings → Leaderboard, and while you pause syncing there
+  nothing is sent unless you click Sign Out. Until you join, nothing reads the leaderboard's
+  Keychain item either. Both hosts are named only in `LeaderboardAPI.swift`; a DEBUG build can
+  point them at local servers with `TOKENWATCH_WEB_URL` and `TOKENWATCH_API_URL`, which release
+  builds ignore. What's sent:
+  - Joining: the sign-in sheet opens `https://tokenwat.ch/connect` with `challenge` (PKCE S256),
+    `state`, `device_id` (a random UUID made on the first sign-in and kept in
+    `~/Library/Application Support/TokenWatch/leaderboard.json`; no hardware identifier),
+    `device_name` (this Mac's name) and `client_version`. You sign in to GitHub on tokenwat.ch;
+    no GitHub token reaches the app. The app then exchanges the one-time code at
+    `POST /v1/devices/token` with `code`, `code_verifier`, `device_id` and `time_zone`.
+  - Syncing: `PUT /v1/usage` with `schemaVersion`, `client` (`app`, `version`), `deviceId`,
+    `timeZone`, `mode` (`incremental` or `backfill`) and `rows`, one per local day, source and
+    model: `date`, `source`, `model`, `input`, `cacheRead`, `cacheWrite`, `output`, `costUSD` and
+    `approximate`. Nothing else from your logs: no prompts, code, project or folder names, file
+    paths or API keys. This version sends no plan or quota data. Settings → Leaderboard →
+    Preview Upload shows the exact JSON of the next upload.
+  - `GET /v1/devices` as an hourly check-in when there's no recent usage to send, and
+    `DELETE /v1/devices/current` when you sign out.
+  - Settings shows your GitHub avatar from the URL tokenwat.ch returns for it.
+  - With the Cursor provider on, the history upload asks Cursor's own usage API (the same
+    request the Usage tab makes for its 30 days) for older Cursor history.
+
+  The device token is stored in the Keychain under the service `dev.tokenwatch.credentials`,
+  account `leaderboard.deviceToken` -- never in `config.json`, `UserDefaults` or logs -- and is
+  sent only to `api.tokenwat.ch`. To leave, Settings → Leaderboard → Sign Out revokes this Mac on
+  the server and deletes the token; Delete Account… opens `tokenwat.ch/account`, where you can
+  delete your account and everything uploaded.
 - API keys you enter yourself are stored in the macOS Keychain under the service
   `dev.tokenwatch.credentials`, scoped to TokenWatch's own code-signing identity. Cached derived
   sessions (currently: Cursor's Safari-cookie fallback) live under `dev.tokenwatch.cookiecache`,
@@ -48,7 +78,7 @@ credit reporters in the fix's release notes unless you'd rather stay anonymous.
 
 - Zero external Swift package dependencies (`Package.swift` has no `dependencies:` entries) — the
   entire dependency-vulnerability surface is Apple's own frameworks (Foundation, AppKit, SwiftUI,
-  Security, SQLite3).
+  Security, SQLite3, and for the leaderboard CryptoKit and AuthenticationServices).
 - Every subprocess invocation (`Process`, in `BoundedSubprocess.swift` and
   `CodexAppServerClient.swift`) uses an argument array against a resolved executable path — never
   a shell string, so there's no command-injection surface from provider CLI output or PATH

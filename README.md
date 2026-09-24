@@ -4,7 +4,7 @@
 
 A native macOS menu-bar app that shows session/weekly usage, limits, credit balances, and spend
 for the AI subscriptions, routing providers, and API keys you actually use — in one place, with
-nothing relayed off your device.
+nothing relayed off your device unless you join the optional [leaderboard](#leaderboard-optional).
 
 ## Supported providers
 
@@ -25,7 +25,8 @@ nothing relayed off your device.
 
 Quota summaries use a single account per provider on the menu bar and the Limits tab. The Limits
 tab additionally discovers and shows every local Claude/Codex login it can find, not just the default one.
-Everything runs locally: no telemetry, no data leaves your device.
+Everything runs locally: no telemetry, and no usage data leaves your device unless you join the
+optional [leaderboard](#leaderboard-optional).
 
 ## Menu bar behavior
 
@@ -312,7 +313,41 @@ the Carbon Event Manager -- no external dependency and no Input Monitoring permi
   silent baseline, then only a new crossing or a worsening trigger fires again. macOS asks for
   notification permission the first time you turn one on; if you decline, Settings shows a
   warning with a link to System Settings.
+- **Leaderboard** -- off by default: Join with GitHub, then status, Preview Upload, Pause Syncing,
+  Resync All History, Sign Out and Delete Account. See [Leaderboard (optional)](#leaderboard-optional).
 - **Refresh interval**, **Providers** -- unchanged.
+
+## Leaderboard (optional)
+
+[tokenwat.ch](https://tokenwat.ch) ranks daily token usage and API-equivalent spend across
+TokenWatch users. It's off by default, and until you join nothing about it runs: no request to
+tokenwat.ch, no Keychain read, and no prompt or banner anywhere in the app.
+
+- **Join** -- Settings → Leaderboard → **Join with GitHub**. tokenwat.ch's consent page opens in
+  a sign-in sheet (`ASWebAuthenticationSession`, reusing your browser's GitHub session). Approve,
+  and this Mac gets its own device token, stored in the Keychain under `dev.tokenwatch.credentials`
+  / `leaderboard.deviceToken`. GitHub's own token never reaches the app.
+- **What's uploaded** -- per local day, source (`claude`, `codex`, ..., `service.devin`, `other`)
+  and model: input, cache-read, cache-write and output tokens, the estimated cost, and whether
+  that cost used a fallback rate. These are the Usage tab's own numbers: first the 30 days it
+  shows, then every older day the same local logs still hold, newest month first; after that,
+  changes to today and the two days before, at most every 15 minutes (the server sets the pace),
+  plus an hourly check-in. **Preview Upload** shows the exact JSON of the next upload. Never
+  uploaded: prompts, code, project or folder names, file paths, API keys. This version sends no
+  plan or quota data. The full field list is in [SECURITY.md](SECURITY.md).
+- **What's public** -- everything uploaded, on your profile at `tokenwat.ch/@<GitHub login>` and
+  on the boards. On [tokenwat.ch/account](https://tokenwat.ch/account) you can hide individual
+  stats (tokens, cost, providers, models, ...) from your profile and the boards that rank on them.
+- **Pause** -- **Pause Syncing** stops all uploads and check-ins until you resume. Pausing on
+  tokenwat.ch instead keeps the app sending while the server stores nothing; Settings then says
+  "Paused on tokenwat.ch".
+- **Leave** -- **Sign Out** revokes this Mac on the server and deletes its token; what you
+  uploaded stays on your profile until you delete it. **Delete Account…** opens
+  tokenwat.ch/account, where you can delete your account and everything uploaded.
+
+If the server rejects this Mac's token, TokenWatch signs out locally and says "Disconnected, sign
+in again". If it stops accepting this version's uploads, syncing stops with "Update TokenWatch to
+keep syncing".
 
 ## Build & run
 
@@ -329,23 +364,36 @@ Configuration lives at `~/Library/Application Support/TokenWatch/config.json`; A
 stored in the macOS Keychain under the service `dev.tokenwatch.credentials`, and cached derived
 sessions (e.g. Cursor's Safari-cookie fallback) under `dev.tokenwatch.cookiecache`.
 
+To try the leaderboard against a local stack (tokenwatch-cloud's web app on :3000 and API on
+:8787), a DEBUG build reads two overrides; release builds ignore them:
+
+```sh
+TOKENWATCH_WEB_URL=http://localhost:3000 TOKENWATCH_API_URL=http://localhost:8787 swift run TokenWatch
+```
+
 ## Tests
 
 ```sh
 swift test
 ```
 
-Each provider has a mapper fixture test: sample JSON in, expected metric lines out.
+Each provider has a mapper fixture test: sample JSON in, expected metric lines out. The
+leaderboard's payload and sign-in tests check against the server's own contract:
+`Tests/TokenWatchCoreTests/Contracts/` is a copy of tokenwatch-cloud's `packages/contracts` build
+output (`pnpm --filter @tokenwatch/contracts build`, then copy its `schema/` and `fixtures/`).
 
 ## Privacy & security
 
 Every credential TokenWatch reads goes to that same provider's own official usage API over
-HTTPS, and nowhere else. The one exception is the optional pricing refresh
-(`PricingRefreshService`): a plain, unauthenticated GET of a public GitHub-hosted price list,
-roughly hourly, carrying no usage data or credentials -- it only ever sends a request for the
-file, nothing about you or your usage. Notifications use Apple's local `UNUserNotificationCenter`
-directly -- nothing about a quota alert leaves your Mac. No telemetry, no analytics, no server we
-operate. Full detail on what's read, why, and how to report a security issue: [SECURITY.md](SECURITY.md).
+HTTPS, and nowhere else. Beyond those, it makes two kinds of request. The optional pricing
+refresh (`PricingRefreshService`) is a plain, unauthenticated GET of a public GitHub-hosted price
+list, roughly hourly, carrying no usage data or credentials -- it only ever sends a request for
+the file, nothing about you or your usage. And only if you join the
+[leaderboard](#leaderboard-optional), it sends daily token counts and estimated cost per
+provider and model to `api.tokenwat.ch`. Notifications use Apple's local
+`UNUserNotificationCenter` directly -- nothing about a quota alert leaves your Mac. No telemetry
+or analytics. Nothing leaves your Mac unless you join the leaderboard. Full detail on what's
+read, what's sent, why, and how to report a security issue: [SECURITY.md](SECURITY.md).
 
 ## Contributing
 
@@ -358,9 +406,10 @@ usage metric(s) per provider, plus read-only multi-account visibility for Claude
 local cost history for Claude and Codex (see Usage tab, above) -- not every edge case (account *switching*,
 team budgets, enterprise hosts) that larger, multi-year usage trackers eventually grow. See
 inline doc comments on each provider for the specific scope cuts. Zero external SwiftPM
-dependencies and zero telemetry are firm project principles -- an in-app auto-updater and any
-analytics SDK are deliberately not implemented, even though comparable menu-bar usage trackers
-ship both; see [DISTRIBUTION.md](DISTRIBUTION.md) for how updates work instead.
+dependencies and zero telemetry are firm project principles -- the leaderboard is opt-in and
+uploads only what Preview Upload shows, and an in-app auto-updater and any analytics SDK are
+deliberately not implemented, even though comparable menu-bar usage trackers ship both; see
+[DISTRIBUTION.md](DISTRIBUTION.md) for how updates work instead.
 
 Distributed as a signed, notarized DMG and a Homebrew cask (see
 [DISTRIBUTION.md](DISTRIBUTION.md)); in-app auto-update is not implemented yet, and the cask sets
