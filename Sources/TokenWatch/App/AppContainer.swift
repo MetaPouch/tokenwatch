@@ -31,6 +31,7 @@ public final class AppContainer {
 
     private var notificationCancellable: AnyCancellable?
     private var spendRefreshCancellable: AnyCancellable?
+    private var leaderboardCancellable: AnyCancellable?
 
     public init() {
         let runtimes: [any ProviderRuntime] = Self.buildRuntimes()
@@ -50,7 +51,10 @@ public final class AppContainer {
         self.pricingRefreshService = PricingRefreshService()
         self.apiKeyManagers = Self.buildAPIKeyManagers()
         self.spendHistoryStore = SpendHistoryStore(includeCursor: { enablementStore.isEnabled(.cursor) })
-        self.leaderboardService = LeaderboardService(clientVersion: AppVersion.leaderboardClientVersion)
+        self.leaderboardService = LeaderboardService(
+            clientVersion: AppVersion.leaderboardClientVersion,
+            environment: LeaderboardService.Environment(includeCursorHistory: { enablementStore.isEnabled(.cursor) })
+        )
 
         let notificationService = self.notificationService
         notificationCancellable = dataStore.$snapshots
@@ -66,6 +70,16 @@ public final class AppContainer {
             .filter { !$0 }
             .receive(on: RunLoop.main)
             .sink { _ in spendHistoryStore.reload() }
+
+        // The leaderboard syncs what the history store already scanned -- after filesystem
+        // events and provider refreshes alike -- and never scans on its own for it.
+        let leaderboardService = self.leaderboardService
+        leaderboardCancellable = spendHistoryStore.$daysBySource
+            .combineLatest(spendHistoryStore.$isLoading)
+            .filter { !$0.1 }
+            .map(\.0)
+            .receive(on: RunLoop.main)
+            .sink { days in leaderboardService.usageDidChange(days) }
     }
 
     /// Every registered provider runtime, in menu display order. Real providers are appended
@@ -104,5 +118,6 @@ public final class AppContainer {
         spendHistoryStore.startWatching()
         refreshScheduler.start()
         Task { await pricingRefreshService.start() }
+        leaderboardService.start()
     }
 }

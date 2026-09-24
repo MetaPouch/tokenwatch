@@ -186,10 +186,17 @@ final class StubURLProtocol: URLProtocol {
 final class MemoryTokenStore: LeaderboardTokenStore, @unchecked Sendable {
     private let lock = NSLock()
     private var value: String?
+    /// How often the token was read: zero means the Keychain was never touched.
+    private(set) var reads = 0
 
     init(_ value: String? = nil) { self.value = value }
 
-    func token() -> String? { lock.withLock { value } }
+    func token() -> String? {
+        lock.withLock {
+            reads += 1
+            return value
+        }
+    }
     func setToken(_ token: String) throws { lock.withLock { value = token } }
     func deleteToken() throws { lock.withLock { value = nil } }
 }
