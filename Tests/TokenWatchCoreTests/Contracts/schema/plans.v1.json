@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "deviceId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Client-generated UUID in lowercase"
+    },
+    "snapshots": {
+      "minItems": 1,
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "claude",
+              "codex",
+              "openai",
+              "gemini",
+              "antigravity",
+              "cursor",
+              "copilot",
+              "openrouter",
+              "zai",
+              "kimi",
+              "amp",
+              "grok",
+              "opencode"
+            ],
+            "description": "ProviderID"
+          },
+          "plan": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Plan tier as the provider reports it, e.g. max (values settled by MET-107)"
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "description": "When the client read these numbers"
+          },
+          "windows": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "weekly",
+                    "session"
+                  ]
+                },
+                "usedPercent": {
+                  "type": "number",
+                  "description": "Share of the window's quota used; the server clamps it to [0, 100]"
+                },
+                "resetsAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "description": "When the window resets; also identifies the window"
+                }
+              },
+              "required": [
+                "kind",
+                "usedPercent",
+                "resetsAt"
+              ],
+              "additionalProperties": false
+            },
+            "description": "At most one window per kind"
+          }
+        },
+        "required": [
+          "provider",
+          "plan",
+          "observedAt",
+          "windows"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "deviceId",
+    "snapshots"
+  ],
+  "additionalProperties": false,
+  "title": "PUT /v1/plans request, v1",
+  "description": "Plan tier and quota-window snapshots. The server also rejects snapshots observed more than 10 minutes in the future or more than 8 days in the past."
+}

@@ -1,0 +1,334 @@
+{
+  "now": "2026-09-24T12:00:00Z",
+  "requests": [
+    {
+      "file": "usage.v1.valid.incremental.json",
+      "schema": "usage.v1",
+      "expect": {
+        "status": "ok",
+        "accepted": 4,
+        "rejected": []
+      }
+    },
+    {
+      "file": "usage.v1.valid.backfill.json",
+      "schema": "usage.v1",
+      "expect": {
+        "status": "ok",
+        "accepted": 3,
+        "rejected": []
+      }
+    },
+    {
+      "file": "usage.v1.invalid.unsupported-schema-version.json",
+      "schema": "usage.v1",
+      "expect": {
+        "status": "unsupported_schema_version"
+      }
+    },
+    {
+      "file": "usage.v1.invalid.uppercase-device-id.json",
+      "schema": "usage.v1",
+      "expect": {
+        "status": "invalid_request"
+      }
+    },
+    {
+      "file": "usage.v1.invalid.unknown-mode.json",
+      "schema": "usage.v1",
+      "expect": {
+        "status": "invalid_request"
+      }
+    },
+    {
+      "file": "usage.v1.invalid.no-rows.json",
+      "schema": "usage.v1",
+      "expect": {
+        "status": "invalid_request"
+      }
+    },
+    {
+      "file": "usage.v1.invalid.missing-model.json",
+      "schema": "usage.v1",
+      "expect": {
+        "status": "ok",
+        "accepted": 1,
+        "rejected": [
+          {
+            "index": 1,
+            "reason": "invalid_row"
+          }
+        ]
+      }
+    },
+    {
+      "file": "usage.v1.invalid.impossible-date.json",
+      "schema": "usage.v1",
+      "expect": {
+        "status": "ok",
+        "accepted": 1,
+        "rejected": [
+          {
+            "index": 1,
+            "reason": "invalid_date"
+          }
+        ]
+      }
+    },
+    {
+      "file": "usage.v1.invalid.date-before-2023.json",
+      "passesJsonSchema": true,
+      "schema": "usage.v1",
+      "expect": {
+        "status": "ok",
+        "accepted": 1,
+        "rejected": [
+          {
+            "index": 1,
+            "reason": "date_out_of_range"
+          }
+        ]
+      }
+    },
+    {
+      "file": "usage.v1.invalid.date-in-future.json",
+      "passesJsonSchema": true,
+      "schema": "usage.v1",
+      "expect": {
+        "status": "ok",
+        "accepted": 1,
+        "rejected": [
+          {
+            "index": 1,
+            "reason": "date_out_of_range"
+          }
+        ]
+      }
+    },
+    {
+      "file": "usage.v1.invalid.unknown-source.json",
+      "schema": "usage.v1",
+      "expect": {
+        "status": "ok",
+        "accepted": 1,
+        "rejected": [
+          {
+            "index": 1,
+            "reason": "unknown_source"
+          }
+        ]
+      }
+    },
+    {
+      "file": "usage.v1.invalid.negative-tokens.json",
+      "schema": "usage.v1",
+      "expect": {
+        "status": "ok",
+        "accepted": 1,
+        "rejected": [
+          {
+            "index": 1,
+            "reason": "invalid_tokens"
+          }
+        ]
+      }
+    },
+    {
+      "file": "usage.v1.invalid.fractional-tokens.json",
+      "schema": "usage.v1",
+      "expect": {
+        "status": "ok",
+        "accepted": 1,
+        "rejected": [
+          {
+            "index": 1,
+            "reason": "invalid_tokens"
+          }
+        ]
+      }
+    },
+    {
+      "file": "usage.v1.invalid.cost-over-limit.json",
+      "schema": "usage.v1",
+      "expect": {
+        "status": "ok",
+        "accepted": 1,
+        "rejected": [
+          {
+            "index": 1,
+            "reason": "invalid_cost"
+          }
+        ]
+      }
+    },
+    {
+      "file": "usage.v1.invalid.duplicate-row.json",
+      "passesJsonSchema": true,
+      "schema": "usage.v1",
+      "expect": {
+        "status": "ok",
+        "accepted": 1,
+        "rejected": [
+          {
+            "index": 1,
+            "reason": "duplicate_row"
+          }
+        ]
+      }
+    },
+    {
+      "file": "plans.v1.valid.snapshots.json",
+      "schema": "plans.v1",
+      "expect": {
+        "status": "ok",
+        "accepted": 2,
+        "rejected": []
+      }
+    },
+    {
+      "file": "plans.v1.invalid.unsupported-schema-version.json",
+      "schema": "plans.v1",
+      "expect": {
+        "status": "unsupported_schema_version"
+      }
+    },
+    {
+      "file": "plans.v1.invalid.missing-device-id.json",
+      "schema": "plans.v1",
+      "expect": {
+        "status": "invalid_request"
+      }
+    },
+    {
+      "file": "plans.v1.invalid.unknown-provider.json",
+      "schema": "plans.v1",
+      "expect": {
+        "status": "ok",
+        "accepted": 1,
+        "rejected": [
+          {
+            "index": 1,
+            "reason": "unknown_provider"
+          }
+        ]
+      }
+    },
+    {
+      "file": "plans.v1.invalid.duplicate-window-kind.json",
+      "passesJsonSchema": true,
+      "schema": "plans.v1",
+      "expect": {
+        "status": "ok",
+        "accepted": 1,
+        "rejected": [
+          {
+            "index": 1,
+            "reason": "invalid_snapshot"
+          }
+        ]
+      }
+    },
+    {
+      "file": "plans.v1.invalid.missing-reset-time.json",
+      "schema": "plans.v1",
+      "expect": {
+        "status": "ok",
+        "accepted": 1,
+        "rejected": [
+          {
+            "index": 1,
+            "reason": "invalid_snapshot"
+          }
+        ]
+      }
+    },
+    {
+      "file": "plans.v1.invalid.observed-in-future.json",
+      "passesJsonSchema": true,
+      "schema": "plans.v1",
+      "expect": {
+        "status": "ok",
+        "accepted": 1,
+        "rejected": [
+          {
+            "index": 1,
+            "reason": "observed_at_out_of_range"
+          }
+        ]
+      }
+    },
+    {
+      "file": "plans.v1.invalid.observed-too-long-ago.json",
+      "passesJsonSchema": true,
+      "schema": "plans.v1",
+      "expect": {
+        "status": "ok",
+        "accepted": 1,
+        "rejected": [
+          {
+            "index": 1,
+            "reason": "observed_at_out_of_range"
+          }
+        ]
+      }
+    },
+    {
+      "file": "device-token.v1.valid.json",
+      "schema": "device-token.v1",
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "file": "device-token.v1.invalid.short-verifier.json",
+      "schema": "device-token.v1",
+      "expect": {
+        "status": "invalid_request"
+      }
+    },
+    {
+      "file": "device-token.v1.invalid.uppercase-device-id.json",
+      "schema": "device-token.v1",
+      "expect": {
+        "status": "invalid_request"
+      }
+    },
+    {
+      "file": "device-token.v1.invalid.missing-code.json",
+      "schema": "device-token.v1",
+      "expect": {
+        "status": "invalid_request"
+      }
+    }
+  ],
+  "responses": [
+    {
+      "file": "usage-response.v1.valid.partial.json",
+      "schema": "usage-response.v1"
+    },
+    {
+      "file": "plans-response.v1.valid.accepted.json",
+      "schema": "plans-response.v1"
+    },
+    {
+      "file": "error.v1.valid.unsupported-schema-version.json",
+      "schema": "error.v1"
+    },
+    {
+      "file": "device-token-response.v1.valid.json",
+      "schema": "device-token-response.v1"
+    },
+    {
+      "file": "devices-response.v1.valid.json",
+      "schema": "devices-response.v1"
+    },
+    {
+      "file": "error.v1.valid.invalid-grant.json",
+      "schema": "error.v1"
+    },
+    {
+      "file": "error.v1.valid.device-revoked.json",
+      "schema": "error.v1"
+    }
+  ]
+}

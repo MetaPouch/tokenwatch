@@ -1,4 +1,5 @@
 import Foundation
+import TokenWatchCore
 
 /// The app's own version, for display in the UI (dashboard header, Settings). Reads
 /// `CFBundleShortVersionString` from the running bundle's `Info.plist` -- set by
@@ -10,5 +11,12 @@ enum AppVersion {
             return "dev"
         }
         return version
+    }
+
+    /// `client.version` for the leaderboard API, which needs a numeric version: a dev build
+    /// reports `0.0.0-dev`.
+    static var leaderboardClientVersion: String {
+        let version = displayString
+        return LeaderboardAuth.isValidClientVersion(version) ? version : "0.0.0-dev"
     }
 }

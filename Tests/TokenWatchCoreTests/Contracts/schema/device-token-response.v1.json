@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "token": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opaque bearer token for this device; returned once, keep it in the Keychain"
+    },
+    "login": {
+      "type": "string",
+      "description": "GitHub login"
+    },
+    "avatarUrl": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uri"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "GitHub avatar"
+    },
+    "profileUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "Public profile, https://tokenwat.ch/@<login>"
+    }
+  },
+  "required": [
+    "token",
+    "login",
+    "avatarUrl",
+    "profileUrl"
+  ],
+  "additionalProperties": false,
+  "title": "POST /v1/devices/token 200 response, v1"
+}

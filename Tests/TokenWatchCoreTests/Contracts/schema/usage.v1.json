@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "client": {
+      "type": "object",
+      "properties": {
+        "app": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$",
+          "description": "Client identifier, e.g. tokenwatch-macos or tokenwatch-cli"
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^\\d+(\\.\\d+){0,3}([-+][0-9A-Za-z.-]+)?$",
+          "description": "Client version, e.g. 1.9.0"
+        }
+      },
+      "required": [
+        "app",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "deviceId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Client-generated UUID in lowercase"
+    },
+    "timeZone": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[A-Za-z][A-Za-z0-9_+-]*(\\/[A-Za-z0-9_+-]+)*$",
+      "description": "The device's IANA time zone, e.g. Asia/Kolkata"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "incremental",
+        "backfill"
+      ],
+      "description": "backfill uploads history and may be split over several requests"
+    },
+    "rows": {
+      "minItems": 1,
+      "maxItems": 2000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "The device's local calendar day, YYYY-MM-DD"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "claude",
+              "codex",
+              "openai",
+              "gemini",
+              "antigravity",
+              "cursor",
+              "copilot",
+              "openrouter",
+              "zai",
+              "kimi",
+              "amp",
+              "grok",
+              "opencode",
+              "service.devin",
+              "service.fx",
+              "service.muse",
+              "other"
+            ],
+            "description": "SpendSource.id"
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Model id as the client saw it"
+          },
+          "input": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Input tokens, excluding cache reads and writes"
+          },
+          "cacheRead": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Cache-read input tokens"
+          },
+          "cacheWrite": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Cache-write (cache creation) input tokens"
+          },
+          "output": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Output tokens"
+          },
+          "costUSD": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "The client's API-equivalent cost for the row"
+          },
+          "approximate": {
+            "type": "boolean",
+            "description": "True when any part of costUSD used a fallback rate"
+          }
+        },
+        "required": [
+          "date",
+          "source",
+          "model",
+          "input",
+          "cacheRead",
+          "cacheWrite",
+          "output",
+          "costUSD",
+          "approximate"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Omit rows whose tokens and cost are all zero. At most one row per (date, source, model)."
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "client",
+    "deviceId",
+    "timeZone",
+    "mode",
+    "rows"
+  ],
+  "additionalProperties": false,
+  "title": "PUT /v1/usage request, v1",
+  "description": "Daily per-model token usage. Token buckets are disjoint. The server also rejects rows dated before 2023-01-01 or after today in UTC+14, and repeated (date, source, model) rows."
+}

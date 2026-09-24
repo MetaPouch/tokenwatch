@@ -1,0 +1,4 @@
+{
+  "error": "device_revoked",
+  "message": "This device was signed out; connect it again from TokenWatch"
+}

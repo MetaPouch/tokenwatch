@@ -27,6 +27,9 @@ let package = Package(
             name: "TokenWatchCoreTests",
             dependencies: ["TokenWatchCore"],
             path: "Tests/TokenWatchCoreTests",
+            // tokenwatch-cloud's `packages/contracts` build output (schema/ and fixtures/),
+            // copied verbatim so the Swift encoder is checked against the server's own files.
+            resources: [.copy("Contracts")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         )
     ]

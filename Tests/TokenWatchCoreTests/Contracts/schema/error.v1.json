@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "error": {
+      "type": "string",
+      "enum": [
+        "invalid_request",
+        "invalid_grant",
+        "unauthorized",
+        "forbidden",
+        "not_found",
+        "device_revoked",
+        "unsupported_schema_version",
+        "rate_limited",
+        "unavailable"
+      ]
+    },
+    "message": {
+      "type": "string",
+      "description": "Human-readable detail; not for programmatic use"
+    }
+  },
+  "required": [
+    "error",
+    "message"
+  ],
+  "additionalProperties": false,
+  "title": "API error response, v1"
+}

@@ -40,6 +40,23 @@ public struct HTTPClient: Sendable {
         }
     }
 
+    /// Any request, answering the body and response whatever the status -- for APIs whose status
+    /// codes and headers carry meaning (the leaderboard's `Retry-After`). Only a transport failure
+    /// throws (`ProviderError.network`).
+    public func response(for request: URLRequest) async throws -> (data: Data, response: HTTPURLResponse) {
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw ProviderError.network(error.localizedDescription)
+        }
+        guard let http = response as? HTTPURLResponse else {
+            throw ProviderError.network("Not an HTTP response")
+        }
+        return (data, http)
+    }
+
     private func send<T: Decodable>(_ request: URLRequest) async throws -> T {
         let data: Data
         let status: Int

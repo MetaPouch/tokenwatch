@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "devices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Server id of the device"
+          },
+          "deviceId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "Client-generated UUID in lowercase"
+          },
+          "name": {
+            "type": "string"
+          },
+          "clientApp": {
+            "type": "string",
+            "description": "e.g. tokenwatch-macos"
+          },
+          "clientVersion": {
+            "type": "string",
+            "description": "Version at the last connect"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "description": "First connected"
+          },
+          "lastSeenAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "description": "UTC instant, ISO 8601 with a Z suffix"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Last authenticated request, updated at most every 5 minutes"
+          },
+          "revokedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "description": "UTC instant, ISO 8601 with a Z suffix"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set when signed out or revoked"
+          },
+          "current": {
+            "type": "boolean",
+            "description": "Whether this is the device whose token made the request (false for sessions)"
+          }
+        },
+        "required": [
+          "id",
+          "deviceId",
+          "name",
+          "clientApp",
+          "clientVersion",
+          "createdAt",
+          "lastSeenAt",
+          "revokedAt",
+          "current"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Newest first, revoked ones included"
+    }
+  },
+  "required": [
+    "devices"
+  ],
+  "additionalProperties": false,
+  "title": "GET /v1/devices 200 response, v1"
+}

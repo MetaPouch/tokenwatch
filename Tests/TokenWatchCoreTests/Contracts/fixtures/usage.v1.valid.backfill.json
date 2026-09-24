@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "client": {
+    "app": "tokenwatch-cli",
+    "version": "0.1.0-beta.2"
+  },
+  "deviceId": "5d0c6f1e-8a4b-4c2d-9e3f-7a1b2c3d4e5f",
+  "timeZone": "America/Los_Angeles",
+  "mode": "backfill",
+  "rows": [
+    {
+      "date": "2023-01-01",
+      "source": "claude",
+      "model": "claude-3-5-sonnet-20241022",
+      "input": 1200,
+      "cacheRead": 850000,
+      "cacheWrite": 42000,
+      "output": 18000,
+      "costUSD": 3.21,
+      "approximate": false
+    },
+    {
+      "date": "2025-03-14",
+      "source": "claude",
+      "model": "anthropic/claude-haiku-4.5",
+      "input": 1200,
+      "cacheRead": 850000,
+      "cacheWrite": 42000,
+      "output": 18000,
+      "costUSD": 3.21,
+      "approximate": false
+    },
+    {
+      "date": "2025-03-14",
+      "source": "openrouter",
+      "model": "anthropic/claude-haiku-4.5",
+      "input": 1200,
+      "cacheRead": 850000,
+      "cacheWrite": 42000,
+      "output": 18000,
+      "costUSD": 3.21,
+      "approximate": false
+    }
+  ]
+}

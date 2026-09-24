@@ -1,0 +1,4 @@
+{
+  "error": "unsupported_schema_version",
+  "message": "schemaVersion 2 is not supported; update TokenWatch"
+}

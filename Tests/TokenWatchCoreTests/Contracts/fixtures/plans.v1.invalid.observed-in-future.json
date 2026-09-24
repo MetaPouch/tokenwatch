@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "deviceId": "5d0c6f1e-8a4b-4c2d-9e3f-7a1b2c3d4e5f",
+  "snapshots": [
+    {
+      "provider": "claude",
+      "plan": "max",
+      "observedAt": "2026-09-24T10:00:00Z",
+      "windows": [
+        {
+          "kind": "weekly",
+          "usedPercent": 62.5,
+          "resetsAt": "2026-09-28T07:00:00Z"
+        },
+        {
+          "kind": "session",
+          "usedPercent": 30,
+          "resetsAt": "2026-09-24T14:00:00Z"
+        }
+      ]
+    },
+    {
+      "provider": "claude",
+      "plan": "max",
+      "observedAt": "2026-09-24T12:10:00.001Z",
+      "windows": [
+        {
+          "kind": "weekly",
+          "usedPercent": 62.5,
+          "resetsAt": "2026-09-28T07:00:00Z"
+        },
+        {
+          "kind": "session",
+          "usedPercent": 30,
+          "resetsAt": "2026-09-24T14:00:00Z"
+        }
+      ]
+    }
+  ]
+}

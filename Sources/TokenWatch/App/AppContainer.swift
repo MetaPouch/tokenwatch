@@ -19,6 +19,9 @@ public final class AppContainer {
     public let spendHistoryStore: SpendHistoryStore
     public let detectionStore: ProviderDetectionStore
     public let hintStore = HintStore()
+    /// The opt-in leaderboard. Idle (no Keychain read, no request) until the user joins.
+    public let leaderboardService: LeaderboardService
+    let webAuthenticationPresenter = WebAuthenticationPresenter()
     /// Providers backed by a plain API key, keyed by id, for Settings' secure text fields.
     public let apiKeyManagers: [ProviderID: any APIKeyManaging]
     /// Assigned by `AppDelegate` once the status item controller exists -- lets Settings'
@@ -47,6 +50,7 @@ public final class AppContainer {
         self.pricingRefreshService = PricingRefreshService()
         self.apiKeyManagers = Self.buildAPIKeyManagers()
         self.spendHistoryStore = SpendHistoryStore(includeCursor: { enablementStore.isEnabled(.cursor) })
+        self.leaderboardService = LeaderboardService(clientVersion: AppVersion.leaderboardClientVersion)
 
         let notificationService = self.notificationService
         notificationCancellable = dataStore.$snapshots

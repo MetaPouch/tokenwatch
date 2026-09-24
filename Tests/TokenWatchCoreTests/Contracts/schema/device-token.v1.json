@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$",
+      "description": "The code from tokenwatch://auth/callback"
+    },
+    "code_verifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._~-]{43,128}$",
+      "description": "PKCE code_verifier (RFC 7636): 43-128 unreserved characters"
+    },
+    "device_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "The device_id the app sent to /connect"
+    },
+    "time_zone": {
+      "description": "The device's IANA time zone; UTC if omitted on the first connect",
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[A-Za-z][A-Za-z0-9_+-]*(\\/[A-Za-z0-9_+-]+)*$"
+    }
+  },
+  "required": [
+    "code",
+    "code_verifier",
+    "device_id"
+  ],
+  "additionalProperties": false,
+  "title": "POST /v1/devices/token request, v1",
+  "description": "Exchanges a one-time /connect code for a device token. The code works once, for 5 minutes; any exchange attempt with a well-formed body uses it up."
+}
