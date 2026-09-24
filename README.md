@@ -86,21 +86,24 @@ keep their prior token-count visibility when migrating from the old all-or-nothi
 
 ## Dashboard
 
-One popover, three screens that slide horizontally instead of stacking as separate windows: the
-dashboard (default), Customize, and Settings all share one fixed top bar and footer, and the
-popover grows or shrinks to fit whichever screen is showing instead of staying one fixed size
-with an internal scrollbar for short content. Click the status item to open it. The dashboard
-screen itself has two tabs, switched via the segmented control at the top: **Limits** (default)
-answers "how close am I to a wall," **Usage** answers "what have I actually spent or done" --
-every metric belongs under exactly one of the two (see `MetricLine.category`), so nothing shows
-up mixed together on the same card the way it used to.
+One popover, four screens that slide horizontally instead of stacking as separate windows: the
+dashboard (default), Leaderboard, Customize, and Settings all share one fixed top bar and
+footer, and the popover grows or shrinks to fit whichever screen is showing instead of staying
+one fixed size with an internal scrollbar for short content. Click the status item to open it.
+The dashboard screen itself has two tabs, switched via the segmented control at the top:
+**Limits** (default) answers "how close am I to a wall," **Usage** answers "what have I actually
+spent or done" -- every metric belongs under exactly one of the two (see `MetricLine.category`),
+so nothing shows up mixed together on the same card the way it used to.
 
 A dismissible banner the first time providers are found ("Found N providers on this Mac") points
 at Customize; it's gone for good once dismissed, on this Mac or any other install sharing the
 same config. The footer shows the installed version and a live "Next update in Xs" countdown to
 the next background refresh (click it to refresh immediately); the ⋯ menu on the right opens
-Customize or Settings, shares a screenshot of any visible provider, opens the standard About
-panel, or quits.
+Leaderboard, Customize or Settings, shares a screenshot of any visible provider, opens the
+standard About panel, or quits. The dashboard's top bar carries a leaderboard button next to
+Refresh: **Join Leaderboard** until you join, then your GitHub avatar and `@login` (a gray pause
+badge while paused, an orange dot when syncing stopped for an app update, **Sign In Again** after
+tokenwat.ch signed this Mac out). It opens the Leaderboard screen.
 
 ## Limits tab
 
@@ -287,7 +290,7 @@ it's opened.
 | Key | Action |
 | --- | --- |
 | Return | Open Customize from the dashboard; on Customize's provider detail, go back to the list |
-| Esc | Go back one level (Customize detail → list → dashboard; Settings → dashboard); closes the popover if already on the dashboard |
+| Esc | Go back one level (Customize detail → list → dashboard; Leaderboard or Settings → dashboard); closes the popover if already on the dashboard |
 | ⌘Z | Undo the last customization change (hide/show, reorder, star, tier move), app-wide |
 | ⌘R | Refresh now |
 | ⌘, | Toggle Settings |
@@ -313,17 +316,17 @@ the Carbon Event Manager -- no external dependency and no Input Monitoring permi
   silent baseline, then only a new crossing or a worsening trigger fires again. macOS asks for
   notification permission the first time you turn one on; if you decline, Settings shows a
   warning with a link to System Settings.
-- **Leaderboard** -- off by default: Join with GitHub, then status, Preview Upload, Pause Syncing,
-  Resync All History, Sign Out and Delete Account. See [Leaderboard (optional)](#leaderboard-optional).
 - **Refresh interval**, **Providers** -- unchanged.
 
 ## Leaderboard (optional)
 
 [tokenwat.ch](https://tokenwat.ch) ranks daily token usage and API-equivalent spend across
 TokenWatch users. It's off by default, and until you join nothing about it runs: no request to
-tokenwat.ch, no Keychain read, and no prompt or banner anywhere in the app.
+tokenwat.ch or anywhere else for it, and no Keychain read. The dashboard's **Join Leaderboard**
+button only opens the Leaderboard screen.
 
-- **Join** -- Settings → Leaderboard → **Join with GitHub**. tokenwat.ch's consent page opens in
+- **Join** -- the **Join Leaderboard** button at the top right of the dashboard, or ⋯ →
+  **Leaderboard**, then **Join with GitHub**. tokenwat.ch's consent page opens in
   a sign-in sheet (`ASWebAuthenticationSession`, reusing your browser's GitHub session). Approve,
   and this Mac gets its own device token, stored in the Keychain under `dev.tokenwatch.credentials`
   / `leaderboard.deviceToken`. GitHub's own token never reaches the app.
@@ -339,11 +342,16 @@ tokenwat.ch, no Keychain read, and no prompt or banner anywhere in the app.
   on the boards. On [tokenwat.ch/account](https://tokenwat.ch/account) you can hide individual
   stats (tokens, cost, providers, models, ...) from your profile and the boards that rank on them.
 - **Pause** -- **Pause Syncing** stops all uploads and check-ins until you resume. Pausing on
-  tokenwat.ch instead keeps the app sending while the server stores nothing; Settings then says
-  "Paused on tokenwat.ch".
-- **Leave** -- **Sign Out** revokes this Mac on the server and deletes its token; what you
-  uploaded stays on your profile until you delete it. **Delete Account…** opens
+  tokenwat.ch instead keeps the app sending while the server stores nothing; the Leaderboard
+  screen then says "Paused on tokenwat.ch".
+- **Leave** -- **Sign Out** revokes this Mac on the server and deletes its token and cached
+  avatar; what you uploaded stays on your profile until you delete it. **Delete Account…** opens
   tokenwat.ch/account, where you can delete your account and everything uploaded.
+- **Avatar** -- while joined and not paused, the app downloads your GitHub avatar from
+  `avatars.githubusercontent.com` (the URL tokenwat.ch returned at sign-in; no other host is ever
+  used), at most once a day or when that URL changes, and caches it in
+  `~/Library/Application Support/TokenWatch/leaderboard-avatar`. Until then it shows your
+  initial.
 
 If the server rejects this Mac's token, TokenWatch signs out locally and says "Disconnected, sign
 in again". If it stops accepting this version's uploads, syncing stops with "Update TokenWatch to

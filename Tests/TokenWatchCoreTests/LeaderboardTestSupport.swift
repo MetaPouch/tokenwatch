@@ -105,6 +105,9 @@ enum JSONSchemaCheck {
 final class StubHTTP: @unchecked Sendable {
     enum Reply {
         case status(Int, headers: [String: String] = [:], body: String = "")
+        case bytes(Int, Data)
+        /// A 302 to `location`; the session follows it unless its delegate refuses.
+        case redirect(URL)
         case offline
     }
 
@@ -173,11 +176,22 @@ final class StubURLProtocol: URLProtocol {
         case .offline:
             client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
         case let .status(status, headers, text):
-            let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers)!
+            respond(status: status, headers: headers, body: Data(text.utf8))
+        case let .bytes(status, data):
+            respond(status: status, headers: [:], body: data)
+        case let .redirect(location):
+            let response = HTTPURLResponse(url: request.url!, statusCode: 302, httpVersion: "HTTP/1.1", headerFields: ["Location": location.absoluteString])!
+            client?.urlProtocol(self, wasRedirectedTo: URLRequest(url: location), redirectResponse: response)
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: Data(text.utf8))
             client?.urlProtocolDidFinishLoading(self)
         }
+    }
+
+    private func respond(status: Int, headers: [String: String], body: Data) {
+        let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
     }
 
     override func stopLoading() {}

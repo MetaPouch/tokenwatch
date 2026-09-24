@@ -125,11 +125,15 @@ final class LeaderboardSyncTests: XCTestCase {
     // MARK: - Off means off
 
     /// The invariant: without joining, launch, provider refreshes and filesystem events (both
-    /// reach the service as `SpendHistoryStore` updates) make no request and read no token.
+    /// reach the service as `SpendHistoryStore` updates) make no request and read no token --
+    /// nor does the dashboard's badge or the avatar loader.
     func testNotJoinedMakesNoRequestAndNeverReadsTheToken() async {
         // Also catch anything that would bypass the injected client through URLSession.shared.
         _ = URLProtocol.registerClass(StubURLProtocol.self)
         defer { URLProtocol.unregisterClass(StubURLProtocol.self) }
+        // An avatar a crash left behind is deleted, never shown.
+        let avatarURL = URL(string: "https://avatars.githubusercontent.com/u/583231?v=4")!
+        LeaderboardAvatarCache(directory: directory).save(Data([0x89, 0x50, 0x4E, 0x47]), for: avatarURL, now: start)
         let service = makeService()
         service.start()
         for minute in 0..<180 {
@@ -137,11 +141,15 @@ final class LeaderboardSyncTests: XCTestCase {
             XCTAssertNil(service.nextWake())
             clock.now = start.addingTimeInterval(TimeInterval(minute * 60))
             await service.performDueWork()
+            await service.refreshAvatarNow()
+            XCTAssertEqual(service.badge, .join)
         }
         service.resyncAllHistory()
         service.setPaused(false)
         XCTAssertNil(service.nextUploadPreview())
         XCTAssertNil(service.account)
+        XCTAssertNil(service.avatar)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("leaderboard-avatar").path))
         XCTAssertEqual(http.requests.count, 0)
         XCTAssertEqual(tokens.reads, 0)
         XCTAssertTrue(history.throughs.isEmpty)

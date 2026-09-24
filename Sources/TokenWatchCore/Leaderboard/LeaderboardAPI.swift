@@ -2,7 +2,8 @@ import Foundation
 
 /// Where the leaderboard lives. The two string literals below are TokenWatch's only leaderboard
 /// hosts, and this is the only file that names them (SECURITY.md's `git grep -n 'URL(string:'`
-/// audit). A DEBUG build can point them at local servers with `TOKENWATCH_WEB_URL` and
+/// audit) -- along with `LeaderboardAPI.avatarHost`, the one other host the leaderboard reaches.
+/// A DEBUG build can point them at local servers with `TOKENWATCH_WEB_URL` and
 /// `TOKENWATCH_API_URL` (README, Development); release builds ignore both variables.
 public struct LeaderboardEndpoints: Sendable, Equatable {
     public let web: URL
@@ -125,7 +126,7 @@ public enum LeaderboardAPIError: Error, Equatable, Sendable {
 }
 
 /// The leaderboard's HTTP API, through the shared `HTTPClient`. Every call but the code exchange
-/// sends the device token as `Authorization: Bearer`.
+/// and the avatar sends the device token as `Authorization: Bearer`.
 public struct LeaderboardAPI: Sendable {
     public let endpoints: LeaderboardEndpoints
     private let http: HTTPClient
@@ -157,6 +158,42 @@ public struct LeaderboardAPI: Sendable {
     public func putUsage(_ body: Data, token: String) async throws -> LeaderboardIngestResponse {
         let data = try await send("PUT", "v1/usage", token: token, body: body)
         return try decode(LeaderboardIngestResponse.self, from: data)
+    }
+
+    /// The only host a joined account's avatar is downloaded from: GitHub's avatar CDN, which is
+    /// where tokenwat.ch's `avatarUrl` points. Anything else is never fetched.
+    public static let avatarHost = "avatars.githubusercontent.com"
+    /// Avatars are drawn at most 44pt wide, so 128px covers Retina.
+    static let avatarPixelSize = 128
+    /// A 128px avatar is a few KB; anything this large isn't one.
+    static let maxAvatarBytes = 512 * 1024
+
+    /// Whether `url` is an HTTPS avatar on `avatarHost` (no port, no credentials).
+    public static func isAllowedAvatarURL(_ url: URL) -> Bool {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return false }
+        return components.scheme?.lowercased() == "https"
+            && components.host?.lowercased() == avatarHost
+            && components.port == nil
+            && components.user == nil
+            && components.password == nil
+    }
+
+    /// `GET` an allowed avatar URL at 128px: no token, no cookies, no redirects (a redirect off
+    /// the host is refused rather than followed). `nil` for a disallowed URL, a failure, or a
+    /// body that isn't a small image.
+    public func avatar(at url: URL) async -> Data? {
+        guard Self.isAllowedAvatarURL(url), var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        components.queryItems = (components.queryItems ?? []).filter { $0.name != "s" } + [URLQueryItem(name: "s", value: String(Self.avatarPixelSize))]
+        guard let sized = components.url else { return nil }
+        var request = URLRequest(url: sized, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        request.httpShouldHandleCookies = false
+        request.setValue("image/*", forHTTPHeaderField: "Accept")
+        guard let (data, response) = try? await http.response(for: request, delegate: RefuseRedirects()),
+              response.statusCode == 200,
+              data.count <= Self.maxAvatarBytes,
+              LeaderboardAvatarCache.isImage(data)
+        else { return nil }
+        return data
     }
 
     private func send(_ method: String, _ path: String, token: String?, body: Data?, now: Date = Date()) async throws -> Data {
@@ -216,5 +253,12 @@ public struct LeaderboardAPI: Sendable {
         formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
         guard let date = formatter.date(from: value) else { return nil }
         return max(0, date.timeIntervalSince(now))
+    }
+}
+
+/// Answers a redirect with the 3xx itself, so a request never reaches a host it didn't name.
+private final class RefuseRedirects: NSObject, URLSessionTaskDelegate {
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest) async -> URLRequest? {
+        nil
     }
 }

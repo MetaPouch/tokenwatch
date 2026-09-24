@@ -2,8 +2,8 @@ import SwiftUI
 import AppKit
 import TokenWatchCore
 
-/// Popover root: one panel, three screens (Dashboard / Customize / Settings) that slide
-/// horizontally within it -- a shared top bar and footer stay fixed while the middle content
+/// Popover root: one panel, four screens (Dashboard / Leaderboard / Customize / Settings) that
+/// slide horizontally within it -- a shared top bar and footer stay fixed while the middle content
 /// slides, and the panel resizes to fit whichever screen is currently showing (see
 /// `TokenWatchPanel.setContentHeight` and `PanelHeightPreferenceKey`). Every enabled provider
 /// renders stacked in one scrollable list on the Dashboard screen, in `LayoutStore` order.
@@ -22,7 +22,9 @@ struct DashboardView: View {
     @ObservedObject var hintStore: HintStore
     let notificationService: QuotaNotificationService
     let toggleDashboardPanel: () -> Void
-    @ObservedObject var leaderboardService: LeaderboardService
+    /// Observed by the screens that show it (`LeaderboardView`, `LeaderboardBadgeButton`), not
+    /// here, so a sync status change doesn't re-render the whole dashboard.
+    let leaderboardService: LeaderboardService
     let webAuthenticator: LeaderboardWebAuthenticating
     /// Reports this view's total natural height (top bar + current screen + footer) so the
     /// hosting `TokenWatchPanel` can resize to fit it.
@@ -109,6 +111,7 @@ struct DashboardView: View {
     private var pager: some View {
         HStack(alignment: .top, spacing: 0) {
             dashboardScreenContent.frame(width: TokenWatchPanel.width, alignment: .top)
+            leaderboardScreenContent.frame(width: TokenWatchPanel.width, alignment: .top)
             customizeScreenContent.frame(width: TokenWatchPanel.width, alignment: .top)
             settingsScreenContent.frame(width: TokenWatchPanel.width, alignment: .top)
         }
@@ -175,8 +178,12 @@ struct DashboardView: View {
         CustomizeView(enablementStore: enablementStore, layoutStore: layoutStore, dataStore: dataStore, detailProvider: $customizeDetailProvider, hintStore: hintStore)
     }
 
+    private var leaderboardScreenContent: some View {
+        LeaderboardView(service: leaderboardService, authenticator: webAuthenticator)
+    }
+
     private var settingsScreenContent: some View {
-        SettingsView(enablementStore: enablementStore, detectionStore: detectionStore, apiKeyManagers: apiKeyManagers, displayStore: displayStore, appearanceStore: appearanceStore, notificationSettingsStore: notificationSettingsStore, notificationService: notificationService, toggleDashboardPanel: toggleDashboardPanel, leaderboardService: leaderboardService, webAuthenticator: webAuthenticator)
+        SettingsView(enablementStore: enablementStore, detectionStore: detectionStore, apiKeyManagers: apiKeyManagers, displayStore: displayStore, appearanceStore: appearanceStore, notificationSettingsStore: notificationSettingsStore, notificationService: notificationService, toggleDashboardPanel: toggleDashboardPanel)
     }
 
     private func reportTotalHeight(for screen: DashboardScreen) {
@@ -203,6 +210,7 @@ struct DashboardView: View {
             Spacer()
             switch currentScreen {
             case .dashboard:
+                LeaderboardBadgeButton(service: leaderboardService) { currentScreen = .leaderboard }
                 Button(action: { refreshScheduler.refreshNow() }) {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -216,7 +224,7 @@ struct DashboardView: View {
                     Button("Reset All", role: .destructive) { layoutStore.resetAll() }
                         .font(.caption)
                 }
-            case .settings:
+            case .leaderboard, .settings:
                 EmptyView()
             }
         }
@@ -226,13 +234,14 @@ struct DashboardView: View {
     private var topBarTitle: String {
         switch currentScreen {
         case .dashboard: return "TokenWatch"
+        case .leaderboard: return "Leaderboard"
         case .customize: return customizeDetailProvider?.displayName ?? "Customize"
         case .settings: return "Settings"
         }
     }
 
-    /// One level back: Customize's detail returns to its provider list; the provider list or
-    /// Settings returns to the dashboard. Matches the documented Esc/Return semantics.
+    /// One level back: Customize's detail returns to its provider list; the provider list,
+    /// Leaderboard or Settings returns to the dashboard. Matches the documented Esc/Return semantics.
     private func goBack() {
         switch currentScreen {
         case .dashboard:
@@ -243,7 +252,7 @@ struct DashboardView: View {
             } else {
                 currentScreen = .dashboard
             }
-        case .settings:
+        case .leaderboard, .settings:
             currentScreen = .dashboard
         }
     }
@@ -284,6 +293,8 @@ struct DashboardView: View {
             .help("Click to refresh now (⌘R)")
             Spacer()
             Menu {
+                Button("Leaderboard") { currentScreen = .leaderboard }
+                Divider()
                 Button("Customize") { customizeDetailProvider = nil; currentScreen = .customize }
                 Button("Settings") { currentScreen = .settings }
                 if !orderedEnabledProviders.isEmpty {

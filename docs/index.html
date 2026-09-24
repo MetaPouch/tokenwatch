@@ -756,8 +756,8 @@
     <p class="eyebrow">Customize &amp; settings</p>
     <h2>Set it up once and leave it running.</h2>
     <p class="section-lede">
-      Dashboard, Customize, and Settings are three screens in the same popover. It resizes to fit
-      what's on screen, and you can do everything from the keyboard.
+      Dashboard, Leaderboard, Customize, and Settings are screens in the same popover. It resizes
+      to fit what's on screen, and you can do everything from the keyboard.
     </p>
     <div class="grid">
       <div class="card">
@@ -888,13 +888,13 @@
     <h2>See how your token burn compares.</h2>
     <p class="section-lede">
       <a href="https://tokenwat.ch">tokenwat.ch</a> ranks daily tokens and API-equivalent spend
-      across TokenWatch users. It's off until you join in Settings, and TokenWatch makes no request
-      to it before then. Pause or leave any time.
+      across TokenWatch users. It's off until you join from the Leaderboard screen, and
+      TokenWatch makes no request to it before then. Pause or leave any time.
     </p>
     <div class="steps">
       <div class="step">
         <h3>Join with GitHub</h3>
-        <p>Settings &rarr; Leaderboard &rarr; <b>Join with GitHub</b>. This Mac gets its own token, kept in the macOS Keychain. Your GitHub token never reaches the app.</p>
+        <p>Click <b>Join Leaderboard</b> at the top right of the dashboard (or &#8943; &rarr; <b>Leaderboard</b>), then <b>Join with GitHub</b>. This Mac gets its own token, kept in the macOS Keychain. Your GitHub token never reaches the app. Once you're in, the button shows your GitHub avatar and username.</p>
       </div>
       <div class="step">
         <h3>What's shared</h3>
@@ -920,8 +920,8 @@
       <h2>Your usage data stays on your Mac unless you share it.</h2>
       <p class="section-lede" style="margin-bottom:24px">
         No telemetry, no analytics SDK, and no account needed. Out of the box it makes two kinds of
-        network requests, and nothing else. A third, to tokenwat.ch, starts only if you join the
-        <a href="#leaderboard">leaderboard</a>.
+        network requests, and nothing else. Two more, to tokenwat.ch and for your GitHub avatar,
+        start only if you join the <a href="#leaderboard">leaderboard</a>.
       </p>
       <ul class="feature-list">
         <li><span class="fi"><svg class="h-ic"><use href="#i-key"/></svg></span><div><h3>Keys in the Keychain</h3><p>API keys you paste are stored in the macOS Keychain, not in a config file.</p></div></li>
@@ -935,6 +935,7 @@
         <div class="flow-row"><div class="node">Your credential<small>per provider</small></div><div class="arrow">&rarr;</div><div class="node">That provider's own API<small>HTTPS, e.g. api.anthropic.com</small></div></div>
         <div class="flow-row"><div class="node">Price-list request<small>~hourly, optional</small></div><div class="arrow">&rarr;</div><div class="node">Public GitHub-hosted price list<small>no credentials, no usage data</small></div></div>
         <div class="flow-row"><div class="node">Daily token counts &amp; cost<small>only after you join the leaderboard</small></div><div class="arrow">&rarr;</div><div class="node">api.tokenwat.ch<small>per day, provider and model</small></div></div>
+        <div class="flow-row"><div class="node">Avatar request<small>only while joined, at most daily</small></div><div class="arrow">&rarr;</div><div class="node">avatars.githubusercontent.com<small>your GitHub avatar, no credentials</small></div></div>
         <div class="flow-row never"><div class="node">Your prompts, code, keys, or projects</div><div class="arrow">&times;</div><div class="node">Anyone else</div></div>
       </div>
     </div>
@@ -953,7 +954,7 @@
       <details><summary>Can I see more than one Claude or Codex account?</summary><p>Yes. If you have a second profile on this Mac (a separate <code>CLAUDE_CONFIG_DIR</code> or <code>CODEX_HOME</code>), it shows up on the Limits tab as its own card, and spend history counts every account's local logs. TokenWatch only reads these accounts. It never changes which account your CLI uses.</p></details>
       <details><summary>Why doesn't it update itself?</summary><p>An auto-updater would check a server for new versions in the background, and TokenWatch doesn't do that. The Homebrew cask also sets <code>auto_updates false</code>. To update, run <code>brew upgrade --cask tokenwatch</code> or download the latest DMG.</p></details>
       <details><summary>Does it read my prompts or code?</summary><p>It reads your local session log files, but only uses token counts, timestamps, model names, and project folder names from them. Prompts, code, project names, and file paths are never sent anywhere. If you join the <a href="#leaderboard">leaderboard</a>, it uploads daily token counts and estimated cost per provider and model, and nothing else.</p></details>
-      <details><summary>How do I uninstall it completely?</summary><p>If you joined the leaderboard, click <b>Sign Out</b> in Settings first so this Mac is revoked and its token removed from the Keychain. Then run <code>brew uninstall --zap --cask tokenwatch</code>. This also removes its settings, caches, and preferences. For a DMG install, drag the app to the Trash and delete <code>~/Library/Application Support/TokenWatch</code>.</p></details>
+      <details><summary>How do I uninstall it completely?</summary><p>If you joined the leaderboard, click <b>Sign Out</b> on the Leaderboard screen first so this Mac is revoked and its token removed from the Keychain. Then run <code>brew uninstall --zap --cask tokenwatch</code>. This also removes its settings, caches, and preferences. For a DMG install, drag the app to the Trash and delete <code>~/Library/Application Support/TokenWatch</code>.</p></details>
       <details><summary>My provider isn't listed. Can I add it?</summary><p>Yes. Each provider is one self-contained Swift file plus a test fixture. <a href="https://github.com/MetaPouch/tokenwatch/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> explains how to add one, or you can <a href="https://github.com/MetaPouch/tokenwatch/issues">open an issue</a> to request it.</p></details>
     </div>
   </div>

@@ -4,7 +4,7 @@ import TokenWatchCore
 
 /// Lists every `ProviderID` with an enable/disable toggle; `APIKeyManaging` providers get a
 /// secure text field wired to `saveAPIKey`/`deleteAPIKey`; a stepper controls the refresh
-/// interval; the Leaderboard section is the opt-in leaderboard's only entry point.
+/// interval. The leaderboard has its own screen (`LeaderboardView`).
 struct SettingsView: View {
     @ObservedObject var enablementStore: ProviderEnablementStore
     @ObservedObject var detectionStore: ProviderDetectionStore
@@ -14,8 +14,6 @@ struct SettingsView: View {
     @ObservedObject var notificationSettingsStore: NotificationSettingsStore
     let notificationService: QuotaNotificationService
     let toggleDashboardPanel: () -> Void
-    @ObservedObject var leaderboardService: LeaderboardService
-    let webAuthenticator: LeaderboardWebAuthenticating
 
     @State private var apiKeyDrafts: [ProviderID: String] = [:]
     @State private var launchAtLoginEnabled = LaunchAtLogin.isEnabled
@@ -24,7 +22,7 @@ struct SettingsView: View {
     var body: some View {
         MeasuredScrollView(maxHeight: 640, refreshID: detectionStore.detections.count) {
             VStack(alignment: .leading, spacing: 14) {
-                settingsSection("General") {
+                SettingsSection("General") {
                     Toggle("Show Total Spend", isOn: $displayStore.showTotalSpend)
                         .help("Whether the Total Spend card, with its last-7-days chart, shows at the top of the Usage tab.")
                     Toggle("Launch at Login", isOn: Binding(
@@ -48,7 +46,7 @@ struct SettingsView: View {
                     .help("A global shortcut that toggles the popover from anywhere.")
                 }
 
-                settingsSection("Menu Bar") {
+                SettingsSection("Menu Bar") {
                     Picker("Icon Style", selection: $appearanceStore.iconStyle) {
                         ForEach(MenuBarIconStyle.allCases) { Text($0.rawValue).tag($0) }
                     }
@@ -68,7 +66,7 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                settingsSection("Appearance") {
+                SettingsSection("Appearance") {
                     Picker("Theme", selection: $appearanceStore.theme) {
                         ForEach(AppTheme.allCases) { Text($0.rawValue).tag($0) }
                     }
@@ -86,7 +84,7 @@ struct SettingsView: View {
                         .help("Excludes the popover from screen recordings and screen sharing.")
                 }
 
-                settingsSection("Notifications") {
+                SettingsSection("Notifications") {
                     Toggle("Almost Out", isOn: notificationToggle(\.almostOut))
                         .help("Alerts when a metric crosses under 10% remaining.")
                     Toggle("Cutting It Close", isOn: notificationToggle(\.cuttingItClose))
@@ -109,7 +107,7 @@ struct SettingsView: View {
                     }
                 }
 
-                settingsSection("Refresh Interval") {
+                SettingsSection("Refresh Interval") {
                     Stepper(
                         "\(enablementStore.refreshIntervalSeconds) seconds",
                         value: Binding(
@@ -121,11 +119,7 @@ struct SettingsView: View {
                     )
                 }
 
-                settingsSection("Leaderboard") {
-                    LeaderboardSettingsSection(service: leaderboardService, authenticator: webAuthenticator)
-                }
-
-                settingsSection("Providers") {
+                SettingsSection("Providers") {
                     ForEach(ProviderID.allCases) { provider in
                         providerRow(provider)
                         if provider != ProviderID.allCases.last {
@@ -138,22 +132,6 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .reportPanelHeight(for: .settings)
-    }
-
-    @ViewBuilder
-    private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-            VStack(alignment: .leading, spacing: 10) {
-                content()
-            }
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
-        }
     }
 
     private func notificationToggle(_ keyPath: ReferenceWritableKeyPath<NotificationSettingsStore, Bool>) -> Binding<Bool> {
@@ -227,6 +205,33 @@ struct SettingsView: View {
         case .notSet: return "Not set"
         case .fromEnvironment: return "Using environment variable"
         case .saved: return "Saved in Keychain"
+        }
+    }
+}
+
+/// A titled card: an uppercase caption over a softly filled rounded box. Settings' sections and
+/// the Leaderboard screen's groups.
+struct SettingsSection<Content: View>: View {
+    let title: String
+    let content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+            VStack(alignment: .leading, spacing: 10) {
+                content
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
         }
     }
 }

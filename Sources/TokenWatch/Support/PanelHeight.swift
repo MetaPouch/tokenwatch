@@ -1,18 +1,20 @@
 import SwiftUI
 
-/// Which of the popover's pager screens is currently showing. All three are mounted
-/// simultaneously (side by side in the sliding `HStack`) so the slide has something to animate
-/// between -- only the panel host resizes to match whichever one is actually in view.
+/// Which of the popover's pager screens is currently showing, in left-to-right slide order. All
+/// of them are mounted simultaneously (side by side in the sliding `HStack`) so the slide has
+/// something to animate between -- only the panel host resizes to match whichever one is
+/// actually in view.
 enum DashboardScreen: Int, CaseIterable {
     case dashboard = 0
-    case customize = 1
-    case settings = 2
+    case leaderboard = 1
+    case customize = 2
+    case settings = 3
 }
 
 /// Reports each pager screen's natural (unclipped) content height, tagged by screen, up to the
 /// pager host -- which reads out only the *currently visible* screen's height to resize the
-/// actual AppKit panel. A plain "keep the latest value" key wouldn't work here: because all
-/// three screens are mounted at once, they all publish on every layout pass in an unspecified
+/// actual AppKit panel. A plain "keep the latest value" key wouldn't work here: because every
+/// screen is mounted at once, they all publish on every layout pass in an unspecified
 /// order, so the host needs to know *which* screen each height belongs to, not just the most
 /// recent one.
 struct PanelHeightPreferenceKey: PreferenceKey {

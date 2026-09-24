@@ -73,8 +73,16 @@ public final class LeaderboardService: ObservableObject {
     @Published public private(set) var isPausedOnWeb: Bool
     /// `nil` when there's no history upload to do.
     @Published public private(set) var history: LeaderboardHistoryProgress?
+    /// The joined account's avatar image bytes, from the disk cache or GitHub's avatar CDN; `nil`
+    /// when not joined, when the account has no allowed avatar URL, or before the first download.
+    @Published public private(set) var avatar: Data?
 
     public var endpoints: LeaderboardEndpoints { api.endpoints }
+
+    /// The dashboard's top-right button state.
+    public var badge: LeaderboardBadge {
+        LeaderboardBadge(account: account, notice: notice, isPaused: isPaused, isPausedOnWeb: isPausedOnWeb)
+    }
 
     private typealias Policy = LeaderboardSyncPolicy
     private let api: LeaderboardAPI
@@ -86,6 +94,11 @@ public final class LeaderboardService: ObservableObject {
     private let syncFile: LeaderboardFile<LeaderboardSyncState>
     private var enrollment: LeaderboardEnrollment
     private var sync: LeaderboardSyncState
+    private let avatarCache: LeaderboardAvatarCache
+    private var avatarTask: Task<Void, Never>?
+    /// The last failed avatar download; the same URL isn't tried again for an hour.
+    private var avatarFailure: (url: URL, at: Date)?
+    private static let avatarRetryInterval: TimeInterval = 3600
     private weak var authenticator: LeaderboardWebAuthenticating?
     private var started = false
     private var cachedToken: String?
@@ -109,6 +122,7 @@ public final class LeaderboardService: ObservableObject {
         let directory = directory ?? ConfigStore.defaultDirectory()
         enrollmentFile = LeaderboardFile(directory: directory, name: "leaderboard.json")
         syncFile = LeaderboardFile(directory: directory, name: "leaderboard-sync.json")
+        avatarCache = LeaderboardAvatarCache(directory: directory)
         var enrollment = enrollmentFile.load() ?? LeaderboardEnrollment()
         if enrollment.notice == .updateRequired, enrollment.updateRequiredVersion != clientVersion {
             // A different app version may be accepted again.
@@ -124,6 +138,11 @@ public final class LeaderboardService: ObservableObject {
         syncIssue = sync.issue
         isPausedOnWeb = sync.pausedOnWeb
         history = sync.backfill == nil ? nil : .waiting
+        if let avatarURL = Self.avatarURL(of: enrollment.account) {
+            avatar = avatarCache.image(for: avatarURL)
+        } else {
+            avatarCache.delete()
+        }
     }
 
     // MARK: - App events
@@ -133,11 +152,13 @@ public final class LeaderboardService: ObservableObject {
         guard !started else { return }
         started = true
         schedule()
+        refreshAvatar()
     }
 
     /// `SpendHistoryStore` finished a scan (a filesystem event, a provider refresh, a panel open).
     public func usageDidChange(_ daysBySource: [SpendSource: [UsageDay]]) {
         latestDays = daysBySource
+        refreshAvatar()
         guard canSync else { return }
         if changedAt == nil, changedRecentRows() != nil { changedAt = environment.now() }
         schedule()
@@ -146,7 +167,13 @@ public final class LeaderboardService: ObservableObject {
     public func setPaused(_ paused: Bool) {
         guard account != nil, paused != enrollment.isPaused else { return }
         updateEnrollment { $0.isPaused = paused }
-        if paused { stopWork() } else { schedule() }
+        if paused {
+            stopWork()
+            stopAvatarDownload()
+        } else {
+            schedule()
+            refreshAvatar()
+        }
     }
 
     /// Uploads all local history again (the server keeps one row per day, source and model).
@@ -205,8 +232,11 @@ public final class LeaderboardService: ObservableObject {
                 $0.updateRequiredVersion = nil
             }
             resetSync(LeaderboardSyncState(backfill: LeaderboardBackfillProgress()))
+            avatarFailure = nil
+            avatar = Self.avatarURL(of: joined).flatMap(avatarCache.image(for:))
             signInState = .idle
             schedule()
+            refreshAvatar()
         } catch let error as LeaderboardSignInError {
             signInState = error == .cancelled ? .idle : .failed(error)
         } catch {
@@ -230,9 +260,13 @@ public final class LeaderboardService: ObservableObject {
         signOutLocally(notice: nil)
     }
 
-    /// Forgets the token, the account and the sync state, keeping the device id.
+    /// Forgets the token, the account, the avatar and the sync state, keeping the device id.
     func signOutLocally(notice: LeaderboardNotice?) {
         stopWork()
+        stopAvatarDownload()
+        avatarFailure = nil
+        avatarCache.delete()
+        avatar = nil
         try? tokens.deleteToken()
         cachedToken = nil
         updateEnrollment {
@@ -243,6 +277,57 @@ public final class LeaderboardService: ObservableObject {
         }
         resetSync(LeaderboardSyncState())
         syncFile.delete()
+    }
+
+    // MARK: - Avatar
+
+    /// Downloads the avatar when it's missing, from a new URL, or a day old. Only while joined and
+    /// not paused, and only from `LeaderboardAPI.avatarHost`. Runs at launch, after joining, on
+    /// resume and whenever local usage changes (every panel open), so a running app checks daily.
+    private func refreshAvatar() {
+        guard avatarTask == nil, avatarURLDue() != nil else { return }
+        avatarTask = Task { [weak self] in
+            await self?.refreshAvatarNow()
+            // A cancelled task was already replaced or cleared by whoever cancelled it.
+            guard !Task.isCancelled else { return }
+            self?.avatarTask = nil
+        }
+    }
+
+    private func stopAvatarDownload() {
+        avatarTask?.cancel()
+        avatarTask = nil
+    }
+
+    /// `refreshAvatar`'s work, awaited.
+    func refreshAvatarNow() async {
+        guard let url = avatarURLDue() else { return }
+        let data = await api.avatar(at: url)
+        // Signed out, paused or joined as someone else meanwhile: drop it.
+        guard !Task.isCancelled, !enrollment.isPaused, Self.avatarURL(of: account) == url else { return }
+        let now = environment.now()
+        if let data {
+            avatarCache.save(data, for: url, now: now)
+            avatarFailure = nil
+            avatar = data
+        } else {
+            avatarFailure = (url, now)
+        }
+    }
+
+    /// The avatar URL to download now, if any.
+    private func avatarURLDue() -> URL? {
+        guard !enrollment.isPaused, let url = Self.avatarURL(of: account) else { return nil }
+        let now = environment.now()
+        if avatarCache.isFresh(for: url, now: now) { return nil }
+        if let failure = avatarFailure, failure.url == url, now < failure.at.addingTimeInterval(Self.avatarRetryInterval) { return nil }
+        return url
+    }
+
+    /// `account`'s avatar URL when it's one TokenWatch may fetch.
+    private static func avatarURL(of account: LeaderboardAccount?) -> URL? {
+        guard let url = account?.avatarURL, LeaderboardAPI.isAllowedAvatarURL(url) else { return nil }
+        return url
     }
 
     // MARK: - Scheduling
