@@ -82,6 +82,7 @@ struct ProviderSectionView: View {
                     displayStore: displayStore,
                     layoutStore: layoutStore,
                     onRefreshProvider: onRefresh,
+                    onCustomizeMetric: { _ in onCustomizeProvider() },
                     timeFormat: timeFormat
                 )
                 if isExpanded && !onDemand.isEmpty {
@@ -91,6 +92,7 @@ struct ProviderSectionView: View {
                         displayStore: displayStore,
                         layoutStore: layoutStore,
                         onRefreshProvider: onRefresh,
+                        onCustomizeMetric: { _ in onCustomizeProvider() },
                         timeFormat: timeFormat
                     )
                 }

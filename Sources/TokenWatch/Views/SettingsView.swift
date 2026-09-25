@@ -16,6 +16,7 @@ struct SettingsView: View {
     let toggleDashboardPanel: () -> Void
 
     @State private var apiKeyDrafts: [ProviderID: String] = [:]
+    @State private var apiKeyErrors: [ProviderID: String] = [:]
     @State private var launchAtLoginEnabled = LaunchAtLogin.isEnabled
     @State private var shortcutCombo = KeyCombo.loadPersisted()
 
@@ -50,6 +51,7 @@ struct SettingsView: View {
                     Picker("Icon Style", selection: $appearanceStore.iconStyle) {
                         ForEach(MenuBarIconStyle.allCases) { Text($0.rawValue).tag($0) }
                     }
+                    .help("Bars needs at least one bounded metric starred for the menu bar (right-click a row -> Star for menu bar) -- with nothing starred, Bars looks identical to Text.")
                     ForEach(MenuBarValue.allCases) { value in
                         Toggle(value.title, isOn: Binding(
                             get: { appearanceStore.menuBarValues.contains(value) },
@@ -178,19 +180,34 @@ struct SettingsView: View {
                 .textFieldStyle(.roundedBorder)
             Button("Save") {
                 guard let key = apiKeyDrafts[provider], !key.isEmpty else { return }
-                try? manager.saveAPIKey(key)
-                apiKeyDrafts[provider] = ""
+                do {
+                    try manager.saveAPIKey(key)
+                    apiKeyDrafts[provider] = ""
+                    apiKeyErrors[provider] = nil
+                } catch {
+                    apiKeyErrors[provider] = "Couldn't save: \(error.localizedDescription)"
+                }
             }
             if manager.keyStatus() != .notSet {
                 Button("Clear") {
-                    try? manager.deleteAPIKey()
-                    apiKeyDrafts[provider] = ""
+                    do {
+                        try manager.deleteAPIKey()
+                        apiKeyDrafts[provider] = ""
+                        apiKeyErrors[provider] = nil
+                    } catch {
+                        apiKeyErrors[provider] = "Couldn't clear: \(error.localizedDescription)"
+                    }
                 }
             }
         }
         Text(statusText(manager.keyStatus()))
             .font(.caption2)
             .foregroundStyle(.secondary)
+        if let error = apiKeyErrors[provider] {
+            Text(error)
+                .font(.caption2)
+                .foregroundStyle(.red)
+        }
     }
 
     private func draftBinding(for provider: ProviderID) -> Binding<String> {

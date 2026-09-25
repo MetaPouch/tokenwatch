@@ -9,10 +9,10 @@ struct ProviderCardView: View {
     /// progressive disclosure (always-visible vs. on-demand) pass a filtered subset instead.
     var lines: [MetricLine]?
     @ObservedObject var displayStore: MeterDisplayStore
-    /// When non-nil, rows get a right-click context menu (Hide / Star for menu bar / Refresh)
-    /// backed by this store, keyed by `snapshot.provider`. `nil` for read-only contexts like
-    /// `UsageTabView`'s per-account history cards, where several accounts share one
-    /// `ProviderID` and would collide on the same `LayoutStore` keys.
+    /// When non-nil, rows get a right-click context menu (Hide / Star for menu bar / Refresh /
+    /// Customize) backed by this store, keyed by `snapshot.provider`. `nil` for read-only
+    /// contexts like `DashboardView.additionalAccountCard`'s per-account history cards, where
+    /// several accounts share one `ProviderID` and would collide on the same `LayoutStore` keys.
     var layoutStore: LayoutStore?
     var onRefreshProvider: (() -> Void)?
     var onCustomizeMetric: ((String) -> Void)?
@@ -100,7 +100,7 @@ struct ProviderCardView: View {
             }
             .contextMenu { rowContextMenu(metricID: id) }
         case let .badge(id, text, tone, icon, detail):
-            HStack(spacing: 6) {
+            HStack(spacing: Density.groupSpacing(density)) {
                 if let icon {
                     Image(systemName: icon)
                         .font(.caption)
@@ -110,7 +110,7 @@ struct ProviderCardView: View {
                 // distinguishing prefixes/suffixes like worktree hashes) rather than wrapping,
                 // and the hit/expiry detail keeps priority since that's the part being read.
                 Text(text)
-                    .font(.caption.weight(.semibold))
+                    .font(Density.valueFont(density).weight(.semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if let detail {
@@ -124,12 +124,15 @@ struct ProviderCardView: View {
             }
             .contextMenu { rowContextMenu(metricID: id) }
         case let .chart(id, label, points):
-            VStack(alignment: .leading, spacing: 3) {
-                Text(label).font(.subheadline)
+            VStack(alignment: .leading, spacing: Density.rowSpacing(density)) {
+                Text(label).font(Density.labelFont(density))
                 Sparkline(points: points)
                     .frame(height: 28)
             }
-            .contextMenu { rowContextMenu(metricID: id) }
+            // No `limit`/bounded value to show a fill-fraction for -- "Star for menu bar" would
+            // toggle state that never actually renders anywhere (see `StatusItemController`'s
+            // `pinText`/`barsFractions`, which only understand `.progress`/`.values`/`.badge`).
+            .contextMenu { rowContextMenu(metricID: id, allowStar: false) }
         case let .text(_, value):
             Text(value).font(.callout)
         }
@@ -219,11 +222,13 @@ struct ProviderCardView: View {
     }
 
     @ViewBuilder
-    private func rowContextMenu(metricID: String) -> some View {
+    private func rowContextMenu(metricID: String, allowStar: Bool = true) -> some View {
         if let layoutStore {
-            let starred = layoutStore.layout(for: snapshot.provider, metricID: metricID).starred
-            Button(starred ? "Unstar" : "Star for menu bar") {
-                layoutStore.toggleStar(provider: snapshot.provider, metricID: metricID)
+            if allowStar {
+                let starred = layoutStore.layout(for: snapshot.provider, metricID: metricID).starred
+                Button(starred ? "Unstar" : "Star for menu bar") {
+                    layoutStore.toggleStar(provider: snapshot.provider, metricID: metricID)
+                }
             }
             Button("Hide") {
                 layoutStore.setHidden(true, provider: snapshot.provider, metricID: metricID)

@@ -31,6 +31,7 @@ extension EnvironmentValues {
 /// everywhere it's read rather than each call site picking its own numbers.
 enum Density {
     static func rowSpacing(_ density: AppDensity) -> CGFloat { density == .compact ? 2 : 3 }
+    static func groupSpacing(_ density: AppDensity) -> CGFloat { density == .compact ? 4 : 6 }
     static func sectionSpacing(_ density: AppDensity) -> CGFloat { density == .compact ? 5 : 8 }
     static func cardPadding(_ density: AppDensity) -> CGFloat { density == .compact ? 8 : 12 }
     static func labelFont(_ density: AppDensity) -> Font { density == .compact ? .caption : .subheadline }

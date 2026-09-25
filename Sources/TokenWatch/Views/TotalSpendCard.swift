@@ -16,6 +16,8 @@ struct TotalSpendCard: View {
     @ObservedObject var displayStore: MeterDisplayStore
     @ObservedObject var spendHistoryStore: SpendHistoryStore
 
+    @Environment(\.appDensity) private var density
+
     @AppStorage("totalSpendPeriod") private var periodRaw: String = SpendPeriod.today.rawValue
     @AppStorage("totalSpendMode") private var modeRaw: String = SpendMetricMode.cost.rawValue
     @State private var isHoveringCenter = false
@@ -76,7 +78,7 @@ struct TotalSpendCard: View {
 
     private func card(entries: [(provider: SpendSource, value: Double)]) -> some View {
         let total = entries.reduce(0) { $0 + $1.value }
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: Density.sectionSpacing(density)) {
             HStack(spacing: 6) {
                 Menu {
                     ForEach(SpendMetricMode.allCases) { candidate in
@@ -130,7 +132,7 @@ struct TotalSpendCard: View {
             Divider()
             chart
         }
-        .padding(12)
+        .padding(Density.cardPadding(density))
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
     }
 
@@ -166,20 +168,34 @@ struct TotalSpendCard: View {
             let lineWidth: CGFloat = 10
             let rect = CGRect(origin: .zero, size: size).insetBy(dx: lineWidth / 2, dy: lineWidth / 2)
             var startAngle = Angle(degrees: -90)
-            for entry in entries {
-                let fraction = total > 0 ? entry.value / total : 0
-                // A tiny share still gets a visible sliver rather than vanishing entirely.
-                let sweep = Angle(degrees: max(fraction * 360, entries.count > 1 ? 3 : 360))
+            for sweep in donutSweeps(entries: entries, total: total) {
                 var path = Path()
-                path.addArc(center: CGPoint(x: rect.midX, y: rect.midY), radius: rect.width / 2, startAngle: startAngle, endAngle: startAngle + sweep, clockwise: false)
-                context.stroke(path, with: .color(BrandColor.forSource(entry.provider)), style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
-                startAngle += sweep
+                path.addArc(center: CGPoint(x: rect.midX, y: rect.midY), radius: rect.width / 2, startAngle: startAngle, endAngle: startAngle + sweep.angle, clockwise: false)
+                context.stroke(path, with: .color(BrandColor.forSource(sweep.provider)), style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
+                startAngle += sweep.angle
             }
         }
     }
 
+    /// Each slice's sweep, largest-first order preserved. A tiny share still gets a visible
+    /// 3° sliver rather than vanishing entirely, but that floor is applied *before* normalizing
+    /// every sweep back down so the total is always exactly 360° -- applying the floor without
+    /// renormalizing let enough small slices (e.g. a power user's 8+ local sources) push the sum
+    /// well past 360°, drawing overlapping arcs instead of a clean ring.
+    private func donutSweeps(entries: [(provider: SpendSource, value: Double)], total: Double) -> [(provider: SpendSource, angle: Angle)] {
+        guard !entries.isEmpty else { return [] }
+        guard entries.count > 1, total > 0 else {
+            return entries.map { ($0.provider, Angle(degrees: 360)) }
+        }
+        let minDegrees = 3.0
+        let raw = entries.map { max(($0.value / total) * 360, minDegrees) }
+        let rawSum = raw.reduce(0, +)
+        let scale = rawSum > 0 ? 360 / rawSum : 1
+        return zip(entries, raw).map { entry, degrees in (entry.provider, Angle(degrees: degrees * scale)) }
+    }
+
     private func legend(entries: [(provider: SpendSource, value: Double)], total: Double) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: Density.rowSpacing(density)) {
             ForEach(entries, id: \.provider) { entry in
                 HStack(spacing: 5) {
                     Circle().fill(BrandColor.forSource(entry.provider)).frame(width: 6, height: 6)
@@ -260,7 +276,7 @@ struct TotalSpendCard: View {
     private func centerUnit(total: Double) -> String {
         switch mode {
         case .cost: return "dollars"
-        case .tokens: return total >= 1_000_000_000 ? "billion" : "million"
+        case .tokens: return TokenCountFormatter.spelledOutTier(total).unit
         case .costPerMTok: return "MTok"
         }
     }
@@ -268,7 +284,7 @@ struct TotalSpendCard: View {
     private func compactCenterNumber(total: Double) -> String {
         switch mode {
         case .cost: return compactDollars(total)
-        case .tokens: return String(format: "%.1f", total / (total >= 1_000_000_000 ? 1_000_000_000 : 1_000_000))
+        case .tokens: return TokenCountFormatter.spelledOutTier(total).value
         case .costPerMTok: return String(format: "$%.2f", total)
         }
     }
