@@ -1,18 +1,27 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <!--
   TokenWatch's Sparkle appcast, served at https://tokenwatch.fyi/appcast.xml via GitHub Pages
-  (this file lives in docs/, the Pages root -- see CNAME).
+  (this file lives in docs/, the Pages root; see CNAME).
 
   Regenerated automatically by scripts/release.sh (via Sparkle's generate_appcast tool) every
   release; do not hand-edit <item> entries. See DISTRIBUTION.md's "Auto-update (Sparkle)"
-  section. This starts empty -- a valid, item-less feed reads as "no update available" rather
+  section. This starts empty: a valid, item-less feed reads as "no update available" rather
   than a 404, until the first Sparkle-signed release adds an entry.
 -->
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-  <channel>
-    <title>TokenWatch</title>
-    <link>https://tokenwatch.fyi/appcast.xml</link>
-    <description>TokenWatch release updates</description>
-    <language>en</language>
-  </channel>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>TokenWatch</title>
+        <link>https://tokenwatch.fyi/appcast.xml</link>
+        <description>TokenWatch release updates</description>
+        <language>en</language>
+        <item>
+            <title>1.10.0-beta.3</title>
+            <pubDate>Mon, 28 Sep 2026 10:50:39 +0530</pubDate>
+            <sparkle:version>150</sparkle:version>
+            <sparkle:shortVersionString>1.10.0-beta.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/MetaPouch/tokenwatch/releases/download/v1.10.0-beta.3/TokenWatch-1.10.0-beta.3.dmg" length="3417812" type="application/octet-stream" sparkle:edSignature="J7knxY8bbWz13v8Ew846tKy7GqBeWdWDZXIKe0lJPWujGPnr/d83DvsV2b21BxdQ5NBaTq0dTFMYhUxzYnW4DQ=="/>
+        </item>
+    </channel>
 </rss>
