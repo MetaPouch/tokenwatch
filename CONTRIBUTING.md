@@ -11,8 +11,9 @@ swift run TokenWatch
 ```
 
 Requires Xcode 26+ / Swift 6.2 toolchain on macOS 26 (Tahoe)+ -- the popover uses real Liquid
-Glass (`glassEffect`), which needs the macOS 26 SDK. No external dependencies to install —
-`Package.swift` has none.
+Glass (`glassEffect`), which needs the macOS 26 SDK. One external dependency, Sparkle (in-app
+auto-update): `swift build` fetches it automatically on first run, so nothing to install by hand,
+but it does need network access the first time.
 
 ## Project layout
 
@@ -61,8 +62,9 @@ numbers against the provider's own dashboard is the best proof a new provider ac
 
 ## Code style
 
-- No third-party dependencies. If a task seems to need one, it probably means the task is bigger
-  than a single provider addition — open an issue to discuss first.
+- No new third-party dependencies (Sparkle, for auto-update, is the one deliberate exception --
+  see DISTRIBUTION.md). If a task seems to need one, it probably means the task is bigger than a
+  single provider addition — open an issue to discuss first.
 - Every provider's UI comes from the generic `ProviderCardView` renderer over the five
   `MetricLine` cases (`progress`, `values`, `badge`, `chart`, `text`). Don't add bespoke SwiftUI
   per provider.

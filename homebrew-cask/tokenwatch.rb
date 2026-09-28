@@ -7,7 +7,7 @@ cask "tokenwatch" do
   desc "Menu-bar usage tracker for AI subscriptions, routing providers, and API keys"
   homepage "https://tokenwatch.fyi"
 
-  auto_updates false
+  auto_updates true
   depends_on macos: :tahoe
 
   app "TokenWatch.app"

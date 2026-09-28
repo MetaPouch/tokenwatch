@@ -19,6 +19,9 @@ public final class AppContainer {
     public let spendHistoryStore: SpendHistoryStore
     public let detectionStore: ProviderDetectionStore
     public let hintStore = HintStore()
+    /// Scheduled background update checks + the "Check for Updates…" menu item's UI. See
+    /// `AppUpdater`'s doc comment and DISTRIBUTION.md's "Auto-update (Sparkle)" section.
+    public let appUpdater = AppUpdater()
     /// The opt-in leaderboard. Idle (no Keychain read, no request) until the user joins.
     public let leaderboardService: LeaderboardService
     let webAuthenticationPresenter = WebAuthenticationPresenter()

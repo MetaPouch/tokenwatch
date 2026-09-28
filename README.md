@@ -393,15 +393,18 @@ output (`pnpm --filter @tokenwatch/contracts build`, then copy its `schema/` and
 ## Privacy & security
 
 Every credential TokenWatch reads goes to that same provider's own official usage API over
-HTTPS, and nowhere else. Beyond those, it makes two kinds of request. The optional pricing
-refresh (`PricingRefreshService`) is a plain, unauthenticated GET of a public GitHub-hosted price
-list, roughly hourly, carrying no usage data or credentials -- it only ever sends a request for
-the file, nothing about you or your usage. And only if you join the
-[leaderboard](#leaderboard-optional), it sends daily token counts and estimated cost per
-provider and model to `api.tokenwat.ch`. Notifications use Apple's local
-`UNUserNotificationCenter` directly -- nothing about a quota alert leaves your Mac. No telemetry
-or analytics. Nothing leaves your Mac unless you join the leaderboard. Full detail on what's
-read, what's sent, why, and how to report a security issue: [SECURITY.md](SECURITY.md).
+HTTPS, and nowhere else. Beyond those, it makes three kinds of request, none carrying usage
+data, credentials, or anything identifying you. The optional pricing refresh
+(`PricingRefreshService`) is a plain, unauthenticated GET of a public GitHub-hosted price list,
+roughly hourly. The Sparkle update check is a plain GET of `tokenwatch.fyi/appcast.xml`, daily by
+default (toggle off in Settings) or on demand via ⋯ → Check for Updates…; it never installs an
+update without an explicit click, and `SUEnableSystemProfiling` is off, so the request itself
+carries no system-profile data. And only if you join the [leaderboard](#leaderboard-optional), it
+sends daily token counts and estimated cost per provider and model to `api.tokenwat.ch`.
+Notifications use Apple's local `UNUserNotificationCenter` directly -- nothing about a quota
+alert leaves your Mac. No telemetry or analytics, and nothing identifying you leaves your Mac
+unless you join the leaderboard. Full detail on what's read, what's sent, why, and how to report
+a security issue: [SECURITY.md](SECURITY.md).
 
 ## Contributing
 
@@ -413,15 +416,14 @@ This is a from-scratch, clean-room build. It implements one reliable auth path a
 usage metric(s) per provider, plus read-only multi-account visibility for Claude/Codex and a
 local cost history for Claude and Codex (see Usage tab, above) -- not every edge case (account *switching*,
 team budgets, enterprise hosts) that larger, multi-year usage trackers eventually grow. See
-inline doc comments on each provider for the specific scope cuts. Zero external SwiftPM
-dependencies and zero telemetry are firm project principles -- the leaderboard is opt-in and
-uploads only what Preview Upload shows, and an in-app auto-updater and any analytics SDK are
-deliberately not implemented, even though comparable menu-bar usage trackers ship both; see
-[DISTRIBUTION.md](DISTRIBUTION.md) for how updates work instead.
+inline doc comments on each provider for the specific scope cuts. Zero telemetry and one external
+SwiftPM dependency ([Sparkle](https://sparkle-project.org/), for in-app auto-update -- see
+[DISTRIBUTION.md](DISTRIBUTION.md)) are firm project principles; the leaderboard is opt-in and
+uploads only what Preview Upload shows, and any analytics SDK is deliberately not implemented,
+even though comparable menu-bar usage trackers ship one.
 
 Distributed as a signed, notarized DMG and a Homebrew cask (see
-[DISTRIBUTION.md](DISTRIBUTION.md)); in-app auto-update is not implemented yet, and the cask sets
-`auto_updates false` so Homebrew won't silently upgrade it either -- update by running
-`brew update && brew upgrade --cask tokenwatch` (Homebrew installs) or re-downloading the
-[latest release](https://github.com/MetaPouch/tokenwatch/releases/latest) DMG and dragging it
-over the old app (manual installs).
+[DISTRIBUTION.md](DISTRIBUTION.md)). TokenWatch checks `tokenwatch.fyi/appcast.xml` for updates
+(daily by default, or on demand via ⋯ → Check for Updates…; toggle off in Settings), but never
+installs one without an explicit click. The cask sets `auto_updates true` since Sparkle is the
+app's own update mechanism now.

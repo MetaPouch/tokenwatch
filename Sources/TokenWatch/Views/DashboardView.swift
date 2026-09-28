@@ -20,6 +20,7 @@ struct DashboardView: View {
     @ObservedObject var spendHistoryStore: SpendHistoryStore
     @ObservedObject var detectionStore: ProviderDetectionStore
     @ObservedObject var hintStore: HintStore
+    @ObservedObject var appUpdater: AppUpdater
     let notificationService: QuotaNotificationService
     let toggleDashboardPanel: () -> Void
     /// Observed by the screens that show it (`LeaderboardView`, `LeaderboardBadgeButton`), not
@@ -183,7 +184,7 @@ struct DashboardView: View {
     }
 
     private var settingsScreenContent: some View {
-        SettingsView(enablementStore: enablementStore, detectionStore: detectionStore, apiKeyManagers: apiKeyManagers, displayStore: displayStore, appearanceStore: appearanceStore, notificationSettingsStore: notificationSettingsStore, notificationService: notificationService, toggleDashboardPanel: toggleDashboardPanel)
+        SettingsView(enablementStore: enablementStore, detectionStore: detectionStore, apiKeyManagers: apiKeyManagers, displayStore: displayStore, appearanceStore: appearanceStore, notificationSettingsStore: notificationSettingsStore, notificationService: notificationService, toggleDashboardPanel: toggleDashboardPanel, appUpdater: appUpdater)
     }
 
     private func reportTotalHeight(for screen: DashboardScreen) {
@@ -304,6 +305,8 @@ struct DashboardView: View {
                         }
                     }
                 }
+                Divider()
+                Button(appUpdater.pendingUpdate != nil ? "Update Available…" : "Check for Updates…") { appUpdater.checkForUpdates() }
                 Divider()
                 Button("About TokenWatch") { NSApp.orderFrontStandardAboutPanel(nil) }
                 Divider()

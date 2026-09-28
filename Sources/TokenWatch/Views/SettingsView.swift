@@ -14,6 +14,7 @@ struct SettingsView: View {
     @ObservedObject var notificationSettingsStore: NotificationSettingsStore
     let notificationService: QuotaNotificationService
     let toggleDashboardPanel: () -> Void
+    @ObservedObject var appUpdater: AppUpdater
 
     @State private var apiKeyDrafts: [ProviderID: String] = [:]
     @State private var apiKeyErrors: [ProviderID: String] = [:]
@@ -33,6 +34,8 @@ struct SettingsView: View {
                             launchAtLoginEnabled = LaunchAtLogin.isEnabled
                         }
                     ))
+                    Toggle("Automatically Check for Updates", isOn: $appUpdater.automaticallyChecksForUpdates)
+                        .help("Checks tokenwatch.fyi's appcast daily. Downloading and installing an update always needs your click; this only controls whether TokenWatch checks by itself. Use ⋯ → Check for Updates… to check right now regardless of this setting.")
                     HStack {
                         Text("Global Shortcut")
                         Spacer()

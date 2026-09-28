@@ -15,12 +15,20 @@ each provider's doc comment under `Sources/TokenWatchCore/Providers/`.
   issued it.
 - Never writes to, modifies, or deletes another app's credential file or Keychain item — every
   read is read-only.
-- Doesn't phone home. There is no telemetry, no analytics SDK, no crash reporter and no
-  update-check ping, and out of the box it contacts no server TokenWatch's authors operate. You
-  can verify this directly: every outbound host is a literal string in the relevant provider file
-  (`*UsageClient.swift`, and `CursorUsageHistory.swift`), in `PricingRefreshService.swift` or in
-  `LeaderboardAPI.swift` (the two exceptions below), and `git grep -n 'URL(string:'` finds all of
-  them -- plus the one host allowlisted by name rather than URL, `LeaderboardAPI.avatarHost`.
+- Doesn't phone home. There is no telemetry, no analytics SDK, and no crash reporter, and out of
+  the box it contacts no server TokenWatch's authors operate except the Sparkle update check
+  below. You can verify this directly: every outbound host is a literal string in the relevant
+  provider file (`*UsageClient.swift`, and `CursorUsageHistory.swift`), in
+  `PricingRefreshService.swift`, `AppUpdater.swift`, or in `LeaderboardAPI.swift` (the exceptions
+  below), and `git grep -n 'URL(string:'` finds all of them -- plus the one host allowlisted by
+  name rather than URL, `LeaderboardAPI.avatarHost`.
+- Exception 0, the Sparkle update check: a plain, unauthenticated GET of
+  `tokenwatch.fyi/appcast.xml`, daily by default (`Toggle` in Settings → General) or on demand
+  via ⋯ → Check for Updates…. Sparkle's system-profile reporting (`SUEnableSystemProfiling`) is
+  explicitly off in `Info.plist`, so the request carries no OS version, hardware model, or other
+  profile data beyond what any HTTP GET reveals (IP address, TokenWatch's own version in the
+  User-Agent). Downloading and installing an update always requires an explicit click; nothing
+  is installed silently.
 - Exception 1, the price list: `PricingRefreshService` does a plain, unauthenticated GET of a
   public GitHub-hosted model-price list roughly hourly, to keep local cost estimates current.
   This request carries no credential, no usage data, and no identifying information -- it's
@@ -84,8 +92,9 @@ credit reporters in the fix's release notes unless you'd rather stay anonymous.
 
 ## Scope notes for reviewers
 
-- Zero external Swift package dependencies (`Package.swift` has no `dependencies:` entries) — the
-  entire dependency-vulnerability surface is Apple's own frameworks (Foundation, AppKit, SwiftUI,
+- One external Swift package dependency, [Sparkle](https://sparkle-project.org/)
+  (`sparkle-project/Sparkle`, in-app auto-update only -- see DISTRIBUTION.md's "Auto-update
+  (Sparkle)" section). Everything else is Apple's own frameworks (Foundation, AppKit, SwiftUI,
   Security, SQLite3, and for the leaderboard CryptoKit, AuthenticationServices and ImageIO).
 - Every subprocess invocation (`Process`, in `BoundedSubprocess.swift` and
   `CodexAppServerClient.swift`) uses an argument array against a resolved executable path — never

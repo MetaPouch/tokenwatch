@@ -20,15 +20,22 @@ BUILD_DIR=".build/release"
 APP_BUNDLE="dist/${APP_NAME}.app"
 
 echo "==> Building release binary"
-swift build -c release --product "$APP_NAME"
+# @loader_path (SwiftPM's default rpath for an executable target with a binary framework
+# dependency) resolves to Contents/MacOS -- add @executable_path/../Frameworks too so dyld also
+# finds Sparkle.framework in the conventional Contents/Frameworks location it's copied to below.
+swift build -c release --product "$APP_NAME" -Xlinker -rpath -Xlinker @executable_path/../Frameworks
 
 echo "==> Assembling ${APP_BUNDLE}"
 rm -rf "dist"
-mkdir -p "${APP_BUNDLE}/Contents/MacOS" "${APP_BUNDLE}/Contents/Resources"
+mkdir -p "${APP_BUNDLE}/Contents/MacOS" "${APP_BUNDLE}/Contents/Resources" "${APP_BUNDLE}/Contents/Frameworks"
 
 cp "${BUILD_DIR}/${APP_NAME}" "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}"
 cp "Resources/Info.plist" "${APP_BUNDLE}/Contents/Info.plist"
 cp "Resources/AppIcon.icns" "${APP_BUNDLE}/Contents/Resources/AppIcon.icns"
+# Sparkle ships as a versioned framework bundle (internal Versions/Current symlinks, plus a
+# nested Updater.app helper and XPC services unused outside the App Sandbox) -- `cp -R` without
+# `-L` preserves those symlinks as symlinks, which both codesign and Sparkle itself require.
+cp -R "${BUILD_DIR}/Sparkle.framework" "${APP_BUNDLE}/Contents/Frameworks/Sparkle.framework"
 # SwiftPM's generated Bundle.module accessor only ever looks next to Bundle.main.bundleURL (the
 # .app's own top level) or the build directory -- neither is compatible with proper codesign
 # sealing (content outside Contents/ fails "code has no resources but signature indicates they

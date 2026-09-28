@@ -10,6 +10,12 @@ let package = Package(
         .executable(name: "TokenWatch", targets: ["TokenWatch"]),
         .library(name: "TokenWatchCore", targets: ["TokenWatchCore"])
     ],
+    dependencies: [
+        // Sole external dependency, used only for in-app auto-update -- see DISTRIBUTION.md's
+        // "Auto-update (Sparkle)" section for the EdDSA key setup this requires before release
+        // builds can actually self-update.
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0")
+    ],
     targets: [
         .target(
             name: "TokenWatchCore",
@@ -18,7 +24,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "TokenWatch",
-            dependencies: ["TokenWatchCore"],
+            dependencies: [
+                "TokenWatchCore",
+                .product(name: "Sparkle", package: "Sparkle")
+            ],
             path: "Sources/TokenWatch",
             resources: [.copy("Icons")],
             swiftSettings: [.swiftLanguageMode(.v5)]

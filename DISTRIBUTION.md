@@ -84,25 +84,71 @@ spctl -a -t open --context context:primary-signature -v dist/TokenWatch-<version
 
 ## Publish
 
-- **GitHub Release**: `./scripts/release.sh <version>` builds, signs, notarizes, and uploads the
-  DMG to a new GitHub release in one shot (see that script's header for prerequisites).
+- **GitHub Release**: `./scripts/release.sh <version>` builds, signs, notarizes, uploads the DMG
+  to a new GitHub release, and (once the one-time Sparkle key setup below is done) regenerates
+  and pushes `docs/appcast.xml` so existing installs see the update -- one shot (see that
+  script's header for prerequisites).
 - **Homebrew Cask**: `homebrew-cask/tokenwatch.rb` is a ready-to-submit cask formula. Update its
   `sha256` after cutting a release (the release script prints it), then open a PR against
   [homebrew/homebrew-cask](https://github.com/Homebrew/homebrew-cask) or tap it yourself first:
-  `brew tap MetaPouch/tokenwatch && brew install --cask tokenwatch`.
+  `brew tap MetaPouch/tokenwatch && brew install --cask tokenwatch`. `auto_updates true` since
+  Sparkle is the app's own update mechanism now -- Homebrew defers to it instead of managing
+  upgrades itself.
 - **tokenwatch.fyi**: the landing page's Download button points at the latest GitHub release
   asset directly (`/releases/latest/download/...`), so publishing a release is enough — no
-  separate landing-page edit needed per version.
+  separate landing-page edit needed per version. `docs/appcast.xml` is served from the same
+  GitHub Pages site, at `/appcast.xml`.
 
 ## Versioning
 
 Bump both `CFBundleShortVersionString` in `Resources/Info.plist` and the tag passed to
-`scripts/release.sh`. `CFBundleVersion` (the build number) can stay monotonically increasing
-separately if you want Sparkle-style auto-update later; not required for manual DMG distribution.
+`scripts/release.sh`; the script does this for you. `CFBundleVersion` (the build number Sparkle
+actually compares to decide whether an update exists) is set automatically from the commit count
+(`git rev-list --count HEAD`) — monotonic for as long as history only fast-forwards, so it never
+needs manual bookkeeping or risks colliding between releases.
 
-## Auto-update (not set up yet)
+## Auto-update (Sparkle)
 
-Out of scope for this pass. If you want in-app update checks later, the standard approach is
-[Sparkle](https://sparkle-project.org/): add it as a dependency, generate an EdDSA signing key,
-publish an `appcast.xml` alongside releases. Flag it separately when you want it — it changes the
-app's dependency graph and adds a signing key to manage, which is a real decision, not a script.
+In-app update checks use [Sparkle](https://sparkle-project.org/) (`Package.swift`'s one external
+dependency). `AppUpdater` (`Sources/TokenWatch/Support/AppUpdater.swift`) wraps
+`SPUStandardUpdaterController`: a daily background check against `SUFeedURL`
+(`https://tokenwatch.fyi/appcast.xml`), a "Check for Updates…" item in the ⋯ menu, and an
+"Automatically Check for Updates" toggle in Settings. Checking never installs anything without
+an explicit click, and `SUEnableSystemProfiling` is off, so the check carries no system-profile
+data — see SECURITY.md.
+
+### One-time setup (do this once, on whichever Mac cuts releases)
+
+**1. Download the Sparkle command-line tools.** The SPM package only vends the framework, not
+`generate_keys`/`generate_appcast`/`sign_update` — those ship in the separate release tarball:
+```sh
+mkdir -p ~/.sparkle-tools
+curl -L -o /tmp/sparkle-tools.tar.xz \
+  https://github.com/sparkle-project/Sparkle/releases/download/2.10.0/Sparkle-2.10.0.tar.xz
+tar -xf /tmp/sparkle-tools.tar.xz -C ~/.sparkle-tools
+```
+`scripts/release.sh` looks for these under `~/.sparkle-tools/bin` by default (override with
+`SPARKLE_BIN_DIR`).
+
+**2. Generate the EdDSA signing keypair.** Stores the private key in your login Keychain and
+prints the public key:
+```sh
+~/.sparkle-tools/bin/generate_keys
+```
+Paste the printed public key into `Resources/Info.plist`'s `SUPublicEDKey`, replacing the
+`REPLACE_WITH_SPARKLE_PUBLIC_ED_KEY` placeholder. Without a valid key there, Sparkle's signature
+check fails closed and every check finds nothing — safe, but no auto-update actually works until
+this is done. The private key never leaves this Keychain; `generate_appcast` (next release, and
+every one after) finds it there automatically to sign.
+
+### Every release after that
+
+`scripts/release.sh <version>` does it: copies the freshly-published DMG into a persistent local
+archive (`~/.tokenwatch-release-archive` by default, override with
+`TOKENWATCH_RELEASE_ARCHIVE`; kept outside `dist/`, which `build-app.sh` wipes every run, so
+`generate_appcast` always sees the full release history), regenerates `docs/appcast.xml` from
+that archive with `generate_appcast --maximum-deltas 0` (delta updates are off — this app is
+small enough that full-download updates are simpler to operate), and commits + pushes
+`docs/appcast.xml` if it changed. If the Sparkle tools aren't installed, the script warns and
+skips this step instead of failing the release — the DMG still publishes normally, existing
+installs just won't see it as an in-app update until the appcast catches up.

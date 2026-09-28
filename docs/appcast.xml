@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TokenWatch's Sparkle appcast, served at https://tokenwatch.fyi/appcast.xml via GitHub Pages
+  (this file lives in docs/, the Pages root -- see CNAME).
+
+  Regenerated automatically by scripts/release.sh (via Sparkle's generate_appcast tool) every
+  release; do not hand-edit <item> entries. See DISTRIBUTION.md's "Auto-update (Sparkle)"
+  section. This starts empty -- a valid, item-less feed reads as "no update available" rather
+  than a 404, until the first Sparkle-signed release adds an entry.
+-->
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>TokenWatch</title>
+    <link>https://tokenwatch.fyi/appcast.xml</link>
+    <description>TokenWatch release updates</description>
+    <language>en</language>
+  </channel>
+</rss>
