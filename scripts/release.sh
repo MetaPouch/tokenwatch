@@ -32,6 +32,11 @@ BUILD_NUMBER=$(git rev-list --count HEAD)
 echo "==> Setting version to ${VERSION} (build ${BUILD_NUMBER})"
 plutil -replace CFBundleShortVersionString -string "$VERSION" Resources/Info.plist
 plutil -replace CFBundleVersion -string "$BUILD_NUMBER" Resources/Info.plist
+if ! git diff --quiet -- Resources/Info.plist; then
+    git add Resources/Info.plist
+    git commit -m "Release v${VERSION}"
+    git push
+fi
 
 echo "==> Build, sign, package, notarize"
 ./scripts/build-app.sh
@@ -41,12 +46,20 @@ echo "==> Build, sign, package, notarize"
 DMG_PATH="dist/TokenWatch-${VERSION}.dmg"
 SHA256=$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')
 echo "==> SHA256: ${SHA256}"
-echo "    (update homebrew-cask/tokenwatch.rb's sha256 field with this value)"
 
 echo "==> Publishing GitHub release v${VERSION}"
 gh release create "v${VERSION}" "$DMG_PATH" \
     --title "TokenWatch ${VERSION}" \
     --generate-notes
+
+echo "==> Updating Homebrew cask mirror"
+sed -i '' -E "s/^  version \"[^\"]*\"/  version \"${VERSION}\"/" homebrew-cask/tokenwatch.rb
+sed -i '' -E "s/^  sha256 \"[^\"]*\"/  sha256 \"${SHA256}\"/" homebrew-cask/tokenwatch.rb
+if ! git diff --quiet -- homebrew-cask/tokenwatch.rb; then
+    git add homebrew-cask/tokenwatch.rb
+    git commit -m "Bump cask mirror to v${VERSION}"
+    git push
+fi
 
 DOWNLOAD_URL_PREFIX="https://github.com/MetaPouch/tokenwatch/releases/download/v${VERSION}/"
 

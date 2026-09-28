@@ -84,12 +84,13 @@ spctl -a -t open --context context:primary-signature -v dist/TokenWatch-<version
 
 ## Publish
 
-- **GitHub Release**: `./scripts/release.sh <version>` builds, signs, notarizes, uploads the DMG
-  to a new GitHub release, and (once the one-time Sparkle key setup below is done) regenerates
-  and pushes `docs/appcast.xml` so existing installs see the update -- one shot (see that
-  script's header for prerequisites).
-- **Homebrew Cask**: `homebrew-cask/tokenwatch.rb` is a ready-to-submit cask formula. Update its
-  `sha256` after cutting a release (the release script prints it), then open a PR against
+- **GitHub Release**: `./scripts/release.sh <version>` bumps and commits `Resources/Info.plist`'s
+  version, builds, signs, notarizes, uploads the DMG to a new GitHub release, bumps and commits
+  `homebrew-cask/tokenwatch.rb`'s `version`/`sha256`, and (once the one-time Sparkle key setup
+  below is done) regenerates and pushes `docs/appcast.xml` -- one shot, three commits pushed to
+  `main` along the way (see that script's header for prerequisites).
+- **Homebrew Cask**: `homebrew-cask/tokenwatch.rb`'s `version`/`sha256` are kept current by
+  `scripts/release.sh` automatically. To actually publish it, open a PR against
   [homebrew/homebrew-cask](https://github.com/Homebrew/homebrew-cask) or tap it yourself first:
   `brew tap MetaPouch/tokenwatch && brew install --cask tokenwatch`. `auto_updates true` since
   Sparkle is the app's own update mechanism now -- Homebrew defers to it instead of managing
