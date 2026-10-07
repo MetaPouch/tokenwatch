@@ -63,7 +63,7 @@ public enum ProviderID: String, CaseIterable, Codable, Sendable, Identifiable {
         switch self {
         case .claude: return "Reads Claude Code's local session — sign in via the Claude CLI or Claude.ai app first."
         case .codex: return "Reads ~/.codex/auth.json — run `codex login` first."
-        case .cursor: return "Reads Cursor.app's local session (Safari cookie fallback) — sign into Cursor.app first."
+        case .cursor: return "Reads Cursor.app's local session, else the Cursor CLI's (Safari cookie as a last resort) — sign into Cursor.app or run `cursor-agent login` first."
         case .copilot: return "Reuses a sign-in from another Copilot client (VS Code, Neovim, JetBrains) — sign into one of those first."
         case .gemini: return "Reads the Gemini CLI's local session — run `gemini` and sign in with a personal Google account first."
         case .antigravity: return "Reads the Antigravity CLI's local session — sign in via that CLI first."

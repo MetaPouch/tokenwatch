@@ -1,8 +1,9 @@
 import Foundation
 
 /// One locally discovered login's quota data, for providers that support more than one account
-/// on the same machine (currently: Claude, Codex, via a second `CLAUDE_CONFIG_DIR`/`CODEX_HOME`
-/// profile). Purely additive to the core single-account model every other part of TokenWatch
+/// on the same machine (currently: Claude and Codex via a second `CLAUDE_CONFIG_DIR`/`CODEX_HOME`
+/// profile, and Cursor via the Cursor CLI signed in as a different person than Cursor.app).
+/// Purely additive to the core single-account model every other part of TokenWatch
 /// uses (`ProviderRuntime.refresh()` / `ProviderSnapshot`, unchanged) -- this exists only to feed
 /// the "Usage" dashboard tab's consolidated, multi-account quota view.
 public struct ProviderAccount: Sendable, Equatable, Codable, Identifiable {

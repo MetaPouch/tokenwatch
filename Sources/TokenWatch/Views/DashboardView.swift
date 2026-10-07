@@ -354,7 +354,7 @@ struct DashboardView: View {
     }
 
     /// Every enabled provider's quota bars (session, weekly, credit balance/remaining) -- "how
-    /// close am I to a wall" -- plus any additional locally discovered account (Claude, Codex)
+    /// close am I to a wall" -- plus any additional locally discovered account (Claude, Codex, Cursor)
     /// for the same question about a second login. Spend, cache temperature, and cost history
     /// live on the Usage tab instead; see `MetricLine.category`.
     private var limitsList: some View {

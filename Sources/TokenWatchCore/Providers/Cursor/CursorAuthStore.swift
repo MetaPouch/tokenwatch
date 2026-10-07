@@ -45,20 +45,34 @@ public struct CursorAuthStore: Sendable {
     /// The `WorkosCursorSessionToken` cookie value `CursorProvider.refresh()` sends: the local app
     /// token if usable, else a cached or freshly-imported Safari cookie.
     public func resolvedSessionToken() -> String? {
-        validAccessToken().flatMap(Self.sessionCookieValue(forAccessToken:)) ?? safariCookieToken()
+        appSessionToken() ?? safariCookieToken()
+    }
+
+    /// The session cookie built from Cursor.app's own saved token, or `nil` when it's missing or
+    /// expired. Split out so `CursorProvider` can try the Cursor CLI's sign-in between this and
+    /// the Safari fallback.
+    func appSessionToken() -> String? {
+        validAccessToken().flatMap(Self.sessionCookieValue(forAccessToken:))
     }
 
     /// cursor.com rejects the bare access token as a session cookie (401 `not_authenticated`); it
     /// wants the WorkOS user id -- the part of the JWT's `sub` after its last `|` -- joined to the
     /// token by a URL-encoded `::`.
     static func sessionCookieValue(forAccessToken token: String) -> String? {
+        userID(fromAccessToken: token).map { "\($0)%3A%3A\(token)" }
+    }
+
+    /// The WorkOS user id in an access token's `sub` claim (`google-oauth2|user_01ABC` ->
+    /// `user_01ABC`). Cursor.app and the Cursor CLI sign in through the same WorkOS tenant, so
+    /// this is how two tokens are recognised as the same person.
+    static func userID(fromAccessToken token: String) -> String? {
         guard let subject = JWT.payload(token)?["sub"] as? String,
               let userID = subject.split(separator: "|").last, !userID.isEmpty
         else { return nil }
-        return "\(userID)%3A%3A\(token)"
+        return String(userID)
     }
 
-    private func safariCookieToken() -> String? {
+    func safariCookieToken() -> String? {
         if let cached = readCache(), Date().timeIntervalSince(cached.fetchedAt) < Self.cookieCacheTTL {
             return cached.value
         }

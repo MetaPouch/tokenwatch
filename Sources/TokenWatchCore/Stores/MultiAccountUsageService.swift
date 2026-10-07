@@ -6,7 +6,8 @@ import Combine
 /// (reused as-is -- no duplicate network call, so this respects the same rate-limit-friendly
 /// polling cadence every other part of the app already uses), plus a fresh fetch for any
 /// additional local accounts discovered for providers that support more than one login
-/// (currently: Claude, Codex -- see `ClaudeAccountDiscovery`/`CodexAccountDiscovery`).
+/// (currently: Claude, Codex, Cursor -- see `ClaudeAccountDiscovery`/`CodexAccountDiscovery`/
+/// `CursorAccountDiscovery`).
 @MainActor
 public final class MultiAccountUsageService: ObservableObject {
     @Published public private(set) var accounts: [ProviderAccount] = []
@@ -41,6 +42,9 @@ public final class MultiAccountUsageService: ObservableObject {
         }
         if enabled.contains(.codex) {
             results.append(contentsOf: await Self.fetchAdditionalCodexAccounts())
+        }
+        if enabled.contains(.cursor) {
+            results.append(contentsOf: await Self.fetchAdditionalCursorAccounts())
         }
 
         accounts = results
@@ -121,6 +125,41 @@ public final class MultiAccountUsageService: ObservableObject {
             return ProviderAccount(id: id, providerID: .codex, label: account.sourceLabel, isDefault: false, lines: [], error: error, fetchedAt: Date())
         } catch {
             return ProviderAccount(id: id, providerID: .codex, label: account.sourceLabel, isDefault: false, lines: [], error: .network(error.localizedDescription), fetchedAt: Date())
+        }
+    }
+
+    private static func fetchAdditionalCursorAccounts() async -> [ProviderAccount] {
+        guard let account = await CursorAccountDiscovery.discoverAdditionalAccount() else { return [] }
+        return [await fetchCursorAccount(account)]
+    }
+
+    private static func fetchCursorAccount(_ account: CursorAdditionalAccount) async -> ProviderAccount {
+        let credential = account.credential
+        let id = "cursor:cli:\(credential.userID)"
+        let fallbackLabel = credential.email ?? account.sourceLabel
+        func result(label: String, lines: [MetricLine] = [], error: ProviderError? = nil) -> ProviderAccount {
+            ProviderAccount(id: id, providerID: .cursor, label: label, isDefault: false, lines: lines, error: error, fetchedAt: Date())
+        }
+
+        // Never refreshed from here (the CLI does that whenever it runs), so a lapse is just a wait.
+        if let expiresAt = credential.expiresAt, expiresAt.timeIntervalSinceNow <= 60 {
+            return result(label: fallbackLabel, error: .credentialLapsed(selfHeals: true, detail: "The Cursor CLI's access token has lapsed. It renews the next time you run `cursor-agent` directly -- no action needed."))
+        }
+        guard let sessionToken = CursorAuthStore.sessionCookieValue(forAccessToken: credential.accessToken) else {
+            return result(label: fallbackLabel, error: .parse("The Cursor CLI's saved sign-in isn't a token TokenWatch can read."))
+        }
+        do {
+            let client = CursorUsageClient()
+            async let summaryTask = client.fetchUsageSummary(sessionToken: sessionToken)
+            async let userInfoTask = try? client.fetchUserInfo(sessionToken: sessionToken)
+            let summary = try await summaryTask
+            let userInfo = await userInfoTask ?? nil
+            let lines = CursorMapper.map(summary, userInfo: userInfo).filter(\.isQuotaMeter)
+            return result(label: userInfo?.email ?? fallbackLabel, lines: lines)
+        } catch let error as ProviderError {
+            return result(label: fallbackLabel, error: error)
+        } catch {
+            return result(label: fallbackLabel, error: .network(error.localizedDescription))
         }
     }
 }

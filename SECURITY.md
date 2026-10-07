@@ -6,8 +6,13 @@ TokenWatch's entire purpose is showing you usage/limits/credits across AI provid
 already signed into elsewhere. To do that, each provider's runtime reads **one** local credential
 source (see the table in [README.md](README.md)) — a Keychain item another CLI wrote, an OAuth
 token file, a locally-stored API key you paste in, or (for Cursor) a local SQLite session
-database. Full detail per provider, including exact file paths and Keychain service names, is in
-each provider's doc comment under `Sources/TokenWatchCore/Providers/`.
+database. Cursor is the one provider that reads two logins: Cursor.app's session database and,
+separately, the Cursor CLI's Keychain item (`cursor-access-token`, account `cursor-user`; the
+CLI's `~/.cursor/cli-config.json` is read only for the email it labels that login with), so a
+second Cursor account signed in through the CLI can show as its own card. Both are read-only; the
+CLI's refresh token is never read or used. Full detail per provider, including exact file paths
+and Keychain service names, is in each provider's doc comment under
+`Sources/TokenWatchCore/Providers/`.
 
 **What TokenWatch does with what it reads:**
 - Sends the credential to that same provider's own official usage API, over HTTPS, to ask "what's
@@ -64,7 +69,9 @@ each provider's doc comment under `Sources/TokenWatchCore/Providers/`.
     `~/Library/Application Support/TokenWatch/leaderboard-avatar` and deleted when you sign out
     or tokenwat.ch signs this Mac out. GitHub sees your IP address, as for any image it serves.
   - With the Cursor provider on, the history upload asks Cursor's own usage API (the same
-    request the Usage tab makes for its 30 days) for older Cursor history.
+    request the Usage tab makes for its 30 days) for older Cursor history. That is only the
+    account Cursor.app is signed in as; a different account signed in through the CLI is not
+    included.
 
   The device token is stored in the Keychain under the service `dev.tokenwatch.credentials`,
   account `leaderboard.deviceToken` -- never in `config.json`, `UserDefaults` or logs -- and is

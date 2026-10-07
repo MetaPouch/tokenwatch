@@ -13,7 +13,7 @@ nothing relayed off your device unless you join the optional [leaderboard](#lead
 | Claude (Claude.ai / Claude Code) | OAuth (Claude CLI Keychain / `~/.claude/.credentials.json`) | Session (5h) + weekly (7d) percent, extra usage spend, cache temperature |
 | Codex / ChatGPT | `~/.codex/auth.json`, `codex app-server` fallback | Session + weekly percent, cache temperature |
 | OpenAI (raw API key) | API key | Today/7d spend |
-| Cursor | Cursor.app local session (Safari cookie fallback) | Plan usage, on-demand spend |
+| Cursor | Cursor.app local session, plus the Cursor CLI's Keychain sign-in (Safari cookie fallback) | Plan usage, on-demand spend |
 | GitHub Copilot | Reused sign-in from another Copilot client | Premium interaction quota |
 | Gemini + Antigravity | Gemini CLI OAuth / Antigravity CLI's own OAuth token file | Pro/Flash quota remaining |
 | OpenRouter | API key | Credit balance, key limit |
@@ -126,17 +126,22 @@ that card to a PNG and copies it to the clipboard) and hiding the whole provider
 whose last successful fetch is more than two refresh cycles old gets a quiet "Outdated" tag next
 to its name.
 
-Any additional locally discovered account (Claude, Codex only, via a second
-`CLAUDE_CONFIG_DIR`/`CODEX_HOME` profile -- see `ClaudeAccountDiscovery`/`CodexAccountDiscovery`)
-shows as its own card below the main list -- quota bars only, the same read-only visibility the
-old separate Usage-tab account list used to provide, just filed under Limits now since that's
-what it's showing. Discovery is file-based only: it finds a profile whose login wrote its own
-`.credentials.json`/`auth.json`, not one that only ever reached the macOS Keychain under a
-profile-specific service name. A found-but-lapsed credential shows why (self-heals on next CLI
-run, or needs a real re-login) rather than a raw HTTP error. This is read-only visibility, not
-account switching -- TokenWatch doesn't change which login your `claude`/`codex` CLI actually
-uses. Spend history on the Usage tab reads every account's local logs the same way, whether or
-not it has a card here.
+Any additional locally discovered account (Claude, Codex via a second
+`CLAUDE_CONFIG_DIR`/`CODEX_HOME` profile -- see `ClaudeAccountDiscovery`/`CodexAccountDiscovery`;
+Cursor via the Cursor CLI, below) shows as its own card below the main list -- quota bars only,
+the same read-only visibility the old separate Usage-tab account list used to provide, just filed
+under Limits now since that's what it's showing. Claude and Codex discovery is file-based only: it
+finds a profile whose login wrote its own `.credentials.json`/`auth.json`, not one that only ever
+reached the macOS Keychain under a profile-specific service name. Cursor is the Keychain
+exception: `cursor-agent login` saves its token in the Keychain (`cursor-access-token`), which
+TokenWatch reads, and if that is a different person than the one Cursor.app is signed in as it
+gets its own card labelled with that account's email -- the same person in both shows once, and a
+CLI-only sign-in simply becomes the main Cursor card. A found-but-lapsed credential shows why
+(self-heals on next CLI run, or needs a real re-login) rather than a raw HTTP error. This is
+read-only visibility, not account switching -- TokenWatch doesn't change which login your
+`claude`/`codex`/`cursor-agent` CLI actually uses. Spend history on the Usage tab reads every
+Claude/Codex account's local logs the same way, whether or not it has a card here; Cursor's
+history is the one exception (below).
 
 ## Usage tab
 
@@ -206,7 +211,9 @@ Cursor keeps no token counts on disk, so while the Cursor provider is enabled it
 Cursor's own per-request usage history for the account (the dashboard's usage-events call, with
 Cursor.app's saved sign-in, fetched at most every 5 minutes) -- covering the app, `cursor-agent`,
 and any other client signed into it, omp's `cursor` provider included, so it replaces any locally
-logged Cursor turns rather than adding to them.
+logged Cursor turns rather than adding to them. That history is per account, and only the main
+Cursor card's account is fetched: usage under a second Cursor login (the CLI signed in as someone
+else) shows on its Limits card but isn't counted in spend history or the leaderboard.
 
 Every spend figure -- the donut, the 7-day bars, each provider's spend row -- is built by summing
 *every* turn's local session tokens (not just the newest, the way cache-temperature works) and
